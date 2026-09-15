@@ -1,0 +1,3 @@
+[submodule "sql/eqclassic_db"]
+	path = sql/eqclassic_db
+	url = https://github.com/erfg12/eqclassic_db.git

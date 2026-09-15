@@ -3,8 +3,19 @@
 ## Toolchain
 
 - Visual Studio 2022 Community (toolset **v143**, Windows SDK 10.0), **Win32 (x86)** only.
-- Open `EQCEmu.sln`, Build → Build Solution. Outputs `login.exe`, `world.exe`, `zone.exe`,
-  `SharedMemory.dll` (Debug/Release per project settings).
+- Two build paths, both kept in sync (CI builds both):
+  - **CMake** (recommended): `cmake -S . -B build -G "Visual Studio 17 2022" -A Win32`,
+    then `cmake --build build --config Debug` and `cmake --install build --config Debug --prefix server`
+    to get a runnable server folder (exes + dependency DLLs + `cfg/`, `spdat.eff`, `spells_en.txt`,
+    `Boot5zones.bat`). Options: `EQC_DEPENDENCIES_DIR`, `EQC_BUILD_MINILOGIN`, `EQC_COPY_RUNTIME_DLLS`,
+    `EQC_BUILD_SERVERS` (OFF on Linux: only `azone` builds there).
+  - **Legacy**: open `EQCEmu.sln`, Build → Build Solution (Debug|Win32). Outputs `login.exe`,
+    `world.exe`, `zone.exe`, `SharedMemory.dll`.
+- Only the Debug configuration was ever used upstream. The CMake build applies the Debug
+  preprocessor definitions (`WORLD`, `EQC_SHAREDMEMORY`, …) to Release too, which the old
+  `.vcxproj` Release configurations did not.
+- CI: `.github/workflows/build.yml` builds CMake Debug/Release and the legacy solution on
+  `windows-latest`, plus `azone` on Linux. Dependencies.zip is downloaded from archive.org and cached.
 
 ## Dependencies (`Dependencies/`, not in git)
 
@@ -12,14 +23,14 @@ Project files expect this layout (paths from `*.vcxproj`):
 
 ```
 Dependencies/
-  mysql/include, mysql/lib        libmysql.lib   (MySQL 5.1 client; MySQL 8 server works with mysql_native_password)
-  zlib/include,  zlib/lib         zdll.lib (Debug) / Zlib.lib (Release) — headers in repo are zlib 1.2.3 (Common/Include/zlib.h)
-  Perl/lib/CORE                   perl512.lib    (ActivePerl 5.12.3.1204 MSWin32-x86)
-  openssl/include (+ lib)         libeay32.lib, ssleay32.lib (Login only, OpenSSL 0.9.8 era API: openssl/des.h)
+  mysql/include, mysql/lib/libmysql.lib (+ .dll)      MySQL C client 5.7.17, x86 (MySQL 8 server works with mysql_native_password)
+  zlib/include,  zlib/lib/zdll.lib | zlib.lib, zlib1.dll  zlib 1.2.3, x86 (zdll.lib in Debug, zlib.lib in Release, as in the .vcxproj)
+  Perl/lib/CORE/perl512.lib, Perl/bin/perl512.dll      ActivePerl 5.12.3, x86
+  openssl/include, openssl/lib/{libeay32,ssleay32}.lib, openssl/bin/*.dll   OpenSSL 0.9.8k, x86 (Login only)
 ```
 
-Ready-made bundle from the upstream maintainer ("EQClassic Compile Dependencies",
-Dependencies.zip, ~300 MB, May 2025):
+All binaries are 32-bit (PE32 i386). Exact contents verified from the bundle below
+(`Dependencies.zip`, 316 MB, uploaded May 2025); it extracts to exactly the layout above.
 - https://archive.org/details/dependencies_202505
 - https://drive.google.com/file/d/0B4YtK9YXaHvQbU93Z25kY2J4WWM/view?usp=sharing
 

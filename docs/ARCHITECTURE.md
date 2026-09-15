@@ -73,7 +73,7 @@ repo (`LS/Login/loginserver.sql`); the world/zone schema comes from the external
 
 ## Suggested next phases
 
-1. Reproducible build (CMake + vcpkg or scripted `Dependencies/`), CI on Windows x86.
+1. ~~Reproducible build~~ — done: CMake + `Dependencies.zip`, CI on Windows x86 + Linux (azone).
 2. End-to-end run procedure with the external DB/maps/quests.
 3. Hardening: SQL escaping helper, packet size validation, bounded string ops.
 4. Optional: Linux port (SharedMemory → POSIX shm), Perl upgrade, x64.

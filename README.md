@@ -2,6 +2,8 @@ EQClassic source code from January 1st, 2010 - For EverQuest Trilogy (big box)
 
 **Online Documention:** http://erfg12.github.io/EQClassic/
 
+**Building / running:** see [docs/BUILD.md](docs/BUILD.md) (CMake or `EQCEmu.sln`, dependencies, database, maps, quests) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ### Support
 
 - Open an issue ticket

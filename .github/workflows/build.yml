@@ -1,0 +1,94 @@
+name: build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Prebuilt x86 dependencies published by the upstream maintainer (see docs/BUILD.md).
+  DEPS_URL: https://archive.org/download/dependencies_202505/Dependencies.zip
+  DEPS_CACHE_KEY: eqclassic-dependencies-202505-v1
+
+jobs:
+  windows-cmake:
+    name: Windows x86 (CMake, ${{ matrix.config }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Dependencies.zip
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: Dependencies.zip
+          key: ${{ env.DEPS_CACHE_KEY }}
+
+      - name: Download Dependencies.zip
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: Invoke-WebRequest -Uri $env:DEPS_URL -OutFile Dependencies.zip -MaximumRetryCount 5 -RetryIntervalSec 30
+
+      - name: Extract dependencies
+        shell: pwsh
+        run: |
+          Expand-Archive -Path Dependencies.zip -DestinationPath deps-tmp -Force
+          Copy-Item -Recurse -Force deps-tmp/Dependencies/* Dependencies/
+          Get-ChildItem Dependencies
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A Win32
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.config }} --parallel
+
+      - name: Install (server layout)
+        run: cmake --install build --config ${{ matrix.config }} --prefix server
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eqclassic-server-${{ matrix.config }}
+          path: server
+
+  windows-msbuild:
+    name: Windows x86 (legacy EQCEmu.sln, Debug)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Dependencies.zip
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: Dependencies.zip
+          key: ${{ env.DEPS_CACHE_KEY }}
+
+      - name: Download Dependencies.zip
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: Invoke-WebRequest -Uri $env:DEPS_URL -OutFile Dependencies.zip -MaximumRetryCount 5 -RetryIntervalSec 30
+
+      - name: Extract dependencies
+        shell: pwsh
+        run: |
+          Expand-Archive -Path Dependencies.zip -DestinationPath deps-tmp -Force
+          Copy-Item -Recurse -Force deps-tmp/Dependencies/* Dependencies/
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Build solution
+        run: msbuild EQCEmu.sln /m /p:Configuration=Debug /p:Platform=Win32
+
+  linux-azone:
+    name: Linux (azone only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y zlib1g-dev
+      - run: cmake -S . -B build -DEQC_BUILD_SERVERS=OFF -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build --parallel

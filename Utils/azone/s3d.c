@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <C:\EQC\Common\Include\zlib.h>
+#include <zlib.h>
 
 #include "s3d.h"
 
@@ -70,9 +70,6 @@ int S3D_Init(s3d_object *s3dobj, FILE *fp)
 				decompress(temp2, temp + inf, s3d_data.deflen, s3d_data.inflen);
 				free(temp2);
 				inf += s3d_data.inflen;
-				//Yeahlight: Zone freeze debug
-				if(ZONE_FREEZE_DEBUG && rand()%ZONE_FREEZE_DEBUG == 1)
-					EQC_FREEZE_DEBUG(__LINE__, __FILE__);
 			}
 
 			fseek(fp, pos, SEEK_SET);
@@ -140,9 +137,6 @@ size_t S3D_GetFile(s3d_object *obj, char *filename, uchar **out) {
 				decompress(temp2, (char *) buf + inf, s3d_data.deflen, s3d_data.inflen);
 				free(temp2);
 				inf += s3d_data.inflen;
-				//Yeahlight: Zone freeze debug
-				if(ZONE_FREEZE_DEBUG && rand()%ZONE_FREEZE_DEBUG == 1)
-					EQC_FREEZE_DEBUG(__LINE__, __FILE__);
 			}
 
 			*out = buf;

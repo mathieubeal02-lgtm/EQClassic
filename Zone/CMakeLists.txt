@@ -1,0 +1,96 @@
+# zone.exe: one process per zone (combat, spells, AI, loot, embedded Perl quests).
+add_executable(zone
+    ../EQC/Sources/EQCException.cpp
+    ../EQC/Sources/EQCUtils.cpp
+    ../EQC/Sources/PacketUtils.cpp
+    ../Common/Source/classes.cpp
+    ../Common/Source/container.cpp
+    ../Common/Source/database.cpp
+    ../Common/Source/DatabaseHandler.cpp
+    ../Common/Source/EQFragment.cpp
+    ../Common/Source/EQPacket.cpp
+    ../Common/Source/EQPacketManager.cpp
+    ../Common/Source/Fragment.cpp
+    ../Common/Source/FragmentGroup.cpp
+    ../Common/Source/FragmentGroupList.cpp
+    ../Common/Source/GuildDatabase.cpp
+    ../Common/Source/Item.cpp
+    ../Common/Source/languages.cpp
+    ../Common/Source/Logger.cpp
+    ../Common/Source/MiscFunctions.cpp
+    ../Common/Source/moremath.cpp
+    ../Common/Source/Mutex.cpp
+    ../Common/Source/packet_dump.cpp
+    ../Common/Source/packet_dump_file.cpp
+    ../Common/Source/packet_functions.cpp
+    ../Common/Source/PlayerPacketFactory.cpp
+    ../Common/Source/races.cpp
+    ../Common/Source/ServerPacketFactory.cpp
+    ../Common/Source/timer.cpp
+    Source/attack.cpp
+    Source/boats.cpp
+    Source/Debug.cpp
+    Source/entity.cpp
+    Source/EntityList.cpp
+    Source/faction.cpp
+    Source/forage.cpp
+    Source/groups.cpp
+    Source/hate_list.cpp
+    Source/loottables.cpp
+    Source/Map.cpp
+    Source/mob.cpp
+    Source/net.cpp
+    nodes.cpp
+    Source/npc.cpp
+    Source/NpcAI.cpp
+    Source/object.cpp
+    Source/PetitionManager.cpp
+    Source/petitions.cpp
+    Source/PlayerCorpse.cpp
+    Source/priorityqueue.cpp
+    Source/projectile.cpp
+    Source/spawn2.cpp
+    Source/spawngroup.cpp
+    Source/Tradeskills.cpp
+    Source/watermap.cpp
+    Source/worldserver.cpp
+    Source/WorldServer_Process.cpp
+    Source/zone.cpp
+    Beg.cpp
+    BindWound.cpp
+    Source/Fishing.cpp
+    Source/InstillDoubt.cpp
+    Source/Mend.cpp
+    Source/Spell.cpp
+    Source/SpellBonuses.cpp
+    Source/SpellData.cpp
+    Source/SpellEffects.cpp
+    Source/spells.cpp
+    Source/SpellsHandler.cpp
+    Source/client.cpp
+    Source/Client_Commands.cpp
+    Source/Client_Messaging.cpp
+    Source/Client_Packet.cpp
+    Source/client_process.cpp
+    Source/ClientList.cpp
+    Source/guild_process.cpp
+    Include/ZoneGuildManager.cpp
+    Source/ZoneGuildManager_Packets.cpp
+    Source/ZoneGuildManager_Process.cpp
+    Source/ZoneGuildManager_WorldProcess.cpp
+    Source/embparser.cpp
+    Source/embperl.cpp
+    Source/questmgr.cpp
+    Source/perl_perlpacket.cpp
+    Source/perlpacket.cpp
+    Source/perl_client.cpp
+    Source/perl_entity.cpp
+    Source/perl_mob.cpp
+    Source/perl_npc.cpp
+)
+target_include_directories(zone PRIVATE Include ../Common/Include ../EQC/Include ../SharedMemory/Include)
+target_compile_definitions(zone PRIVATE WIN32 _CONSOLE ZONE EMBPERL EQC_SHAREDMEMORY UNICODE _UNICODE
+  $<$<CONFIG:Debug>:CATCH_CRASH;_EQDEBUG=5>)
+target_link_libraries(zone PRIVATE ws2_32 eqc::mysql eqc::zlib eqc::perl SharedMemory)
+eqc_copy_runtime_dlls(zone)
+install(TARGETS zone RUNTIME DESTINATION .)

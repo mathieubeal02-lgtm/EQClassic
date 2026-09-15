@@ -18,20 +18,26 @@ See `docs/ARCHITECTURE.md` (components, data flow, hotspots) and `docs/BUILD.md`
 | `SharedMemory/` | Windows DLL sharing item data between World and Zone processes |
 | `LS/Login` | Login server (uses `LS/common` + a few headers from `LS/zone`, an older EQEmu-derived tree) |
 | `Utils/azone` | Builds `.map` collision files from client zone data; `Utils/perlxs` regenerates `Zone/Source/perl_*.cpp` |
+| `sql/` | DB schema, import notes, `eqclassic_db` submodule (data dump) |
+| `cmake/` | `EQCDependencies.cmake`: imported targets for the prebuilt libs in `Dependencies/` |
 | `legacy/` | Dead code moved out of the build (unused parts of `LS/common`, `LS/zone`, stale makefiles). Not compiled. |
 
 ## Conventions and gotchas
 
 - Sources are ISO-8859-1 (non-ASCII in comments). Use `LC_ALL=C grep -a` or grep silently
   skips files as "binary".
-- Windows only. `Win32` (x86) configurations, toolset v143, SDK 10.0. There is no working
-  Linux build (the old makefiles are in `legacy/makefiles/` for reference only).
+- Windows only. `Win32` (x86), toolset v143, SDK 10.0. Build with CMake
+  (`cmake -S . -B build -G "Visual Studio 17 2022" -A Win32`) or the legacy `EQCEmu.sln`;
+  keep both in sync when adding/removing sources (`*/CMakeLists.txt` lists them explicitly).
+  On Linux only `azone` builds (`-DEQC_BUILD_SERVERS=OFF`).
 - `Dependencies/` is empty in git; MySQL, zlib, Perl 5.12 and OpenSSL must be dropped in
   (layout in `docs/BUILD.md`).
 - Config files are read from the working directory: `db.ini` (`[Database]`),
   `LoginServer.ini` (`[LoginServer]` for World, `[LoginConfig]` for Login).
 - Filename case matters for any future non-Windows build: project files were fixed to
   match on-disk names; keep new entries case-exact.
-- No tests, no CI. Verify changes by building the solution in Visual Studio.
+- No tests. CI (`.github/workflows/build.yml`) builds Windows Debug/Release via CMake, the legacy
+  solution, and azone on Linux; it is the only automated check — push to see it run.
+- Database: `sql/schema.sql` (structure), `sql/eqclassic_db` (submodule with the data dump).
 - Do not "fix" the `LS/` tree by re-importing files from `legacy/`; Login only needs what
   is left in `LS/common` and `LS/zone` (transitive include closure, see `legacy/README.md`).
