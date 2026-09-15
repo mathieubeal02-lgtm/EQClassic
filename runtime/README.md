@@ -12,8 +12,8 @@ executables. Copy manually if you use the legacy `.sln` build.
 | `spdat.eff`, `spells_en.txt` | zone | Spell data. `spells_en.txt` is the file from the Trilogy client. Zones crash without it. |
 | `spellResistMods.txt` | zone (`SpellsHandler.cpp`) | `spell_id resist_modifier` per line. |
 | `eqtime.cfg` | world | Persisted in-game clock. |
-| `plugin.pl`, `commands.pl`, `plugins/*.pl` | zone (embedded Perl) | Quest helper plugins and `#` commands implemented in Perl. |
-| `quests/` | zone | Put the PEQ quest pack here: `quests/<zone>/<npcid>.pl`, `quests/<zone>/player.pl`, `quests/plugins/*.pl`, `quests/items/`. Not in git (external download). |
+| `plugin.pl`, `commands.pl`, `quests/plugins/*.pl` | zone (embedded Perl, `embperl.cpp`) | `plugin.pl` and `commands.pl` are loaded from the working directory, plugins from `quests/plugins/`. |
+| `quests/` | zone | Put the PEQ quest pack here: `quests/<zone>/<npcid>.pl`, `quests/<zone>/player.pl`, `quests/items/`. Not in git (external download); only `quests/plugins/` is provided. |
 | `Maps/Maps/*.map` | zone (`Map.cpp`) | Collision/LOS maps from the EQEmu map pack. **NPCs do not spawn without them.** Not in git. |
 | `Maps/3DGraphs/`, `Graphs/`, `Grids/`, `ZoneLines/` | zone | Pathing/zone-line data, generated in game (`#` commands) or shipped by the community. Empty here. |
 | `Maps/Nodes/`, `Maps/Paths/` | zone (`zone.cpp`) | NPC roaming nodes/paths (`<zone>Nodes.txt`, `<zone>Paths.txt`). Only gfaydark is provided. |

@@ -75,8 +75,8 @@ In `C:\eqc`:
 - Client data the server needs (not in git):
   - `Maps/Maps/*.map` → EQEmu Map Pack 1.0 (`Maps.tar.gz`, see `docs/BUILD.md`). Without them
     **no NPC spawns**.
-  - `quests/` → PEQ Velious quest pack (unzip so that `quests/<zone>/*.pl` exists; move the
-    pack's `plugins/` to `quests/plugins/`).
+  - `quests/` → PEQ Velious quest pack (unzip so that `quests/<zone>/*.pl` exists; merge the
+    pack's `plugins/` into the existing `quests/plugins/`).
   - `spells_en.txt` is already in `runtime/`; if your client's file differs, copy the client's.
 
 ## 4. Start
