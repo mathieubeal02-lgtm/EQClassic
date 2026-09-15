@@ -14,7 +14,7 @@
   preprocessor definitions (`WORLD`, `EQC_SHAREDMEMORY`, …) to Release too, which the old
   `.vcxproj` Release configurations did not.
 - CI: `.github/workflows/build.yml` builds CMake Debug/Release and the legacy solution on
-  `windows-latest`, plus `azone` on Linux. Dependencies.zip is downloaded from archive.org and cached.
+  `windows-2022` (VS 2022 / v143; `windows-latest` is now VS 2026 without v143), plus `azone` on Linux. Dependencies.zip is downloaded from archive.org and cached.
 
 ## Dependencies (`Dependencies/`, not in git)
 

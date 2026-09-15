@@ -14,7 +14,7 @@ env:
 jobs:
   windows-cmake:
     name: Windows x86 (CMake, ${{ matrix.config }})
-    runs-on: windows-latest
+    runs-on: windows-2022
     strategy:
       fail-fast: false
       matrix:
@@ -57,7 +57,7 @@ jobs:
 
   windows-msbuild:
     name: Windows x86 (legacy EQCEmu.sln, Debug)
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 
