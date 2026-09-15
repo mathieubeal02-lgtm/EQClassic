@@ -56,10 +56,10 @@
     <ClCompile Include="Source\BoatsManager.cpp">
       <Filter>World Sources</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Client.cpp">
+    <ClCompile Include="Source\client.cpp">
       <Filter>World Sources</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Client_Process.cpp">
+    <ClCompile Include="Source\client_process.cpp">
       <Filter>World Sources</Filter>
     </ClCompile>
     <ClCompile Include="Source\ClientList.cpp">
@@ -278,9 +278,6 @@
       <Filter>Common Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\Common\Include\EQCheckTable.h">
-      <Filter>Common Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Common\Include\EQCSharedMemory.h">
       <Filter>Common Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\Common\Include\FactionCommon.h">

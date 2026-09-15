@@ -239,9 +239,6 @@
     <ClInclude Include="Include\PlayerCorpse.h">
       <Filter>Zone Headers</Filter>
     </ClInclude>
-    <ClInclude Include="priorityqueue.h">
-      <Filter>Zone Headers</Filter>
-    </ClInclude>
     <ClInclude Include="Include\projectile.h">
       <Filter>Zone Headers</Filter>
     </ClInclude>
@@ -463,7 +460,7 @@
     <ClCompile Include="Source\watermap.cpp">
       <Filter>Zone Sources</Filter>
     </ClCompile>
-    <ClCompile Include="Source\WorldServer.cpp">
+    <ClCompile Include="Source\worldserver.cpp">
       <Filter>Zone Sources</Filter>
     </ClCompile>
     <ClCompile Include="Source\WorldServer_Process.cpp">
@@ -517,7 +514,7 @@
     <ClCompile Include="Source\Client_Packet.cpp">
       <Filter>Zone Sources\Client</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Client_Process.cpp">
+    <ClCompile Include="Source\client_process.cpp">
       <Filter>Zone Sources\Client</Filter>
     </ClCompile>
     <ClCompile Include="Source\ClientList.cpp">

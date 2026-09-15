@@ -99,8 +99,8 @@
   <ItemGroup>
     <ClCompile Include="Source\Boat.cpp" />
     <ClCompile Include="Source\BoatsManager.cpp" />
-    <ClCompile Include="Source\Client.cpp" />
-    <ClCompile Include="Source\Client_Process.cpp" />
+    <ClCompile Include="Source\client.cpp" />
+    <ClCompile Include="Source\client_process.cpp" />
     <ClCompile Include="Source\ClientList.cpp" />
     <ClCompile Include="Source\console.cpp" />
     <ClCompile Include="Source\languages.cpp">
@@ -180,7 +180,6 @@
     <ClInclude Include="..\Common\Include\eq_opcodes.h" />
     <ClInclude Include="..\Common\Include\eq_packet_structs.h" />
     <ClInclude Include="..\Common\Include\EQCheckTable.h" />
-    <ClInclude Include="..\Common\Include\EQCSharedMemory.h" />
     <ClInclude Include="..\Common\Include\FactionCommon.h" />
     <ClInclude Include="..\Common\Include\Item.h" />
     <ClInclude Include="..\Common\Include\languages.h" />

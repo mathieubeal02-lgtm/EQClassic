@@ -536,38 +536,27 @@
     <ClInclude Include="..\common\database.h" />
     <ClInclude Include="..\common\DBMemLeak.h" />
     <ClInclude Include="..\common\debug.h" />
-    <ClInclude Include="..\common\deity.h" />
     <ClInclude Include="..\common\eq_opcodes.h" />
     <ClInclude Include="..\common\eq_packet_structs.h" />
     <ClInclude Include="..\common\EQCheckTable.h" />
-    <ClInclude Include="..\common\EQFragment.h" />
     <ClInclude Include="..\common\EQNetwork.h" />
-    <ClInclude Include="..\common\EQOpcodes.h" />
-    <ClInclude Include="..\common\EQPacket.h" />
-    <ClInclude Include="..\common\EQPacketManager.h" />
-    <ClInclude Include="..\common\errmsg.h" />
-    <ClInclude Include="..\common\Guilds.h" />
+    <ClInclude Include="..\common\guilds.h" />
     <ClInclude Include="..\common\linked_list.h" />
     <ClInclude Include="..\common\md5.h" />
     <ClInclude Include="..\common\MiscFunctions.h" />
-    <ClInclude Include="..\common\moremath.h" />
     <ClInclude Include="..\common\Mutex.h" />
     <ClInclude Include="..\common\packet_dump.h" />
-    <ClInclude Include="..\common\packet_dump_file.h" />
     <ClInclude Include="..\common\packet_functions.h" />
     <ClInclude Include="..\common\queue.h" />
-    <ClInclude Include="..\common\queues.h" />
     <ClInclude Include="..\common\races.h" />
-    <ClInclude Include="..\common\Seperator.h" />
+    <ClInclude Include="..\common\seperator.h" />
     <ClInclude Include="..\common\servertalk.h" />
     <ClInclude Include="..\common\TCPConnection.h" />
     <ClInclude Include="..\common\timer.h" />
     <ClInclude Include="..\common\types.h" />
-    <ClInclude Include="..\common\version.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Protocol.txt" />
-    <None Include="Tables.txt" />
     <None Include="ThanksTo.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -182,7 +182,6 @@
     <ClInclude Include="Include\PetitionManager.h" />
     <ClInclude Include="Include\petitions.h" />
     <ClInclude Include="Include\PlayerCorpse.h" />
-    <ClInclude Include="priorityqueue.h" />
     <ClInclude Include="Include\projectile.h" />
     <ClInclude Include="Include\skills.h" />
     <ClInclude Include="Include\spawn2.h" />
@@ -258,7 +257,7 @@
     <ClCompile Include="Source\spawngroup.cpp" />
     <ClCompile Include="Source\Tradeskills.cpp" />
     <ClCompile Include="Source\watermap.cpp" />
-    <ClCompile Include="Source\WorldServer.cpp" />
+    <ClCompile Include="Source\worldserver.cpp" />
     <ClCompile Include="Source\WorldServer_Process.cpp" />
     <ClCompile Include="Source\zone.cpp" />
     <ClCompile Include="Beg.cpp" />
@@ -276,7 +275,7 @@
     <ClCompile Include="Source\Client_Commands.cpp" />
     <ClCompile Include="Source\Client_Messaging.cpp" />
     <ClCompile Include="Source\Client_Packet.cpp" />
-    <ClCompile Include="Source\Client_Process.cpp" />
+    <ClCompile Include="Source\client_process.cpp" />
     <ClCompile Include="Source\ClientList.cpp" />
     <ClCompile Include="Source\guild_process.cpp" />
     <ClCompile Include="Include\ZoneGuildManager.cpp" />
