@@ -18,7 +18,8 @@ See `docs/ARCHITECTURE.md` (components, data flow, hotspots) and `docs/BUILD.md`
 | `SharedMemory/` | Windows DLL sharing item data between World and Zone processes |
 | `LS/Login` | Login server (uses `LS/common` + a few headers from `LS/zone`, an older EQEmu-derived tree) |
 | `Utils/azone` | Builds `.map` collision files from client zone data; `Utils/perlxs` regenerates `Zone/Source/perl_*.cpp` |
-| `sql/` | DB schema, import notes, `eqclassic_db` submodule (data dump) |
+| `runtime/` | Files the servers read from their working directory: `cfg/`, `spdat.eff`, `spells_en.txt`, `Maps/` skeleton, Perl plugins, boot scripts, `*.ini.example`. Installed by `cmake --install`. |
+| `sql/` | DB schema, patches, import notes, `eqclassic_db` submodule (data dump) |
 | `cmake/` | `EQCDependencies.cmake`: imported targets for the prebuilt libs in `Dependencies/` |
 | `legacy/` | Dead code moved out of the build (unused parts of `LS/common`, `LS/zone`, stale makefiles). Not compiled. |
 
@@ -32,8 +33,10 @@ See `docs/ARCHITECTURE.md` (components, data flow, hotspots) and `docs/BUILD.md`
   On Linux only `azone` builds (`-DEQC_BUILD_SERVERS=OFF`).
 - `Dependencies/` is empty in git; MySQL, zlib, Perl 5.12 and OpenSSL must be dropped in
   (layout in `docs/BUILD.md`).
-- Config files are read from the working directory: `db.ini` (`[Database]`),
-  `LoginServer.ini` (`[LoginServer]` for World, `[LoginConfig]` for Login).
+- Everything is read from the working directory: `db.ini` (`[Database]`), `LoginServer.ini`
+  (`[LoginServer]` for World, `[LoginConfig]` for Login), `cfg/`, `Maps/*`, `quests/`, `plugins/`,
+  `spdat.eff`, `spells_en.txt`, `spellResistMods.txt`, `eqtime.cfg`. Templates live in `runtime/`.
+  End-to-end setup: `docs/RUNBOOK.md`.
 - Filename case matters for any future non-Windows build: project files were fixed to
   match on-disk names; keep new entries case-exact.
 - No tests. CI (`.github/workflows/build.yml`) builds Windows Debug/Release via CMake, the legacy

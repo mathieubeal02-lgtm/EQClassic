@@ -49,7 +49,7 @@ endif()
 
 # `cmake --install build --prefix <server dir>` lays out a runnable server folder.
 if(EQC_BUILD_SERVERS)
-  install(FILES Zone/spdat.eff Zone/spells_en.txt Zone/Boot5zones.bat DESTINATION .)
-  install(DIRECTORY Zone/cfg DESTINATION .)
-  install(FILES LS/Login/loginserver.sql DESTINATION sql)
+  # runtime/: cfg/, spdat.eff, spells_en.txt, *.bat, *.pl, Maps/ skeleton, *.ini.example (see runtime/README.md)
+  install(DIRECTORY runtime/ DESTINATION . PATTERN ".keep" EXCLUDE PATTERN "README.md" EXCLUDE)
+  install(FILES sql/schema.sql sql/patches/001_boat_passengers.sql DESTINATION sql)
 endif()

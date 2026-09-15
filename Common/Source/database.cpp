@@ -4059,7 +4059,7 @@ bool Database::FindMyZoneInLocation(const char* zone, const char* zoneLine, floa
 
 	//Yeahlight: GM does not have a zoneline preference, pick one for them
 	if(strcmp(zoneLine, "ANY") == 0){
-		if (RunQuery(query, MakeAnyLenString(&query, "SELECT target_x, target_y, target_z, heading FROM zone_point WHERE target_zone = '%s'", zone), errbuf, &result)) 
+		if (RunQuery(query, MakeAnyLenString(&query, "SELECT target_x, target_y, target_z, heading FROM zone_points WHERE target_zone = '%s'", zone), errbuf, &result)) 
 		{
 			row = mysql_fetch_row(result);
 			if(row)
@@ -4087,7 +4087,7 @@ bool Database::FindMyZoneInLocation(const char* zone, const char* zoneLine, floa
 	}
 	else
 	{
-		if (RunQuery(query, MakeAnyLenString(&query, "SELECT target_x, target_y, target_z, heading FROM zone_point WHERE zone = '%s' AND target_zone = '%s'", zoneLine, zone), errbuf, &result)) 
+		if (RunQuery(query, MakeAnyLenString(&query, "SELECT target_x, target_y, target_z, heading FROM zone_points WHERE zone = '%s' AND target_zone = '%s'", zoneLine, zone), errbuf, &result)) 
 		{
 			row = mysql_fetch_row(result);
 			if(row)

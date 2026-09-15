@@ -6,8 +6,7 @@
 - Two build paths, both kept in sync (CI builds both):
   - **CMake** (recommended): `cmake -S . -B build -G "Visual Studio 17 2022" -A Win32`,
     then `cmake --build build --config Debug` and `cmake --install build --config Debug --prefix server`
-    to get a runnable server folder (exes + dependency DLLs + `cfg/`, `spdat.eff`, `spells_en.txt`,
-    `Boot5zones.bat`). Options: `EQC_DEPENDENCIES_DIR`, `EQC_BUILD_MINILOGIN`, `EQC_COPY_RUNTIME_DLLS`,
+    to get a runnable server folder (exes + dependency DLLs + everything in `runtime/`). Options: `EQC_DEPENDENCIES_DIR`, `EQC_BUILD_MINILOGIN`, `EQC_COPY_RUNTIME_DLLS`,
     `EQC_BUILD_SERVERS` (OFF on Linux: only `azone` builds there).
   - **Legacy**: open `EQCEmu.sln`, Build → Build Solution (Debug|Win32). Outputs `login.exe`,
     `world.exe`, `zone.exe`, `SharedMemory.dll`.
@@ -57,24 +56,4 @@ To be verified.
 
 ## Runtime setup
 
-Server directory (next to the executables):
-
-```
-login.exe  world.exe  zone.exe  SharedMemory.dll
-db.ini              [Database]  host= user= pass= database=        (Common/Source/database.cpp:68)
-LoginServer.ini     [LoginServer] loginserver= worldname= account= password= locked= worldaddress=   (World/Source/net.cpp:181)
-                    [LoginConfig] servermode=Standalone|Master|Slave|Mesh ...                          (LS/Login/net.cpp:238)
-MiniLoginAccounts.ini   (Login built with MINILOGIN)
-spells_en.txt  spdat.eff   (copied from the client; zones crash without spells_en.txt)
-cfg/<zone>.cfg          (Zone/cfg)
-maps/                   (.map files; README says /maps/maps)
-quests/<zone>/*.pl  quests/plugins/*.pl  quests/<zone>/player.pl
-```
-
-1. Create MySQL schema `eqclassic`, import `eqclassic.sql`, then `loginserver.sql`; add an account.
-2. Fill `db.ini` and `LoginServer.ini` (127.0.0.1 for local, LAN/public IP otherwise).
-3. Start in order: `login.exe`, `world.exe`, then `Boot5zones.bat`
-   (`zone <zone_name|.> <address> <port> <worldaddress>`, default port 7996).
-4. Connect the Trilogy client through EQW.exe (the `patchme` suffix disconnects).
-
-Ports: Login 5999 (`LOGIN_PORT`), World 9000 + client UDP, Zone 7996 by default.
+See `docs/RUNBOOK.md` (step-by-step) and `runtime/README.md` (what each file is).
