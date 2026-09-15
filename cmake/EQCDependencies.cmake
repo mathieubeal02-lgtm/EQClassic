@@ -1,7 +1,7 @@
 # Imported targets for the prebuilt third-party libraries shipped in Dependencies.zip
 # (see docs/BUILD.md). Layout expected under EQC_DEPENDENCIES_DIR:
 #   mysql/include, mysql/lib/libmysql.lib          MySQL C client 5.7.17 (x86)
-#   zlib/include,  zlib/lib/zdll.lib | zlib.lib     zlib 1.2.3 (x86)
+#   zlib/include,  zlib/lib/zdll.lib               zlib 1.2.3 (x86, import lib of zlib1.dll)
 #   Perl/lib/CORE/perl512.lib                       ActivePerl 5.12.3 (x86)
 #   openssl/include, openssl/lib/libeay32.lib, ssleay32.lib   OpenSSL 0.9.8k (x86)
 # On non-Windows hosts only system zlib is looked up (for azone).
@@ -25,11 +25,13 @@ set_target_properties(eqc::mysql PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES "${_dep}/mysql/include"
   INTERFACE_LINK_LIBRARIES      "${_dep}/mysql/lib/libmysql.lib")
 
-# The .vcxproj files link zdll.lib (import lib of zlib1.dll) in Debug and zlib.lib in Release.
+# zdll.lib is the import library of zlib1.dll and is the one that resolves deflate/inflate.
+# (The .vcxproj Release configurations pointed at zlib.lib, which does not link: LNK2019 on
+# _deflate/_inflate — the Release configurations were never used upstream.)
 add_library(eqc::zlib INTERFACE IMPORTED)
 set_target_properties(eqc::zlib PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES "${_dep}/zlib/include"
-  INTERFACE_LINK_LIBRARIES      "$<IF:$<CONFIG:Debug>,${_dep}/zlib/lib/zdll.lib,${_dep}/zlib/lib/zlib.lib>")
+  INTERFACE_LINK_LIBRARIES      "${_dep}/zlib/lib/zdll.lib")
 
 add_library(eqc::perl INTERFACE IMPORTED)
 set_target_properties(eqc::perl PROPERTIES

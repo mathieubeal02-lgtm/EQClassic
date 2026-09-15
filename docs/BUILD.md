@@ -23,7 +23,7 @@ Project files expect this layout (paths from `*.vcxproj`):
 ```
 Dependencies/
   mysql/include, mysql/lib/libmysql.lib (+ .dll)      MySQL C client 5.7.17, x86 (MySQL 8 server works with mysql_native_password)
-  zlib/include,  zlib/lib/zdll.lib | zlib.lib, zlib1.dll  zlib 1.2.3, x86 (zdll.lib in Debug, zlib.lib in Release, as in the .vcxproj)
+  zlib/include,  zlib/lib/zdll.lib, zlib1.dll         zlib 1.2.3, x86 (zdll.lib = import lib of zlib1.dll; the zlib.lib the old Release configs used does not link)
   Perl/lib/CORE/perl512.lib, Perl/bin/perl512.dll      ActivePerl 5.12.3, x86
   openssl/include, openssl/lib/{libeay32,ssleay32}.lib, openssl/bin/*.dll   OpenSSL 0.9.8k, x86 (Login only)
 ```
