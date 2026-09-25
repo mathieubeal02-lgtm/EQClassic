@@ -42,9 +42,11 @@ renamed to `Perl512.dll`; try the plain 5.12 install first.
    `002_items_raw_data_encoding.sql` matters: the dump's item blobs are corrupted; without the patch
    (and without `items_axclassic`, which the servers now read first) the world logs thousands of
    "Invalid items" and no item exists in game.
-3. Create a login account (password is checked as `SHA()`):
+3. Create a login account (password is checked as `SHA()`; without `user_active='1'` the login
+   server answers "Your account has not been verified by e-mail"):
    ```sql
-   INSERT INTO login_accounts (name, password, lsadmin, lsstatus) VALUES ('test', SHA1('test'), 0, 0);
+   INSERT INTO login_accounts (name, password, lsadmin, lsstatus, worldadmin, user_active)
+     VALUES ('test', SHA1('test'), 0, 0, '0', '1');
    ```
    The `account` row on the world side is created automatically on first login. To make
    that account a GM afterwards: `UPDATE account SET status=250 WHERE name='test';`
