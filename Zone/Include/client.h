@@ -61,7 +61,7 @@ public:
 	
 	void			InitProcessArray();
 	//fProcessOP_Code process_opcode_array[0xFFFF];
-	void	(Client::*process_opcode_array[0xFFFF])(APPLAYER*); 
+	void	(Client::*process_opcode_array[0x10000])(APPLAYER*);  // indexed by the 16-bit opcode: 0..0xFFFF 
 	void	ProcessOP_Default(APPLAYER* pApp);
 
 	void	ChannelMessageReceived(int8 chan_num, int8 language, char* message, char* targetname);

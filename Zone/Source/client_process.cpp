@@ -2468,6 +2468,8 @@ void Client::ProcessOP_DeleteSpawn(APPLAYER* pApp)
 
 void Client::ProcessOP_PickPockets(APPLAYER* pApp)
 {
+	if (!PacketFits<PickPockets_Struct>(pApp, "ProcessOP_PickPockets"))
+		return;
 	// Pick Pockets - Wizzel - 04/21/08
 	// Basis of PickPockets.
 	//1. Makes sure the person you targeted is an interactive NPC or a PC
@@ -3410,6 +3412,8 @@ void Client::ProcessOP_GMSummon(APPLAYER* pApp) {
 //////////////////////
 
 void Client::ProcessOP_GiveItem(APPLAYER* pApp){
+	if (!PacketFits<Trade_Window_Struct>(pApp, "ProcessOP_GiveItem"))
+		return;
 
 	cout << "Requesting trade !" << endl;
 	Trade_Window_Struct* msg = (Trade_Window_Struct*) pApp->pBuffer; 
@@ -3457,6 +3461,8 @@ void Client::ProcessOP_GiveItem(APPLAYER* pApp){
 
 
 void Client::ProcessOP_TradeAccepted(APPLAYER* pApp){
+	if (!PacketFits<Trade_Window_Struct>(pApp, "ProcessOP_TradeAccepted"))
+		return;
 
 	cout << "trade accepted" << endl;
 	Trade_Window_Struct* msg = (Trade_Window_Struct*) pApp->pBuffer; 
@@ -3564,6 +3570,8 @@ void Client::ProcessOP_Click_Give(APPLAYER* pApp){
 
 //////////////////////
 void Client::ProcessOP_CancelTrade(APPLAYER* pApp){
+	if (!PacketFits<CancelTrade_Struct>(pApp, "ProcessOP_CancelTrade"))
+		return;
 
 	CancelTrade_Struct* msg = (CancelTrade_Struct*) pApp->pBuffer;
 	if (pApp->size != sizeof(CancelTrade_Struct)){
@@ -3605,6 +3613,8 @@ void Client::ProcessOP_CancelTrade(APPLAYER* pApp){
 
 
 void Client::ProcessOP_SplitMoney(APPLAYER* pApp){
+	if (!PacketFits<Split_Struct>(pApp, "ProcessOP_SplitMoney"))
+		return;
 
 	//FileDumpPacket("Splitmoney.txt", pApp);
 
@@ -3749,6 +3759,8 @@ void Client::ProcessOP_GMNameChange(APPLAYER* pApp)
 //////////////////////
 
 void Client::ProcessOP_GMKill(APPLAYER* pApp){
+	if (!PacketFits<GMKill_Struct>(pApp, "ProcessOP_GMKill"))
+		return;
 	if(admin<100) 
 	{
 		Message(RED, "You're not awesome enough to use this command!");
@@ -3907,6 +3919,8 @@ void Client::ProcessOP_GMGoto(APPLAYER* pApp){
 
 }
 void Client::ProcessOP_ShopRequest(APPLAYER* pApp){
+	if (!PacketFits<Merchant_Click_Struct>(pApp, "ProcessOP_ShopRequest"))
+		return;
 	/* this works*/			
 	Merchant_Click_Struct* mc=(Merchant_Click_Struct*)pApp->pBuffer;
 
@@ -3979,7 +3993,9 @@ void Client::ProcessOP_ShopRequest(APPLAYER* pApp){
 
 //////////////////////
 //Tazadar: It removes players sold items now
-void Client::ProcessOP_ShopPlayerBuy(APPLAYER* pApp){						
+void Client::ProcessOP_ShopPlayerBuy(APPLAYER* pApp){
+	if (!PacketFits<Merchant_Purchase_Struct>(pApp, "ProcessOP_ShopPlayerBuy"))
+		return;						
 	cout << name << " is attempting to purchase an item..  " << endl;
 	Merchant_Purchase_Struct* mp=(Merchant_Purchase_Struct*)pApp->pBuffer;
 	if (pApp->size != sizeof(Merchant_Purchase_Struct)) {
@@ -4100,6 +4116,8 @@ void Client::ProcessOP_ShopPlayerBuy(APPLAYER* pApp){
 //////////////////////
 //Tazadar: It adds players sold items now
 void Client::ProcessOP_ShopPlayerSell(APPLAYER* pApp){
+	if (!PacketFits<Merchant_Purchase_Struct>(pApp, "ProcessOP_ShopPlayerSell"))
+		return;
 	Merchant_Purchase_Struct* mp=(Merchant_Purchase_Struct*)pApp->pBuffer;
 	//FileDumpPacket("selling.txt", pApp);
 	if (pApp->size != sizeof(Merchant_Purchase_Struct)) {
@@ -4278,6 +4296,8 @@ void Client::ProcessOP_PetitionCheckout(APPLAYER* pApp){
 //////////////////////
 
 void Client::ProcessOP_PetitionDelete(APPLAYER* pApp){
+	if (!PacketFits<int>(pApp, "ProcessOP_PetitionDelete"))
+		return;
 	APPLAYER* outapp = new APPLAYER(OP_PetitionClientUpdate,sizeof(PetitionClientUpdate_Struct));
 	PetitionClientUpdate_Struct* pet = (PetitionClientUpdate_Struct*) outapp->pBuffer;
 	pet->petnumber = *((int*) pApp->pBuffer);
@@ -4307,6 +4327,8 @@ void Client::ProcessOP_PetitionDelete(APPLAYER* pApp){
 //////////////////////
 
 void Client::ProcessOP_GMDelCorpse(APPLAYER* pApp){
+	if (!PacketFits<GMDelCorpse_Struct>(pApp, "ProcessOP_GMDelCorpse"))
+		return;
 	if(admin<100) 
 	{
 		Message(RED, "You're not awesome enough to use this command!");
@@ -4332,6 +4354,8 @@ void Client::ProcessOP_GMDelCorpse(APPLAYER* pApp){
 //////////////////////
 
 void Client::ProcessOP_GMKick(APPLAYER* pApp){
+	if (!PacketFits<GMKick_Struct>(pApp, "ProcessOP_GMKick"))
+		return;
 	if(admin<150)
 	{
 		Message(RED, "You're not awesome enough to use this command!");
@@ -4364,6 +4388,8 @@ void Client::ProcessOP_GMKick(APPLAYER* pApp){
 //////////////////////
 
 void Client::ProcessOP_PetitionCheckIn(APPLAYER* pApp){
+	if (!PacketFits<Petition_Struct>(pApp, "ProcessOP_PetitionCheckIn"))
+		return;
 	Petition_Struct* inpet = (Petition_Struct*) pApp->pBuffer;
 	Petition* pet = petition_list.GetPetitionByID(inpet->petnumber);
 	if (inpet->urgency != pet->GetUrgency())
@@ -4620,10 +4646,13 @@ void Client::ProcessOP_InspectAnswer(APPLAYER* pApp)
 void Client::ProcessOP_ReadBook(APPLAYER* pApp)
 {
 
-	if(pApp->size <= sizeof(BookRequest_Struct))
+	// The client sends the book name without padding it to sizeof(BookRequest_Struct):
+	// accept 1..sizeof bytes and copy into a terminated local buffer.
+	if(pApp->pBuffer != 0 && pApp->size > 0 && pApp->size <= sizeof(BookRequest_Struct))
 	{
-		BookRequest_Struct* book = (BookRequest_Struct*) pApp->pBuffer;
-		ReadBook(book->txtfile);
+		char txtfile[sizeof(BookRequest_Struct) + 1] = {0};
+		memcpy(txtfile, pApp->pBuffer, pApp->size);
+		ReadBook(txtfile);
 	} 
 	else
 	{
@@ -4715,6 +4744,8 @@ void Client::ProcessOP_MBRetrieveMessages(APPLAYER* pApp) {
 //| Handles post messages requests from player
 //o--------------------------------------------------------------
 void Client::ProcessOP_MBPostMessage(APPLAYER* pApp) {
+	if (!PacketFits<MBMessage_Struct>(pApp, "ProcessOP_MBPostMessage"))
+		return;
 
 	bool debugFlag = true;
 
@@ -4844,6 +4875,8 @@ void Client::ProcessOP_MBRetrieveMessage(APPLAYER* pApp) {
 //o--------------------------------------------------------------
 void Client::ProcessOP_ClickDoor(APPLAYER* pApp)
 {
+	if (!PacketFits<ClickDoor_Struct>(pApp, "ProcessOP_ClickDoor"))
+		return;
 	bool debugFlag = true;
 
 	LinkedListIterator<Door_Struct*> iterator(zone->door_list);
@@ -5169,6 +5202,8 @@ void Client::ProcessOP_ConsumeItem(APPLAYER* pApp){
 
 
 void Client::ProcessOP_ConsentRequest(APPLAYER* pApp){
+	if (!PacketFits<ConsentRequest_Struct>(pApp, "ProcessOP_ConsentRequest"))
+		return;
 	//Ignore empty consent request.
 	if(sizeof(pApp->pBuffer) == 1){
 		return;
@@ -5651,6 +5686,8 @@ void Client::ProcessOP_ClassTraining(APPLAYER* pApp)
 ///////////////////////////////////////////////////////////////////////////
 
 void Client::ProcessOP_ClassEndTraining(APPLAYER* pApp){
+	if (!PacketFits<ClassTrain_Struct>(pApp, "ProcessOP_ClassEndTraining"))
+		return;
 
 	ClassTrain_Struct* classtrain = (ClassTrain_Struct*) pApp->pBuffer;
 
@@ -5666,6 +5703,8 @@ void Client::ProcessOP_ClassEndTraining(APPLAYER* pApp){
 
 void Client::ProcessOP_ClassTrainSkill(APPLAYER* pApp)
 {
+	if (!PacketFits<ClassSkillChange_Struct>(pApp, "ProcessOP_ClassTrainSkill"))
+		return;
 	DumpPacketHex(pApp);
 	
 	ClassSkillChange_Struct* gmskill = (ClassSkillChange_Struct*) pApp->pBuffer;
@@ -6560,6 +6599,8 @@ void Client::ProcessOP_Default(APPLAYER* app){
 //o--------------------------------------------------------------
 void Client::ProcessOP_GMBecomeNPC(APPLAYER* pApp)
 {
+	if (!PacketFits<BecomeNPC_Struct>(pApp, "ProcessOP_GMBecomeNPC"))
+		return;
 	//Yeahlight: TODO: Set temporary PVP flags and max level flags for the GM here and
 	//                 set conditions in attack.cpp. The GM should also be indifferent
 	//                 to other NPCs.
@@ -6711,7 +6752,9 @@ void Client::ProcessOP_ClientError(APPLAYER* pApp)
 //| http://web.archive.org/web/20001109195100/http://eq.castersrealm.com/poison/
 //---------------------------------------------------------------
 void Client::ProcessOP_ApplyPoison(APPLAYER* pApp)
-{	
+{
+	if (!PacketFits<ApplyPoison_Struct>(pApp, "ProcessOP_ApplyPoison"))
+		return;	
 	// Harakiri the correct SLOT ID will only be sent by the client
 	// when  the unique item id is set for each client
 	// currently, only the command #si2 will do this, because its taken the items from the nonblob table

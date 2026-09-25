@@ -59,6 +59,18 @@ namespace EQC
 					SAFE_DELETE(pBuffer); 
 				}
 			};
+			// True if app carries at least sizeof(T) bytes. Handlers cast pBuffer straight to a
+			// struct, so a shorter (malformed or malicious) packet would make them read past it.
+			template <typename T>
+			inline bool PacketFits(const APPLAYER* app, const char* handler)
+			{
+				if (app != 0 && app->pBuffer != 0 && app->size >= sizeof(T))
+					return true;
+				std::cout << "Dropped malformed packet in " << handler << ": " << (app ? app->size : 0)
+				          << " bytes, need " << sizeof(T) << std::endl;
+				return false;
+			}
+
 		}
 	}
 }

@@ -3076,7 +3076,8 @@ void Database::GetBook(char* txtfile, char* txtout)
 			
 			if(row != 0)
 			{
-				strcpy(txtout,row[0]);
+				strncpy(txtout,row[0],5999);	// callers pass char[6000] (Client::ReadBook)
+				txtout[5999] = 0;
 			}
 			else
 			{

@@ -2466,10 +2466,10 @@ void Client::SetGM(bool toggle)
 * but I'm pretty sure it can go up to 14 bytes, but haven't tested.*/
 void Client::ReadBook(char txtfile[8]) {
 	CAST_CLIENT_DEBUG_PTR(this)->Log(CP_UPDATES, "Client::ReadBook(txtfile = %s)", txtfile);
-	char booktxt[6000];						//Buffer to store book txt, 6000 is magic;
+	char booktxt[6000] = {0};				//Buffer to store book txt, 6000 is magic;
 	Database::Instance()->GetBook(txtfile, booktxt);		//Retrieves txt from the database for key txtfile;
 
-	if (booktxt != 0) {
+	if (booktxt[0] != 0) {
 		//cout << "Just Sent Book for: " << txtfile << " Text: " << booktxt << endl;
 		APPLAYER* outapp = new APPLAYER(OP_ReadBook, strlen(booktxt));
 		memcpy(outapp->pBuffer,booktxt,strlen(booktxt));
@@ -2737,6 +2737,8 @@ void Client::ProcessOP_GroupFollow(APPLAYER* pApp){
 /* Triggers when a member gets kicked or clicks disband (not when leader disbands)
 * We still need to figure out how to distinguish between kick and drop.*/
 void Client::ProcessOP_GroupQuit(APPLAYER* pApp){
+	if (!PacketFits<GroupDisband_Struct>(pApp, "ProcessOP_GroupQuit"))
+		return;
 	CAST_CLIENT_DEBUG_PTR(this)->Log(CP_UPDATES, "Client::ProcessOP_GroupQuit()");
 	GroupDisband_Struct* gds = (GroupDisband_Struct*)pApp->pBuffer;
 	if ( pApp->size == sizeof(GroupDisband_Struct))

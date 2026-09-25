@@ -42,7 +42,7 @@ void Client::ProcessOpcode(APPLAYER* app)
 /** Initializes the function array that processes opcodes by the opcode index number.*/
 void Client::InitProcessArray()
 {
-	for(int i=0;i<0xFFFF;i++){
+	for(int i=0;i<0x10000;i++){
 		process_opcode_array[i] = &Client::ProcessOP_Default;
 	}
 	

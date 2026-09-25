@@ -129,7 +129,9 @@
    in the container and has the container id. This way we are figuring
    out the tradeskill ID itself.
  ********************************************************************/
-void Client::ProcessOP_TradeSkillCombine(APPLAYER* pApp){	
+void Client::ProcessOP_TradeSkillCombine(APPLAYER* pApp){
+	if (!PacketFits<Combine_Struct>(pApp, "ProcessOP_TradeSkillCombine"))
+		return;	
 
 	EQC::Common::Log(EQCLog::Debug,CP_CLIENT,"TradeskillCombine Request");
 

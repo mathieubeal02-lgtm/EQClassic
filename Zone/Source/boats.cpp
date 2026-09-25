@@ -32,6 +32,8 @@ extern Zone*			zone;
 	 ********************************************************************/
 
 void Client::ProcessOP_GetOnBoat(APPLAYER* pApp){
+	if (!PacketFits<Boat_Struct>(pApp, "ProcessOP_GetOnBoat"))
+		return;
 	/*	No need for a packet size check. The size is in relation to the size
 	of the name of the boat.*/
 
@@ -56,6 +58,8 @@ void Client::ProcessOP_GetOnBoat(APPLAYER* pApp){
 	/////////////////////////////////////////////////////////////////////
 
 void Client::ProcessOP_GetOffBoat(APPLAYER* pApp){
+	if (!PacketFits<Boat_Struct>(pApp, "ProcessOP_GetOffBoat"))
+		return;
 
 	// Cast the struct
 	Boat_Struct* boatstruct = (Boat_Struct*) pApp->pBuffer;

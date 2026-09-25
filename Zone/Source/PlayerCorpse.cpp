@@ -668,6 +668,8 @@ void Corpse::MakeLootRequestPackets(Client* client, APPLAYER* app)
  *	  bag									                        *  
  ********************************************************************/  
 void Corpse::LootItem(Client* client, APPLAYER* app) {
+	if (!PacketFits<LootingItem_Struct>(app, "LootItem"))
+		return;
 
 	if (this->BeingLootedBy != client->GetID()) {
 		client->Message(RED, "Error: Corpse::LootItem: BeingLootedBy != client");
