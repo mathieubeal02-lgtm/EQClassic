@@ -27,6 +27,7 @@
 #include "petitions.h"
 #include "questmgr.h"
 #include "Client_Commands.h"
+#include "SQLEscape.h"
 
 #ifdef EMBPERL
 	#include "embparser.h"
@@ -589,7 +590,7 @@ bool Database::PopulateZoneLists(char* zone_name, LinkedList<ZonePoint*>* zone_p
 	MYSQL_ROW row;
 	query = 0;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT DISTINCT(spawngroupID), spawngroup.name FROM spawn2,spawngroup WHERE spawn2.spawngroupID=spawngroup.ID and zone='%s'", zone_name), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT DISTINCT(spawngroupID), spawngroup.name FROM spawn2,spawngroup WHERE spawn2.spawngroupID=spawngroup.ID and zone='%s'", SQLEscape(zone_name).c_str()), errbuf, &result))
 	{
 		safe_delete_array(query);//delete[] query;
 		while (row = mysql_fetch_row(result)) {
@@ -607,7 +608,7 @@ bool Database::PopulateZoneLists(char* zone_name, LinkedList<ZonePoint*>* zone_p
 
 	query = 0;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT spawnentry.spawngroupID, npcid, chance, time_of_day from spawnentry, spawn2 where spawnentry.spawngroupID=spawn2.spawngroupID and zone='%s' ORDER by chance", zone_name), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT spawnentry.spawngroupID, npcid, chance, time_of_day from spawnentry, spawn2 where spawnentry.spawngroupID=spawn2.spawngroupID and zone='%s' ORDER by chance", SQLEscape(zone_name).c_str()), errbuf, &result)) {
 		safe_delete_array(query);//delete[] query;
 		while (row = mysql_fetch_row(result))
 		{
@@ -644,7 +645,7 @@ bool Database::PopulateZoneLists(char* zone_name, LinkedList<ZonePoint*>* zone_p
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
-	MakeAnyLenString(&query, "SELECT x,y,z,target_x,target_y,target_z,target_zone,heading FROM zone_points WHERE zone='%s'", zone_name);
+	MakeAnyLenString(&query, "SELECT x,y,z,target_x,target_y,target_z,target_zone,heading FROM zone_points WHERE zone='%s'", SQLEscape(zone_name).c_str());
 	if (RunQuery(query, strlen(query), errbuf, &result))
 	{
 		safe_delete_array(query);//delete[] query;
@@ -672,7 +673,7 @@ bool Database::PopulateZoneLists(char* zone_name, LinkedList<ZonePoint*>* zone_p
 	// CODER new spawn code
 	query = 0;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT DISTINCT(spawngroupID), spawngroup.name FROM spawn2,spawngroup WHERE spawn2.spawngroupID=spawngroup.ID and zone='%s'", zone_name), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT DISTINCT(spawngroupID), spawngroup.name FROM spawn2,spawngroup WHERE spawn2.spawngroupID=spawngroup.ID and zone='%s'", SQLEscape(zone_name).c_str()), errbuf, &result))
 	{
 		safe_delete_array(query);//delete[] query;
 		while(row = mysql_fetch_row(result)) {
@@ -690,7 +691,7 @@ bool Database::PopulateZoneLists(char* zone_name, LinkedList<ZonePoint*>* zone_p
 
 	query = 0;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT spawnentry.spawngroupID, npcid, chance, time_of_day from spawnentry, spawn2 where spawnentry.spawngroupID=spawn2.spawngroupID and zone='%s' ORDER by chance", zone_name), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT spawnentry.spawngroupID, npcid, chance, time_of_day from spawnentry, spawn2 where spawnentry.spawngroupID=spawn2.spawngroupID and zone='%s' ORDER by chance", SQLEscape(zone_name).c_str()), errbuf, &result)) {
 		safe_delete_array(query);//delete[] query;
 		while(row = mysql_fetch_row(result))
 		{
@@ -728,7 +729,7 @@ bool Database::PopulateZoneSpawnList(char* zone_name, LinkedList<Spawn2*> &spawn
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
-	MakeAnyLenString(&query, "SELECT id, spawngroupID, x, y, z, heading, respawntime, variance, roamRange, pathgrid FROM spawn2 WHERE zone='%s'", zone_name);
+	MakeAnyLenString(&query, "SELECT id, spawngroupID, x, y, z, heading, respawntime, variance, roamRange, pathgrid FROM spawn2 WHERE zone='%s'", SQLEscape(zone_name).c_str());
 	
 	if (RunQuery(query, strlen(query), errbuf, &result))
 	{
@@ -812,7 +813,7 @@ bool Database::DumpZoneState() {
 	char errbuf[MYSQL_ERRMSG_SIZE];
 	char *query = 0;
 
-	if (!RunQuery(query, MakeAnyLenString(&query, "DELETE FROM zone_state_dump WHERE zonename='%s'", zone->GetShortName()), errbuf)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "DELETE FROM zone_state_dump WHERE zonename='%s'", SQLEscape(zone->GetShortName()).c_str()), errbuf)) {
 		cerr << "Error in DumpZoneState query '" << query << "' " << errbuf << endl;
 		safe_delete_array(query);//delete[] query;
 		return false;
@@ -926,7 +927,7 @@ sint8 Database::LoadZoneState(char* zonename, LinkedList<Spawn2*>& spawn2_list) 
 	Spawn2** spawn2_loaded = 0;
 	NPC** npc_loaded = 0;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT spawn2_count, npc_count, npcloot_count, gmspawntype_count, spawn2, npcs, npc_loot, gmspawntype, (UNIX_TIMESTAMP()-UNIX_TIMESTAMP(time)) as elapsedtime FROM zone_state_dump WHERE zonename='%s'", zonename), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT spawn2_count, npc_count, npcloot_count, gmspawntype_count, spawn2, npcs, npc_loot, gmspawntype, (UNIX_TIMESTAMP()-UNIX_TIMESTAMP(time)) as elapsedtime FROM zone_state_dump WHERE zonename='%s'", SQLEscape(zonename).c_str()), errbuf, &result)) {
 		safe_delete_array(query);//delete[] query;
 
 		if (mysql_num_rows(result) == 1) {

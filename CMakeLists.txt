@@ -6,6 +6,7 @@ project(EQClassic LANGUAGES C CXX)
 
 option(EQC_BUILD_SERVERS   "Build login/world/zone/SharedMemory (Windows only)" ${WIN32})
 option(EQC_BUILD_AZONE     "Build the azone map tool"                           ON)
+option(EQC_BUILD_TESTS     "Build the portable unit tests (tests/)"              ON)
 option(EQC_BUILD_MINILOGIN "Also build the MINILOGIN variant of the login server (stale, may not compile)" OFF)
 option(EQC_COPY_RUNTIME_DLLS "Copy dependency DLLs next to the executables after build" ON)
 set(EQC_DEPENDENCIES_DIR "${CMAKE_SOURCE_DIR}/Dependencies" CACHE PATH
@@ -45,6 +46,10 @@ if(EQC_BUILD_SERVERS)
 endif()
 if(EQC_BUILD_AZONE)
   add_subdirectory(Utils/azone)
+endif()
+if(EQC_BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
 endif()
 
 # `cmake --install build --prefix <server dir>` lays out a runnable server folder.

@@ -27,6 +27,7 @@
 #include "../include/database.h"
 #include "../include/client.h"
 #include "../include/zone.h"
+#include "SQLEscape.h"
 
 extern Zone* zone;
 
@@ -560,7 +561,7 @@ int32 Database::GetNPCFactionID(int32 npc_id){
     char *query = 0;
     MYSQL_RES *result;
     MYSQL_ROW row;
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id FROM npc_faction where name = '%s'", tempName), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id FROM npc_faction where name = '%s'", SQLEscape(tempName).c_str()), errbuf, &result)) {
 		safe_delete_array(query);//delete[] query;
 		row = mysql_fetch_row(result);
 		if(row)
@@ -580,7 +581,7 @@ int32 Database::GetPrimaryFaction(char* name){
     char *query2 = 0;
     MYSQL_RES *result2;
     MYSQL_ROW row2;
-	if (RunQuery(query2, MakeAnyLenString(&query2, "SELECT primaryfaction FROM npc_faction where name = '%s'", name), errbuf2, &result2)) {
+	if (RunQuery(query2, MakeAnyLenString(&query2, "SELECT primaryfaction FROM npc_faction where name = '%s'", SQLEscape(name).c_str()), errbuf2, &result2)) {
 		safe_delete_array(query2);//delete[] query2;
 		row2 = mysql_fetch_row(result2);
 		if(row2)

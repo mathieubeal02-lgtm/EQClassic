@@ -4,6 +4,7 @@
 #include "zone.h"
 #include "watermap.h"
 #include "math.h"
+#include "SQLEscape.h"
 
 using namespace EQC::Zone;
 
@@ -163,7 +164,7 @@ int32 Database::GetZoneFishing(const char* zone, int8 skill)
 		item[c]=0;
 	}
 	
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT itemid FROM fishing WHERE (shortname= '%s')",zone), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT itemid FROM fishing WHERE (shortname= '%s')",SQLEscape(zone).c_str()), errbuf, &result))
 	{
 		cout << query << endl;
 		safe_delete_array(query);

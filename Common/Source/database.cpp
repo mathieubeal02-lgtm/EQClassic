@@ -15,6 +15,7 @@
 #include "config.h"
 #include "EQCUtils.hpp"
 #include "database.h"
+#include "SQLEscape.h"
 #include "races.h"
 #include "deity.h"
 #include "itemtypes.h"
@@ -206,9 +207,9 @@ int32 Database::GetAuthentication(char* char_name, char* zone_name, int32 ip)
 	MYSQL_ROW row;
 	//int32 newip = 83994816;
 	int32 newip = ip;
-	//int32 tamanio = MakeAnyLenString(&query, "SELECT account_id FROM authentication WHERE char_name='%s' AND zone_name='%s' AND ip=%u AND UNIX_TIMESTAMP()-time < %i", char_name, zone_name, newip, AUTHENTICATION_TIMEOUT);
+	//int32 tamanio = MakeAnyLenString(&query, "SELECT account_id FROM authentication WHERE char_name='%s' AND zone_name='%s' AND ip=%u AND UNIX_TIMESTAMP()-time < %i", SQLEscape(char_name).c_str(), SQLEscape(zone_name).c_str(), newip, AUTHENTICATION_TIMEOUT);
 	//jimm0thy - This check was failing the ip check portion for some reason, So I've removed both ip and timestamp checks and now it appears to be ok
-	int32 tamanio = MakeAnyLenString(&query, "SELECT account_id FROM authentication WHERE char_name='%s' AND zone_name='%s'", char_name, zone_name);
+	int32 tamanio = MakeAnyLenString(&query, "SELECT account_id FROM authentication WHERE char_name='%s' AND zone_name='%s'", SQLEscape(char_name).c_str(), SQLEscape(zone_name).c_str());
 	int32 iresult = 0;
 
 	if (RunQuery(query, tamanio, errbuf, &result))
@@ -250,7 +251,7 @@ bool Database::SetAuthentication(int32 account_id, char* char_name, char* zone_n
 		return false;
 	}
 
-	int32 tamanio = MakeAnyLenString(&query, "INSERT INTO authentication SET account_id=%i, char_name='%s', zone_name='%s', ip=%u, time=UNIX_TIMESTAMP()", account_id, char_name, zone_name, newip);
+	int32 tamanio = MakeAnyLenString(&query, "INSERT INTO authentication SET account_id=%i, char_name='%s', zone_name='%s', ip=%u, time=UNIX_TIMESTAMP()", account_id, SQLEscape(char_name).c_str(), SQLEscape(zone_name).c_str(), newip);
 	if (!RunQuery(query, tamanio, errbuf, 0, &affected_rows))
 	{
 		cerr << "Error in SetAuthentication query '" << query << "' " << errbuf << endl;
@@ -362,7 +363,7 @@ int32 Database::CheckLogin(char* name, char* password)
 		return 0;
 	}
 	
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id FROM account WHERE name='%s' AND password='%s'", name, password), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id FROM account WHERE name='%s' AND password='%s'", SQLEscape(name).c_str(), SQLEscape(password).c_str()), errbuf, &result)) {
 		safe_delete_array(query);//delete[] query;
 		if (mysql_num_rows(result) == 1)
 		{
@@ -427,7 +428,7 @@ bool Database::CreateAccount(char* name, char* password, int8 status, int32 lsac
     char *query = 0;
 	bool bret = false;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "INSERT INTO account SET name='%s', password='%s', status=%i, lsaccount_id=%i;",name,password,status, lsaccount_id), errbuf))
+	if (RunQuery(query, MakeAnyLenString(&query, "INSERT INTO account SET name='%s', password='%s', status=%i, lsaccount_id=%i;",SQLEscape(name).c_str(),SQLEscape(password).c_str(),status, lsaccount_id), errbuf))
 	{
 		bret = true;
 	}
@@ -450,7 +451,7 @@ bool Database::DeleteAccount(char* name)
 
 	cout << "Account Attempting to be deleted:" << name << endl;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "DELETE FROM account WHERE name='%s';",name), errbuf, 0, &affected_rows))
+	if (RunQuery(query, MakeAnyLenString(&query, "DELETE FROM account WHERE name='%s';",SQLEscape(name).c_str()), errbuf, 0, &affected_rows))
 	{
 		if (affected_rows == 1)
 		{
@@ -474,7 +475,7 @@ bool Database::SetGMFlag(char* name, int8 status)
 	int32	affected_rows = 0;
 
 	cout << "Account being GM Flagged:" << name << ", Level: " << (int16) status << endl;
-	if (!RunQuery(query, MakeAnyLenString(&query, "UPDATE account SET status=%i WHERE name='%s';", status, name), errbuf, 0, &affected_rows)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "UPDATE account SET status=%i WHERE name='%s';", status, SQLEscape(name).c_str()), errbuf, 0, &affected_rows)) {
 		safe_delete_array(query);//delete[] query;
 		return false;
 	}
@@ -600,7 +601,7 @@ bool Database::ReserveName(int32 account_id, char* name)
 	if (strlen(name) > 15)
 		return false;
 
-	if (!RunQuery(query, MakeAnyLenString(&query, "INSERT into character_ SET account_id=%i, name='%s', profile=NULL", account_id, name), errbuf)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "INSERT into character_ SET account_id=%i, name='%s', profile=NULL", account_id, SQLEscape(name).c_str()), errbuf)) {
 		cerr << "Error in ReserveName query '" << query << "' " << errbuf << endl;
 		if (query != 0)
 			safe_delete_array(query);//delete[] query;
@@ -620,7 +621,7 @@ bool Database::DeleteCharacter(char* name)
 	char errbuf[MYSQL_ERRMSG_SIZE];
     char *query = 0;
 
-	if (!RunQuery(query, MakeAnyLenString(&query, "DELETE from player_corpses WHERE charname='%s'", name), errbuf)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "DELETE from player_corpses WHERE charname='%s'", SQLEscape(name).c_str()), errbuf)) {
 		cerr << "Error in DeleteCharacter query '" << query << "' " << errbuf << endl;
 		if (query != 0)
 			safe_delete_array(query);
@@ -628,7 +629,7 @@ bool Database::DeleteCharacter(char* name)
 	}
 
 
-	if (!RunQuery(query, MakeAnyLenString(&query, "DELETE from character_ WHERE name='%s'", name), errbuf)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "DELETE from character_ WHERE name='%s'", SQLEscape(name).c_str()), errbuf)) {
 		cerr << "Error in DeleteCharacter query '" << query << "' " << errbuf << endl;
 		if (query != 0)
 			safe_delete_array(query);
@@ -829,7 +830,7 @@ unsigned long Database::GetPlayerProfile(int32 account_id, char* name, PlayerPro
 
 	unsigned long* lengths;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT profile FROM character_ WHERE account_id=%i AND name='%s'", account_id, name), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT profile FROM character_ WHERE account_id=%i AND name='%s'", account_id, SQLEscape(name).c_str()), errbuf, &result)) {
 		safe_delete_array(query);//delete[] query;
 		if (mysql_num_rows(result) == 1) {	
 			row = mysql_fetch_row(result);
@@ -907,7 +908,7 @@ int32 Database::GetAccountIDByChar(char* charname)
     MYSQL_RES *result;
     MYSQL_ROW row;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT account_id FROM character_ WHERE name='%s'", charname), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT account_id FROM character_ WHERE name='%s'", SQLEscape(charname).c_str()), errbuf, &result)) {
 		safe_delete_array(query);//delete[] query;
 		if (mysql_num_rows(result) == 1)
 		{
@@ -938,7 +939,7 @@ int32 Database::GetAccountIDByName(char* accname)
 		return 0;
 	}
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id FROM account WHERE name='%s'", accname), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id FROM account WHERE name='%s'", SQLEscape(accname).c_str()), errbuf, &result)) {
 		safe_delete_array(query);//delete[] query;
 		if (mysql_num_rows(result) == 1)
 		{
@@ -986,7 +987,7 @@ void Database::GetCharacterInfo(char* name, int32* charid, int32* guilddbid, int
     MYSQL_RES *result;
     MYSQL_ROW row;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id, guild, guildrank FROM character_ WHERE name='%s'", name), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id, guild, guildrank FROM character_ WHERE name='%s'", SQLEscape(name).c_str()), errbuf, &result))
 	{
 		safe_delete_array(query);//delete[] query;
 		if (mysql_num_rows(result) == 1)
@@ -1016,7 +1017,7 @@ bool Database::GetVariable(char* varname, char* varvalue, int16 varvalue_len) {
     MYSQL_RES *result;
     MYSQL_ROW row;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT value FROM variables WHERE varname like '%s'", varname), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT value FROM variables WHERE varname like '%s'", SQLEscape(varname).c_str()), errbuf, &result))
 	{
 		safe_delete_array(query);//delete[] query;
 		if (mysql_num_rows(result) == 1) {
@@ -1041,10 +1042,10 @@ bool Database::SetVariable(char* varname, char* varvalue) {
     char *query = 0;
 	int32 affected_rows = 0;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "Update variables set value='%s' WHERE varname like '%s'", varvalue, varname), errbuf, 0, &affected_rows)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "Update variables set value='%s' WHERE varname like '%s'", SQLEscape(varvalue).c_str(), SQLEscape(varname).c_str()), errbuf, 0, &affected_rows)) {
 		safe_delete(query);
 		if (affected_rows != 1) {
-			if (RunQuery(query, MakeAnyLenString(&query, "Insert Into variables (varname, value) values ('%s', '%s')", varname, varvalue), errbuf, 0, &affected_rows)) {
+			if (RunQuery(query, MakeAnyLenString(&query, "Insert Into variables (varname, value) values ('%s', '%s')", SQLEscape(varname).c_str(), SQLEscape(varvalue).c_str()), errbuf, 0, &affected_rows)) {
 				safe_delete(query);
 				if (affected_rows == 1) {
 					return true;
@@ -1064,7 +1065,7 @@ bool Database::CheckZoneserverAuth(char* ipaddr) {
     char *query = 0;
     MYSQL_RES *result;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT * FROM zoneserver_auth WHERE '%s' like host", ipaddr), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT * FROM zoneserver_auth WHERE '%s' like host", SQLEscape(ipaddr).c_str()), errbuf, &result)) {
 		safe_delete_array(query);//delete[] query;
 		if (mysql_num_rows(result) >= 1) {
 			mysql_free_result(result);
@@ -1120,7 +1121,7 @@ bool Database::GetSafePoints(char* short_name, float* safe_x, float* safe_y, flo
     MYSQL_RES *result;
     MYSQL_ROW row;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT safe_x, safe_y, safe_z, minium_status, minium_level, safe_heading FROM zone WHERE short_name='%s'", short_name), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT safe_x, safe_y, safe_z, minium_status, minium_level, safe_heading FROM zone WHERE short_name='%s'", SQLEscape(short_name).c_str()), errbuf, &result)) {
 		safe_delete_array(query);//delete[] query;
 		if(mysql_num_rows(result) == 1) {
 			row = mysql_fetch_row(result);
@@ -1386,7 +1387,7 @@ float Database::getTargetZoneCenter(char* source_zone, char* target_zone, int16 
 	//bool qResult;
 	float tmp = 0;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT centerpoint FROM zone_points WHERE target_zone='%s' and zone='%s' and tozoneid='%i' and usenewzoning >= 1", source_zone, target_zone, tozoneid), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT centerpoint FROM zone_points WHERE target_zone='%s' and zone='%s' and tozoneid='%i' and usenewzoning >= 1", SQLEscape(source_zone).c_str(), SQLEscape(target_zone).c_str(), tozoneid), errbuf, &result))
 	{
 		if (mysql_num_rows(result) == 1)
 		{
@@ -1419,7 +1420,7 @@ float Database::getTargetZoneMax(char* source_zone, char* target_zone, int16 toz
 	//bool qResult;
 	float tmp = 0;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT maxvert FROM zone_points WHERE target_zone='%s' and zone='%s' and tozoneid='%i' and usenewzoning >= 1", source_zone, target_zone, tozoneid), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT maxvert FROM zone_points WHERE target_zone='%s' and zone='%s' and tozoneid='%i' and usenewzoning >= 1", SQLEscape(source_zone).c_str(), SQLEscape(target_zone).c_str(), tozoneid), errbuf, &result))
 	{
 		if (mysql_num_rows(result) == 1)
 		{
@@ -1452,7 +1453,7 @@ float Database::getTargetZoneMin(char* source_zone, char* target_zone, int16 toz
 	//bool qResult;
 	float tmp = 0;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT minvert FROM zone_points WHERE target_zone='%s' and zone='%s' and tozoneid='%i' and usenewzoning >= 1", source_zone, target_zone, tozoneid), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT minvert FROM zone_points WHERE target_zone='%s' and zone='%s' and tozoneid='%i' and usenewzoning >= 1", SQLEscape(source_zone).c_str(), SQLEscape(target_zone).c_str(), tozoneid), errbuf, &result))
 	{
 		if (mysql_num_rows(result) == 1)
 		{
@@ -1486,7 +1487,7 @@ int32 Database::getZoneShutDownDelay(char* short_name)
 	int32 qResult = 3000;
 
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT shutdowndelay FROM zone WHERE short_name='%s'", short_name), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT shutdowndelay FROM zone WHERE short_name='%s'", SQLEscape(short_name).c_str()), errbuf, &result))
 	{
 		if (mysql_num_rows(result) == 1)
 		{
@@ -1522,7 +1523,7 @@ bool Database::GetZoneLongName(char* short_name, char** long_name, char* file_na
     MYSQL_RES *result;
     MYSQL_ROW row;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT long_name, file_name, safe_x, safe_y, safe_z FROM zone WHERE short_name='%s'", short_name), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT long_name, file_name, safe_x, safe_y, safe_z FROM zone WHERE short_name='%s'", SQLEscape(short_name).c_str()), errbuf, &result))
 	{
 		safe_delete_array(query);//delete[] query;
 		if (mysql_num_rows(result) == 1) {
@@ -2484,7 +2485,7 @@ bool Database::CheckNameFilter(char* name)
     MYSQL_RES *result;
     MYSQL_ROW row;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT count(*) FROM name_filter WHERE '%s' like name", name), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT count(*) FROM name_filter WHERE '%s' like name", SQLEscape(name).c_str()), errbuf, &result)) {
 		safe_delete_array(query);//delete[] query;
 		if (mysql_num_rows(result) == 1) {
 			row = mysql_fetch_row(result);
@@ -2514,7 +2515,7 @@ void Database::AddBugReport(int crashes, int duplicates, char* player, char* rep
 	int32 affected_rows = 0;
 
 	RunQuery(query, MakeAnyLenString(&query,"INSERT INTO bug_reports (causes_crash, can_duplicate, player, report) VALUES(%i,%i,'%s','%s');",
-		duplicates, crashes, player, report),errbuf, 0, &affected_rows);
+		duplicates, crashes, SQLEscape(player).c_str(), SQLEscape(report).c_str()),errbuf, 0, &affected_rows);
 	safe_delete_array(query);//delete[] query;
 	return;
 }
@@ -2525,7 +2526,7 @@ bool Database::AddToNameFilter(char* name)
     char *query = 0;
 	int32 affected_rows = 0;
 
-	if (!RunQuery(query, MakeAnyLenString(&query, "INSERT INTO name_filter (name) values ('%s')", name), errbuf, 0, &affected_rows)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "INSERT INTO name_filter (name) values ('%s')", SQLEscape(name).c_str()), errbuf, 0, &affected_rows)) {
 		cerr << "Error in AddToNameFilter query '" << query << "' " << errbuf << endl;
 		safe_delete_array(query);//delete[] query;
 		return false;
@@ -2611,7 +2612,7 @@ bool Database::CreateSpawn2(int32 spawngroup, char* zone, float heading, float x
     char *query = 0;
 	int32 affected_rows = 0;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "INSERT INTO spawn2 (spawngroupID,zone,x,y,z,heading,respawntime,variance) Values (%i, '%s', %f, %f, %f, %f, %i, %i)", spawngroup, zone, x, y, z, heading, respawn, variance), errbuf, 0, &affected_rows)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "INSERT INTO spawn2 (spawngroupID,zone,x,y,z,heading,respawntime,variance) Values (%i, '%s', %f, %f, %f, %f, %i, %i)", spawngroup, SQLEscape(zone).c_str(), x, y, z, heading, respawn, variance), errbuf, 0, &affected_rows)) {
 		safe_delete_array(query);//delete[] query;
 		if (affected_rows == 1) {
 			return true;
@@ -2965,7 +2966,7 @@ bool Database::UpdateName(char* oldname, char* newname)
 	int32	affected_rows = 0;
 
 	cout << "Renaming " << oldname << " to " << newname << "..." << endl;
-	if (!RunQuery(query, MakeAnyLenString(&query, "UPDATE character_ SET name='%s' WHERE name='%s';", newname, oldname), errbuf, 0, &affected_rows)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "UPDATE character_ SET name='%s' WHERE name='%s';", SQLEscape(newname).c_str(), SQLEscape(oldname).c_str()), errbuf, 0, &affected_rows)) {
 		safe_delete_array(query);//delete[] query;
 		return false;
 	}
@@ -2987,7 +2988,7 @@ bool Database::CheckUsedName(char* name)
     MYSQL_RES *result;
 	if (strlen(name) > 15)
 		return false;
-	if (!RunQuery(query, MakeAnyLenString(&query, "SELECT id FROM character_ where name='%s'", name), errbuf, &result)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "SELECT id FROM character_ where name='%s'", SQLEscape(name).c_str()), errbuf, &result)) {
 		cerr << "Error in CheckUsedName query '" << query << "' " << errbuf << endl;
 		if (query != 0)
 			safe_delete_array(query);//delete[] query;
@@ -3032,7 +3033,7 @@ void Database::SetGroupID(char* charname, int GID) {
 void Database::SetGroupID(char* charname, int GID, int isleader) {
 	char errbuf[MYSQL_ERRMSG_SIZE];
 	char *query = 0;
-	if (!RunQuery(query, MakeAnyLenString(&query, "update character_ set GID=%i,groupleader=%i where name='%s'", GID, isleader, charname), errbuf))
+	if (!RunQuery(query, MakeAnyLenString(&query, "update character_ set GID=%i,groupleader=%i where name='%s'", GID, isleader, SQLEscape(charname).c_str()), errbuf))
 		printf("Unable to get group id: %s\n",errbuf);	
 	printf("Set group id on '%s' to %d\n", charname, GID);
 	safe_delete_array(query);
@@ -3043,7 +3044,7 @@ int	Database::GetGroupID(char* charname){
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 	int32 groupid=0;
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT GID from character_ where name='%s'", charname), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT GID from character_ where name='%s'", SQLEscape(charname).c_str()), errbuf, &result)) {
 		if((row = mysql_fetch_row(result)))
 		{
 			if(row[0])
@@ -3067,7 +3068,7 @@ void Database::GetBook(char* txtfile, char* txtout)
     MYSQL_RES *result;
     MYSQL_ROW row;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT txtfile FROM books where name='%s'", txtfile), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT txtfile FROM books where name='%s'", SQLEscape(txtfile).c_str()), errbuf, &result))
 	{
 		if (mysql_num_rows(result) > 0)
 		{
@@ -3104,7 +3105,7 @@ bool Database::UpdateZoneSafeCoords(char* zonename, float x=0, float y=0, float 
 	bool bret = false;
 
 
-	if (RunQuery(query, MakeAnyLenString(&query, "UPDATE zone SET safe_x='%f', safe_y='%f', safe_z='%f' WHERE short_name='%s';", x, y, z, zonename), errbuf, 0, &affected_rows))
+	if (RunQuery(query, MakeAnyLenString(&query, "UPDATE zone SET safe_x='%f', safe_y='%f', safe_z='%f' WHERE short_name='%s';", x, y, z, SQLEscape(zonename).c_str()), errbuf, 0, &affected_rows))
 	{
 		if (affected_rows > 0)
 		{
@@ -3158,7 +3159,7 @@ bool Database::SetStartingLocations(PlayerProfile_Struct *cc, int8 sl_race, int8
 
 	cout<< "Loading starting locations for: Race: " << (int) sl_race << " Class: " << (int) sl_class << " onto " << sl_name << endl;
 
-	if(RunQuery(query, MakeAnyLenString(&query, "SELECT zoneidnumber from zone_ids where short_name = '%s'", cc->current_zone), errbuf, &result))
+	if(RunQuery(query, MakeAnyLenString(&query, "SELECT zoneidnumber from zone_ids where short_name = '%s'", SQLEscape(cc->current_zone).c_str()), errbuf, &result))
 	{
 		while(row = mysql_fetch_row(result))
 		{
@@ -3335,7 +3336,7 @@ bool Database::LoadDoorData(LinkedList<Door_Struct*>* door_list, char* zonename)
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
-	if(RunQuery(query, MakeAnyLenString(&query, "SELECT name,pos_x,pos_y,pos_z,heading,opentype,doorid,triggerdoor,triggertype,door_param,incline,doorisopen,invert_state,lockpick,keyitem,dest_zone,dest_x,dest_y,dest_z,dest_heading FROM doors WHERE zone = '%s'", zonename), errbuf, &result))
+	if(RunQuery(query, MakeAnyLenString(&query, "SELECT name,pos_x,pos_y,pos_z,heading,opentype,doorid,triggerdoor,triggertype,door_param,incline,doorisopen,invert_state,lockpick,keyitem,dest_zone,dest_x,dest_y,dest_z,dest_heading FROM doors WHERE zone = '%s'", SQLEscape(zonename).c_str()), errbuf, &result))
 	{
 		safe_delete_array(query);//delete[] query;
 
@@ -3432,7 +3433,7 @@ bool Database::LoadObjects(vector<Object_Struct*>* object_list, char* zonename)
 	MYSQL_ROW row;
 
 	//Hard coded to qeynos right now.
-	if(RunQuery(query, MakeAnyLenString(&query, "SELECT xpos,ypos,zpos,heading,itemid,charges,objectname,id,type,icon FROM object_new WHERE short_name = '%s'", zonename), errbuf, &result))
+	if(RunQuery(query, MakeAnyLenString(&query, "SELECT xpos,ypos,zpos,heading,itemid,charges,objectname,id,type,icon FROM object_new WHERE short_name = '%s'", SQLEscape(zonename).c_str()), errbuf, &result))
 	{
 		safe_delete_array(query);//delete[] query;
 
@@ -3513,7 +3514,7 @@ int8 Database::GetZoneW(char* zone_name) {
     MYSQL_RES *result;
     MYSQL_ROW row;
 	
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT weather FROM zone WHERE short_name='%s'", zone_name), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT weather FROM zone WHERE short_name='%s'", SQLEscape(zone_name).c_str()), errbuf, &result))
 	{
 		safe_delete_array(query);//delete[] query;
 		if (mysql_num_rows(result) == 1) {
@@ -3545,7 +3546,7 @@ bool Database::SetZoneW(char* zone_name, int8 w) {
     char *query = 0;
 	int32 affected_rows = 0;
 	
-	if (RunQuery(query, MakeAnyLenString(&query, "UPDATE zone SET weather=%i WHERE short_name='%s'", w, zone_name), errbuf, 0, &affected_rows)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "UPDATE zone SET weather=%i WHERE short_name='%s'", w, SQLEscape(zone_name).c_str()), errbuf, 0, &affected_rows)) {
 		safe_delete_array(query);//delete[] query;
 		if (affected_rows == 1)
 			return true;
@@ -3647,7 +3648,7 @@ bool Database::loadZoneLines(vector<zoneLine_Struct*>* zone_line_data, char* zon
 
 	EQC::Common::Log(EQCLog::Debug, CP_DATABASE, "LOADING ZONE LINES FROM %s", zoneName);
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id,zone,y,x,z,target_zone,target_y,target_x,target_z,heading,Zrange,keepY,UseNewZoning,keepX,centerpoint,maxvert,minvert FROM zone_points WHERE zone = '%s'", zoneName), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id,zone,y,x,z,target_zone,target_y,target_x,target_z,heading,Zrange,keepY,UseNewZoning,keepX,centerpoint,maxvert,minvert FROM zone_points WHERE zone = '%s'", SQLEscape(zoneName).c_str()), errbuf, &result))
 	{
 		safe_delete_array(query);//delete[] query;
 
@@ -3704,7 +3705,7 @@ bool Database::LogAccountInPartI(int32 ip, const char* WorldAccount)
 {
 	char errbuf[MYSQL_ERRMSG_SIZE];
     char *query = 0;
-	if (!RunQuery(query, MakeAnyLenString(&query, "INSERT INTO active_accounts (account, ip, lastAction) VALUES ('%s','%i',UNIX_TIMESTAMP())", WorldAccount, ip), errbuf))
+	if (!RunQuery(query, MakeAnyLenString(&query, "INSERT INTO active_accounts (account, ip, lastAction) VALUES ('%s','%i',UNIX_TIMESTAMP())", SQLEscape(WorldAccount).c_str(), ip), errbuf))
 	{
 		cerr << "Error in LogAccountInPartI query '" << query << "' " << errbuf << endl;
 		safe_delete_array(query);//delete[] query;
@@ -4059,7 +4060,7 @@ bool Database::FindMyZoneInLocation(const char* zone, const char* zoneLine, floa
 
 	//Yeahlight: GM does not have a zoneline preference, pick one for them
 	if(strcmp(zoneLine, "ANY") == 0){
-		if (RunQuery(query, MakeAnyLenString(&query, "SELECT target_x, target_y, target_z, heading FROM zone_points WHERE target_zone = '%s'", zone), errbuf, &result)) 
+		if (RunQuery(query, MakeAnyLenString(&query, "SELECT target_x, target_y, target_z, heading FROM zone_points WHERE target_zone = '%s'", SQLEscape(zone).c_str()), errbuf, &result)) 
 		{
 			row = mysql_fetch_row(result);
 			if(row)
@@ -4087,7 +4088,7 @@ bool Database::FindMyZoneInLocation(const char* zone, const char* zoneLine, floa
 	}
 	else
 	{
-		if (RunQuery(query, MakeAnyLenString(&query, "SELECT target_x, target_y, target_z, heading FROM zone_points WHERE zone = '%s' AND target_zone = '%s'", zoneLine, zone), errbuf, &result)) 
+		if (RunQuery(query, MakeAnyLenString(&query, "SELECT target_x, target_y, target_z, heading FROM zone_points WHERE zone = '%s' AND target_zone = '%s'", SQLEscape(zoneLine).c_str(), SQLEscape(zone).c_str()), errbuf, &result)) 
 		{
 			row = mysql_fetch_row(result);
 			if(row)
@@ -4224,7 +4225,7 @@ bool Database::LoadRoamBoxes(const char* zone, RoamBox_Struct roamBoxes[], int16
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id, minX, maxX, minY, maxY FROM zone_roam_boxes WHERE zone = '%s'", zone), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id, minX, maxX, minY, maxY FROM zone_roam_boxes WHERE zone = '%s'", SQLEscape(zone).c_str()), errbuf, &result))
 	{
 		safe_delete_array(query);
 		numberOfRoamBoxes = 0;
@@ -4262,7 +4263,7 @@ int16 Database::LoadZoneID(const char* zone)
 	MYSQL_ROW row;
 	int16 ret = 0;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT zoneidnumber FROM zone_ids WHERE short_name = '%s'", zone), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT zoneidnumber FROM zone_ids WHERE short_name = '%s'", SQLEscape(zone).c_str()), errbuf, &result))
 	{
 		safe_delete_array(query);
 		while(row = mysql_fetch_row(result))
@@ -4343,7 +4344,7 @@ bool Database::AddPlayerToBoat(char* name, int8 boat_id) {
     char *query = 0;
 	int32 affected_rows = 0;
 
-	if (!RunQuery(query, MakeAnyLenString(&query, "INSERT INTO boat_passengers (player_name, boat_id) values ('%s', %i)", name, boat_id), errbuf, 0, &affected_rows)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "INSERT INTO boat_passengers (player_name, boat_id) values ('%s', %i)", SQLEscape(name).c_str(), boat_id), errbuf, 0, &affected_rows)) {
 		cerr << "Error in AddPlayerToBoat query '" << query << "' " << errbuf << endl;
 		safe_delete_array(query);
 		return true;
@@ -4394,7 +4395,7 @@ bool Database::RemovePlayerFromBoat(char* name)
 	char errbuf[MYSQL_ERRMSG_SIZE];
     char *query = 0;
 
-	if (!RunQuery(query, MakeAnyLenString(&query, "DELETE from boat_passengers WHERE player_name='%s'", name), errbuf)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "DELETE from boat_passengers WHERE player_name='%s'", SQLEscape(name).c_str()), errbuf)) {
 		cerr << "Error in RemovePlayerFromBoat query '" << query << "' " << errbuf << endl;
 		if (query != 0)
 			safe_delete_array(query);
@@ -4492,7 +4493,7 @@ bool Database::LoadZoneRules(char* zonename, int8& bindCondition, int8& levCondi
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
-	if(RunQuery(query, MakeAnyLenString(&query, "SELECT can_bind, can_lev, castoutdoor FROM zone_rules WHERE short_name = '%s'", zonename), errbuf, &result))
+	if(RunQuery(query, MakeAnyLenString(&query, "SELECT can_bind, can_lev, castoutdoor FROM zone_rules WHERE short_name = '%s'", SQLEscape(zonename).c_str()), errbuf, &result))
 	{
 		safe_delete_array(query);
 		row = mysql_fetch_row(result);
@@ -4532,7 +4533,7 @@ bool Database::LoadBoatZones(const char* boat, vector<string> &boat_zones)
 	MYSQL_ROW row;
 	string tmp;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT zone FROM boat_infos WHERE boat_name = '%s'", boat), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT zone FROM boat_infos WHERE boat_name = '%s'", SQLEscape(boat).c_str()), errbuf, &result))
 	{
 		safe_delete_array(query);
 		while(row = mysql_fetch_row(result))
@@ -4567,7 +4568,7 @@ bool Database::LoadBoatData(const char* boatname, NPCType& boat,bool& lineroute)
 	MYSQL_RES *result;
 	MYSQL_ROW row;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT race,gender,texture,body,size,lineroute FROM boats WHERE name = '%s'", boatname), errbuf, &result))
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT race,gender,texture,body,size,lineroute FROM boats WHERE name = '%s'", SQLEscape(boatname).c_str()), errbuf, &result))
 	{
 		safe_delete_array(query);
 		while(row = mysql_fetch_row(result))
@@ -4878,7 +4879,7 @@ bool Database::AddMBMessage(MBMessage_Struct* message) {
 			
 			id++;
 
-			if (RunQuery(query, MakeAnyLenString(&query, "insert into mb_messages SET id=%u, date='%s', author='%s', language=%i, subject='%s', category=%i, message='%s', time=UNIX_TIMESTAMP()",id,message->date,message->author, message->language, message->subject, message->category, message->message), errbuf, 0, &affected_rows )) {				
+			if (RunQuery(query, MakeAnyLenString(&query, "insert into mb_messages SET id=%u, date='%s', author='%s', language=%i, subject='%s', category=%i, message='%s', time=UNIX_TIMESTAMP()",id,SQLEscape(message->date).c_str(),SQLEscape(message->author).c_str(), message->language, SQLEscape(message->subject).c_str(), message->category, SQLEscape(message->message).c_str()), errbuf, 0, &affected_rows )) {				
 				safe_delete(query);						
 			} else {
 				cerr << "Error in AddMBMessage '" << query << "' " << errbuf << endl;

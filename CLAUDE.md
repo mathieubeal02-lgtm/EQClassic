@@ -34,13 +34,16 @@ See `docs/ARCHITECTURE.md` (components, data flow, hotspots) and `docs/BUILD.md`
 - `Dependencies/` is empty in git; MySQL, zlib, Perl 5.12 and OpenSSL must be dropped in
   (layout in `docs/BUILD.md`).
 - Everything is read from the working directory: `db.ini` (`[Database]`), `LoginServer.ini`
-  (`[LoginServer]` for World, `[LoginConfig]` for Login), `cfg/`, `Maps/*`, `quests/`, `plugins/`,
+  (`[LoginServer]` for World, `[LoginConfig]` for Login), `cfg/`, `Maps/*`, `quests/` (incl. `quests/plugins/`), `plugin.pl`, `commands.pl`,
   `spdat.eff`, `spells_en.txt`, `spellResistMods.txt`, `eqtime.cfg`. Templates live in `runtime/`.
   End-to-end setup: `docs/RUNBOOK.md`.
 - Filename case matters for any future non-Windows build: project files were fixed to
   match on-disk names; keep new entries case-exact.
-- No tests. CI (`.github/workflows/build.yml`) builds Windows Debug/Release via CMake, the legacy
-  solution, and azone on Linux; it is the only automated check — push to see it run.
+- Unit tests live in `tests/` (portable, no MySQL): `ctest --test-dir build`. CI
+  (`.github/workflows/build.yml`) builds Windows Debug/Release via CMake, the legacy solution,
+  azone on Linux, and runs the tests on both; push to see it run.
+- SQL: wrap every string interpolated into a quoted SQL literal with
+  `SQLEscape(x).c_str()` (`Common/Include/SQLEscape.h`). Never interpolate into unquoted SQL.
 - Database: `sql/schema.sql` (structure), `sql/eqclassic_db` (submodule with the data dump).
 - Do not "fix" the `LS/` tree by re-importing files from `legacy/`; Login only needs what
   is left in `LS/common` and `LS/zone` (transitive include closure, see `legacy/README.md`).

@@ -47,6 +47,9 @@ jobs:
       - name: Build
         run: cmake --build build --config ${{ matrix.config }} --parallel
 
+      - name: Unit tests
+        run: ctest --test-dir build -C ${{ matrix.config }} --output-on-failure
+
       - name: Install (server layout)
         run: cmake --install build --config ${{ matrix.config }} --prefix server
 
@@ -85,10 +88,11 @@ jobs:
         run: msbuild EQCEmu.sln /m /p:Configuration=Debug /p:Platform=Win32
 
   linux-azone:
-    name: Linux (azone only)
+    name: Linux (azone + unit tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y zlib1g-dev
       - run: cmake -S . -B build -DEQC_BUILD_SERVERS=OFF -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build --parallel
+      - run: ctest --test-dir build --output-on-failure

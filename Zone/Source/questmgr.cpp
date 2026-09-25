@@ -79,6 +79,7 @@ using namespace std;
 #include "embparser.h"
 #endif
 #include "questmgr.h"
+#include "SQLEscape.h"
 
 extern Zone* zone;
 extern WorldServer worldserver;
@@ -621,7 +622,7 @@ void QuestManager::setglobal(const char *varname, const char *newvalue, int opti
 	// clean up expired vars and get rid of the one we're going to set if there
 	Database::Instance()->RunQuery(query, MakeAnyLenString(&query,
 		"DELETE FROM quest_globals WHERE expdate < UNIX_TIMESTAMP() || (name='%s' && npcid=%i && charid=%i && zoneid=%i))"
-		,varname,qgNpcid,qgCharid,qgZoneid), errbuf);
+		,SQLEscape(varname).c_str(),qgNpcid,qgCharid,qgZoneid), errbuf);
 	safe_delete_array(query);
 
 	InsertQuestGlobal(qgCharid, qgNpcid, qgZoneid, varname, newvalue, QGVarDuration(duration));
@@ -714,7 +715,7 @@ int QuestManager::InsertQuestGlobal(
 	if (!Database::Instance()->RunQuery(query, MakeAnyLenString(&query,
 		"REPLACE INTO quest_globals (charid, npcid, zoneid, name, value, expdate)"
 		"VALUES (%i, %i, %i, '%s', '%s', %s)",
-		charid, npcid, zoneid, varname, varvalue, duration_ss.str().c_str()
+		charid, npcid, zoneid, SQLEscape(varname).c_str(), SQLEscape(varvalue).c_str(), duration_ss.str().c_str()
 		), errbuf))
 	{
 		cerr << "setglobal error inserting " << varname << " : " << errbuf << endl;
@@ -732,7 +733,7 @@ void QuestManager::targlobal(const char *varname, const char *value, const char 
 	Database::Instance()->RunQuery(query, MakeAnyLenString(&query,
 		"DELETE FROM quest_globals WHERE expdate < UNIX_TIMESTAMP()"
 		" || (name='%s' && npcid=%i && charid=%i && zoneid=%i))"
-		,varname,qgNpcid,qgCharid,qgZoneid), errbuf);
+		,SQLEscape(varname).c_str(),qgNpcid,qgCharid,qgZoneid), errbuf);
 	safe_delete_array(query);
 
 	InsertQuestGlobal(qgCharid, qgNpcid, qgZoneid, varname, value, QGVarDuration(duration));
@@ -758,7 +759,7 @@ void QuestManager::delglobal(const char *varname) {
 	  MakeAnyLenString(&query,
 	  "DELETE FROM quest_globals WHERE name='%s'"
 	  " && (npcid=0 || npcid=%i) && (charid=0 || charid=%i) && (zoneid=%i || zoneid=0)",
-	  varname,qgNpcid,qgCharid,qgZoneid),errbuf))
+	  SQLEscape(varname).c_str(),qgNpcid,qgCharid,qgZoneid),errbuf))
 	{
 		cerr << "delglobal error deleting " << varname << " : " << errbuf << endl;
 	}

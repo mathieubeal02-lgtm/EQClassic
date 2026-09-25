@@ -12,6 +12,7 @@
 #include "config.h"
 #include "packet_dump_file.h"
 #include "groups.h"
+#include "SQLEscape.h"
 using namespace std;
 
 extern EntityList entity_list;
@@ -987,7 +988,7 @@ bool Database::LoadPlayerCorpses(char* zonename) {
 	int char_num = 0;
 	unsigned long* lengths;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id, charid, charname, x, y, z, heading, data, time, rezed, accountid, rezexp FROM player_corpses WHERE zonename='%s'", zonename), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id, charid, charname, x, y, z, heading, data, time, rezed, accountid, rezexp FROM player_corpses WHERE zonename='%s'", SQLEscape(zonename).c_str()), errbuf, &result)) {
 //                                                       0   1       2         3  4  5  6        7     8     9      10         11
 		safe_delete_array(query);//delete[] query;
 		while(row = mysql_fetch_row(result))

@@ -21,6 +21,7 @@
 #include "../common/md5.h"
 #include "login_structs.h"
 #include "EQCrypto.h"
+#include "../../Common/Include/SQLEscape.h"
 extern Database database;
 extern EQCrypto eq_crypto;
 
@@ -41,7 +42,7 @@ int32 Database::GetLSLoginInfo(char* iUsername, char* oPassword, int8* lsadmin, 
 
 	// jimm0thy - changed to have name (username) an exact match instead of like
 	//   and changed to also match password SHA
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id, name, password, lsadmin, lsstatus, worldadmin,user_active from login_accounts where name = '%s' and password = sha('%s')", tmp, oPassword), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id, name, password, lsadmin, lsstatus, worldadmin,user_active from login_accounts where name = '%s' and password = sha('%s')", tmp, SQLEscape(oPassword).c_str()), errbuf, &result)) {
 		delete[] query;
 		if (mysql_num_rows(result) == 1) {
 			row = mysql_fetch_row(result);
@@ -88,7 +89,7 @@ bool Database::SetLSAuthChange(int32 account_id, const char* ip) {
     char *query = 0;
     MYSQL_RES *result;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "INSERT INTO login_authchange SET account_id=%i, ip='%s';", account_id, ip), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "INSERT INTO login_authchange SET account_id=%i, ip='%s';", account_id, SQLEscape(ip).c_str()), errbuf, &result)) {
 		cerr << "Error in SetLSAuthChange query '" << query << "' " << errbuf << endl;
 		delete[] query;
 		return false;
@@ -179,7 +180,7 @@ int32 Database::GetLSAuthChange(const char* ip) {
     MYSQL_RES *result;
     MYSQL_ROW row;
 
-	if (RunQuery(query, MakeAnyLenString(&query, "Select account_id from login_authchange where ip='%s' AND UNIX_TIMESTAMP()-UNIX_TIMESTAMP(time) < %i Order By time desc;", ip, AUTHCHANGE_TIMEOUT), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "Select account_id from login_authchange where ip='%s' AND UNIX_TIMESTAMP()-UNIX_TIMESTAMP(time) < %i Order By time desc;", SQLEscape(ip).c_str(), AUTHCHANGE_TIMEOUT), errbuf, &result)) {
 		delete[] query;
 		if (mysql_num_rows(result) == 1)
 		{
@@ -275,7 +276,7 @@ sint8 Database::CheckWorldAuth(const char* account, const char* password, int32*
     char *query = 0;
     MYSQL_RES *result;
     MYSQL_ROW row;
-	if (RunQuery(query, MakeAnyLenString(&query, "Select id, password, admin_id, greenname, showdown, chat from login_worldservers where account like '%s'", account), errbuf, &result)) {
+	if (RunQuery(query, MakeAnyLenString(&query, "Select id, password, admin_id, greenname, showdown, chat from login_worldservers where account like '%s'", SQLEscape(account).c_str()), errbuf, &result)) {
 		delete[] query;
 		if (mysql_num_rows(result) == 0) {
 			*account_id = 0;
@@ -355,7 +356,7 @@ bool Database::AddLoginAccount(char* stationname, char* password, char* chathand
 {
 	char errbuf[MYSQL_ERRMSG_SIZE];
 	char* query = 0;
-	if (!RunQuery(query, MakeAnyLenString(&query, "INSERT into login_accounts (name, chat_name, password, verified, authcode, email) values('%s','%s',password('%s'),1,'%s','%s')",stationname, chathandel, password, cdkey, email), errbuf)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "INSERT into login_accounts (name, chat_name, password, verified, authcode, email) values('%s','%s',password('%s'),1,'%s','%s')",SQLEscape(stationname).c_str(), SQLEscape(chathandel).c_str(), SQLEscape(password).c_str(), SQLEscape(cdkey).c_str(), SQLEscape(email).c_str()), errbuf)) {
 		delete[] query;
 		return false;
 	}
@@ -377,7 +378,7 @@ int8 Database::ChangeLSPassword(int32 accountid, const char* newpassword, const 
 
 	if (oldpassword) {
 		md5pass.Generate(oldpassword);
-		if (RunQuery(query, MakeAnyLenString(&query, "Select id from login_accounts where id=%d and password='%s'", accountid, md5pass), errbuf, &result)) {
+		if (RunQuery(query, MakeAnyLenString(&query, "Select id from login_accounts where id=%d and password='%s'", accountid, SQLEscape(md5pass).c_str()), errbuf, &result)) {
 			safe_delete(query);
 			if (mysql_num_rows(result) == 0) {
 				mysql_free_result(result);
@@ -394,7 +395,7 @@ int8 Database::ChangeLSPassword(int32 accountid, const char* newpassword, const 
 	md5pass.Generate(newpassword);
 
 	safe_delete(query);
-	if (!RunQuery(query, MakeAnyLenString(&query, "Update login_accounts set password='%s' where id=%d", md5pass, accountid), errbuf)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "Update login_accounts set password='%s' where id=%d", SQLEscape(md5pass).c_str(), accountid), errbuf)) {
 		delete[] query;
 		cerr << "Error in ChangeLSPassword query '" << query << "' " << errbuf << endl;
 		return 2;
@@ -528,7 +529,7 @@ int32 Database::CountUsers(char* account){
     char *query = 0;
     MYSQL_RES *result;
     MYSQL_ROW row;
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id FROM active_accounts WHERE account = '%s'", account), errbuf, &result)){
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id FROM active_accounts WHERE account = '%s'", SQLEscape(account).c_str()), errbuf, &result)){
 		delete[] query;
 		return mysql_num_rows(result);
 	}else{

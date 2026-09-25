@@ -23,6 +23,7 @@
 #include "petitions.h"
 #include "worldserver.h"
 #include "EQCUtils.hpp"
+#include "SQLEscape.h"
 using namespace std;
 
 PetitionList petition_list;
@@ -190,7 +191,7 @@ void	Database::UpdatePetitionToDB(Petition* wpet) {
 	int8 checkedout = 0;
 	if (wpet->CheckedOut()) checkedout = 1;
 	else checkedout = 0;
-	if (!RunQuery(query, MakeAnyLenString(&query, "UPDATE petitions set lastgm = '%s', urgency = %i, checkouts = %i, unavailables = %i, ischeckedout = %i where petid = %i", wpet->GetLastGM(), wpet->GetUrgency(), wpet->GetCheckouts(), wpet->GetUnavails(), checkedout, wpet->GetID()), errbuf, 0, &affected_rows)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "UPDATE petitions set lastgm = '%s', urgency = %i, checkouts = %i, unavailables = %i, ischeckedout = %i where petid = %i", SQLEscape(wpet->GetLastGM()).c_str(), wpet->GetUrgency(), wpet->GetCheckouts(), wpet->GetUnavails(), checkedout, wpet->GetID()), errbuf, 0, &affected_rows)) {
 		cerr << "Error in UpdatetPetitionToDB query '" << query << "' " << errbuf << endl;
 	}
 	safe_delete_array(query);//delete[] query;
@@ -207,7 +208,7 @@ void	Database::InsertPetitionToDB(Petition* wpet)
 	int8 checkedout = 0;
 	if (wpet->CheckedOut()) checkedout = 1;
 	else checkedout = 0;
-	if (!RunQuery(query, MakeAnyLenString(&query, "INSERT INTO petitions (petid, charname, accountname, lastgm, petitiontext, zone, urgency, charclass, charrace, charlevel, checkouts, unavailables, ischeckedout, senttime) values (%i,'%s','%s','%s','%s','%s','%s',%i,%i,%i,%i,%i,%i,%d)", wpet->GetID(), wpet->GetCharName(), wpet->GetAccountName(), wpet->GetLastGM(), wpet->GetPetitionText(), wpet->GetZone(), wpet->GetUrgency(), wpet->GetCharClass(), wpet->GetCharRace(), wpet->GetCharLevel(), wpet->GetCheckouts(), wpet->GetUnavails(), checkedout, wpet->GetSentTime()), errbuf, 0, &affected_rows)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "INSERT INTO petitions (petid, charname, accountname, lastgm, petitiontext, zone, urgency, charclass, charrace, charlevel, checkouts, unavailables, ischeckedout, senttime) values (%i,'%s','%s','%s','%s','%s',%i,%i,%i,%i,%i,%i,%i,%d)", wpet->GetID(), SQLEscape(wpet->GetCharName()).c_str(), SQLEscape(wpet->GetAccountName()).c_str(), SQLEscape(wpet->GetLastGM()).c_str(), SQLEscape(wpet->GetPetitionText()).c_str(), SQLEscape(wpet->GetZone()).c_str(), wpet->GetUrgency(), wpet->GetCharClass(), wpet->GetCharRace(), wpet->GetCharLevel(), wpet->GetCheckouts(), wpet->GetUnavails(), checkedout, wpet->GetSentTime()), errbuf, 0, &affected_rows)) {
 		cerr << "Error in InsertPetitionToDB query '" << query << "' " << errbuf << endl;
 	}
 

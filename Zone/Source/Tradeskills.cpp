@@ -23,6 +23,7 @@
 #define FLETCHING_FLETCHINT_KIT 17910
 // world object types
 #include "container.h"
+#include "SQLEscape.h"
 
 // Harakiri some world objects to try
 // use #fr = recipesearch for ID, then #sr = summonrecipe to get all objects for combine
@@ -545,7 +546,7 @@ bool Database::GetTradeRecipe(Combine_Struct* combin, DBTradeskillRecipe_Struct 
 	
 
 		qlen = MakeAnyLenString(&query,"SELECT tre.recipe_id FROM tradeskill_recipe_entries as tre WHERE tre.recipe_id IN (%s)"
-		" AND tre.item_id %s AND tre.iscontainer=1",stringstream.str(),containers);
+		" AND tre.item_id %s AND tre.iscontainer=1",stringstream.str().c_str(),containers);
 		
 	 
 		if (!RunQuery(query, qlen, errbuf, &result)) {
@@ -731,7 +732,7 @@ bool Database::GetTradeRecipe(Combine_Struct* combin, DBTradeskillRecipe_Struct 
 	uint32 qlen;
 
 	if(recipeID==0) {
-		qlen = MakeAnyLenString(&query, "SELECT tr.name, tr.id , tr.tradeskill, tr.skillneeded, tr.trivial FROM tradeskill_recipe AS tr where tr.name LIKE \"%%%s%%\" ORDER BY tr.tradeskill LIMIT 20", recipeName);
+		qlen = MakeAnyLenString(&query, "SELECT tr.name, tr.id , tr.tradeskill, tr.skillneeded, tr.trivial FROM tradeskill_recipe AS tr where tr.name LIKE \"%%%s%%\" ORDER BY tr.tradeskill LIMIT 20", SQLEscape(recipeName).c_str());
 	} else {
 		qlen = MakeAnyLenString(&query, "SELECT tr.name, tr.id , tr.tradeskill, tr.skillneeded, tr.trivial FROM tradeskill_recipe AS tr where tr.id = %i ORDER BY tr.tradeskill LIMIT 20", recipeID);
 
