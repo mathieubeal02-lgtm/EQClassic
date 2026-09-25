@@ -565,10 +565,12 @@ void Mob::SpellFinished(Spell* spell, int32 target_id, int16 slot,int16 inventor
 					}
 				}
 			}
-			// Ok we have every reagent needed, let's remove them
+			// Ok we have every reagent needed, let's remove them. Only for real components: unused
+			// entries keep slots[i] == 0, and removing a charge there hit whatever sat in slot 0.
 			for(i = 0; i < 4; i++)
 			{
-				this->CastToClient()->RemoveOneCharge(slots[i],true);
+				if(itemid[i] != 0)
+					this->CastToClient()->RemoveOneCharge(slots[i],true);
 			}
 		}
 

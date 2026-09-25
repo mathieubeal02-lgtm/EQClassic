@@ -1889,8 +1889,12 @@ void Client::RemoveOneCharge(uint32 slotid, bool deleteItemOnLastCharge)
 	
 	int16 itemID =  GetItemAt(slotid);
 
-	
-	ItemInst *itemInst = new ItemInst(Database::Instance()->GetItem(itemID), 0);
+	// Nothing in that slot: nothing to consume (used to write charges = -1 into an empty slot).
+	if(itemID == 0xFFFF || itemID == 0)
+		return;
+
+	ItemInst itemInstance(Database::Instance()->GetItem(itemID), 0);
+	ItemInst *itemInst = &itemInstance;
 	// Harakiri imported signed int to not let overlap to 255
 	sint8 charges=-1;
 	// Harakiri - check if we remove a charge from inventory or bags
