@@ -41,10 +41,13 @@ docker rm -f "$DB_CONTAINER" >/dev/null 2>&1 || true
 docker run -d --name "$DB_CONTAINER" -p 127.0.0.1:3306:3306 -e MARIADB_ROOT_PASSWORD=root \
   mariadb:11.8 --skip-ssl --sql-mode=NO_ENGINE_SUBSTITUTION \
   --character-set-server=latin1 --collation-server=latin1_swedish_ci >/dev/null
-for _ in $(seq 60); do
-  db -e "SELECT 1" >/dev/null 2>&1 && break
+# The image first runs a temporary server (port 0) to initialise, then restarts: wait for the
+# real one, listening on 3306, or the first statements can hit the restart.
+for _ in $(seq 90); do
+  docker logs "$DB_CONTAINER" 2>&1 | grep -q 'ready for connections.*port: 3306' && break
   sleep 2
 done
+db -e "SELECT 1" >/dev/null
 db -e "CREATE DATABASE eqclassic CHARACTER SET latin1;
        CREATE USER 'eqc'@'%' IDENTIFIED BY 'eqc';
        GRANT ALL ON eqclassic.* TO 'eqc'@'%';"
