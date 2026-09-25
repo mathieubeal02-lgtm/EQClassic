@@ -432,7 +432,9 @@ void Client::SendPacketQueue(bool Block)
 	/************ Processing finished ************/
 
 	//Yeahlight: TODO: If a client gets flooded with too many packets, this loop may become infinite or close to it
-	if (!packet_manager.CheckActive())
+	// Once: this runs every network loop pass (1 ms) until the process loop removes the client,
+	// and used to log and save the character thousands of times per link-dead client.
+	if (client_state != CLIENT_DISCONNECTED && !packet_manager.CheckActive())
 	{
 		EQC::Common::PrintF(CP_CLIENT, "Client disconnected (!pm.CA): %s\n", GetName());
 		client_state = CLIENT_DISCONNECTED;

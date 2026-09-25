@@ -64,6 +64,7 @@
 #if (_MSC_VER < 1500)
 	#define vsnprintf	_vsnprintf
 #endif
+#endif // WIN32: everything below is platform independent
 
 // Name of the Shared Memory library
 #define SHAREDMEM_NAME "EMuShareMem"
@@ -295,5 +296,3 @@
 
 //Enraged: Time for the PC to answer the translocate request
 #define PC_TRANSLOCATE_ANSWER_DURATION 20000
-
-#endif

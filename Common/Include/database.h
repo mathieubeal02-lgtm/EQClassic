@@ -267,8 +267,8 @@ public:
 	bool	LogAccountInPartI(int32 ip, const char* WorldAccount);
 	bool	LogAccountInPartII(int32 lsaccount_id, int32 ip);
 	bool	LogAccountInPartIII(int32 lsaccount_id, int32 ip);
-	bool	LogAccountInPartIV(int32 lsaccount_id, int32 ip);
-	bool	LogAccountOut(int32 account_id);
+	bool	LogAccountInPartIV(int32 account_id, int32 ip);	// world account id
+	bool	LogAccountOut(int32 account_id);	// world account id
 	bool	TruncateActiveAccounts();
 	bool	PurgeStuckAccounts();
 	//Yeahlight: End Account Management

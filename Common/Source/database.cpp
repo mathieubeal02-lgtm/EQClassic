@@ -3821,12 +3821,14 @@ bool Database::LogAccountInPartIII(int32 lsaccount_id, int32 ip)
 //| LogAccountInPartI; Yeahlight, Aug 22, 2008
 //o--------------------------------------------------------------
 //| Part IV of IV to account log in process
+//| Takes the world account id (account.id, what the zone knows): active_accounts is keyed by
+//| the login server id, which only equals it by chance (e.g. the first account).
 //o--------------------------------------------------------------
-bool Database::LogAccountInPartIV(int32 lsaccount_id, int32 ip)
+bool Database::LogAccountInPartIV(int32 account_id, int32 ip)
 {
 	char errbuf[MYSQL_ERRMSG_SIZE];
     char *query = 0;
-	if (!RunQuery(query, MakeAnyLenString(&query, "UPDATE active_accounts SET status = 'IN_ZONE' WHERE ip = '%i' AND lsaccount = '%i'", ip, lsaccount_id), errbuf))
+	if (!RunQuery(query, MakeAnyLenString(&query, "UPDATE active_accounts SET status = 'IN_ZONE' WHERE ip = '%i' AND lsaccount = (SELECT lsaccount_id FROM account WHERE id = '%i')", ip, account_id), errbuf))
 	{
 		cerr << "Error in LogAccountInPartIV query '" << query << "' " << errbuf << endl;
 		safe_delete_array(query);//delete[] query;
@@ -3840,12 +3842,13 @@ bool Database::LogAccountInPartIV(int32 lsaccount_id, int32 ip)
 //| LogAccountOut; Yeahlight, Aug 3, 2008
 //o--------------------------------------------------------------
 //| Logs account of out active_accounts
+//| Takes the world account id (account.id); active_accounts is keyed by the login server id.
 //o--------------------------------------------------------------
 bool Database::LogAccountOut(int32 account_id)
 {
 	char errbuf[MYSQL_ERRMSG_SIZE];
     char *query = 0;
-	if (!RunQuery(query, MakeAnyLenString(&query, "DELETE FROM active_accounts WHERE lsaccount = '%i'", account_id), errbuf))
+	if (!RunQuery(query, MakeAnyLenString(&query, "DELETE FROM active_accounts WHERE lsaccount = (SELECT lsaccount_id FROM account WHERE id = '%i')", account_id), errbuf))
 	{
 		cerr << "Error in LogAccountOut query '" << query << "' " << errbuf << endl;
 		safe_delete_array(query);//delete[] query;
