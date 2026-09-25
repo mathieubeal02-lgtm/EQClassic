@@ -185,6 +185,9 @@ NPC::NPC(NPCType* d, Spawn2* in_respawn, float x, float y, float z, float headin
 	isPatrolling = false;
 	randomTimer = (int32)(fRandomNum(0.125, 0.999) * 10000) + 5000;
 	patrolPause_timer = new Timer(randomTimer);
+	dbATK = d->db_ATK;
+	accuracyRating = d->accuracy;
+	avoidanceBonus = d->avoidance;
 	usesWaypoints = false;
 	waypointIndex = 0;
 	waypointDirection = 1;
@@ -3927,8 +3930,13 @@ void NPC::CheckSignal() {
 //o--------------------------------------------------------------
 void NPC::SetWaypointGrid(int16 gridID)
 {
-	if (gridID == 0 || isPatroller || IsBoat())
+	if (gridID == 0)
 		return;
+	if (isPatroller || IsBoat())
+	{
+		EQC::Common::Log(EQCLog::Debug, CP_ZONESERVER, "Waypoints: %s grid %i left to the node patrol system", GetName(), gridID);
+		return;
+	}
 	waypoints.clear();
 	for (int i = 0; i < zone->numberOfPatrollingNodes; i++)
 	{
@@ -3937,6 +3945,8 @@ void NPC::SetWaypointGrid(int16 gridID)
 	}
 	if (waypoints.size() < 2)
 	{
+		EQC::Common::Log(EQCLog::Debug, CP_ZONESERVER, "Waypoints: %s grid %i has %i point(s) in zone %i, not walking it",
+			GetName(), gridID, (int)waypoints.size(), zone->GetZoneID());
 		waypoints.clear();
 		return;
 	}
@@ -3961,6 +3971,8 @@ void NPC::SetWaypointGrid(int16 gridID)
 	isRoamer = false;
 	roam_timer->Disable();
 	waypoint_timer->Start((int32)(fRandomNum(0.1, 1.0) * 10000));
+	EQC::Common::Log(EQCLog::Debug, CP_ZONESERVER, "Waypoints: %s walks grid %i (%i points, type %i) from point %i",
+		GetName(), gridID, (int)waypoints.size(), waypointType, waypointIndex);
 }
 
 //o--------------------------------------------------------------

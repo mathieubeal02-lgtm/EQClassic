@@ -1697,6 +1697,8 @@ void Zone::LoadGridTypes()
 		while ((row = mysql_fetch_row(result)))
 			gridTypes[(int16)atoi(row[0])] = atoi(row[1]);
 		mysql_free_result(result);
+		EQC::Common::Log(EQCLog::Debug, CP_ZONESERVER, "Loaded %i grids and %i waypoints for zone %i",
+			(int)gridTypes.size(), (int)numberOfPatrollingNodes, zoneID);
 	}
 	else
 	{
