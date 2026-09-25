@@ -1,3 +1,11 @@
 [submodule "sql/eqclassic_db"]
 	path = sql/eqclassic_db
 	url = https://github.com/erfg12/eqclassic_db.git
+[submodule "externals/LanternExtractor"]
+	path = externals/LanternExtractor
+	url = https://github.com/LanternEQ/LanternExtractor.git
+	ignore = untracked
+[submodule "externals/LanternUnityTools"]
+	path = externals/LanternUnityTools
+	url = https://github.com/LanternEQ/LanternUnityTools.git
+	ignore = untracked
