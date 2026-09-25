@@ -40,6 +40,19 @@ namespace EQC
 				return 0;
 			}
 
+			unsigned int FragmentGroupList::Count()
+			{
+				unsigned int n = 0;
+				LinkedListIterator<FragmentGroup*> iterator(fragment_group_list);
+				iterator.Reset();
+				while(iterator.MoreElements())
+				{
+					n++;
+					iterator.Advance();
+				}
+				return n;
+			}
+
 			void FragmentGroupList::Remove(int16 remove_seq)
 			{
 				LinkedListIterator<FragmentGroup*> iterator(fragment_group_list);

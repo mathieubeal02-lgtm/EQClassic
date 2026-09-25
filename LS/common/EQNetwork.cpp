@@ -43,6 +43,7 @@ using namespace std;
 	#define SOCKET_ERROR -1
 #endif
 #include "EQNetwork.h"
+#include "../../Common/Include/FragmentLimits.h"
 #include "../common/packet_dump.h"
 #include "../common/packet_functions.h"
 #include "../common/MiscFunctions.h"
@@ -1156,8 +1157,8 @@ bool EQNetworkConnection::ProcessPacket(EQNetworkPacket* pack, bool from_buffer)
 		EQNetworkFragmentGroup* fragment_group = 0;
 		fragment_group = fraglist.GotPacket(pack);
 
-		// If we have all the fragments to complete this group
-		if(fragment_group->Ready()) {
+		// If we have all the fragments to complete this group (0: fragment rejected)
+		if(fragment_group && fragment_group->Ready()) {
 			#if EQN_DEBUG_Fragment >= 3
 				cout << Timer::GetCurrentTime() << " Getting fragment opcode: " << hex << setw(4) << setfill('0') << fragment_group->GetOpcode() << dec << endl;
 			#endif
@@ -1779,12 +1780,12 @@ EQNetworkFragmentGroup::~EQNetworkFragmentGroup() {
 
 void EQNetworkFragmentGroup::Add(EQNetworkPacket* pack) {
 #ifdef _DEBUG
-	if (pack->fraginfo.dwSeq != fragseq) {
-		ThrowError("EQNetworkFragmentGroup::Add(): pack->fraginfo.dwSeq != fragseq");
-	}
-	if (pack->fraginfo.dwCurr >= num_fragments) {
-		ThrowError("EQNetworkFragmentGroup::Add(): pack->fraginfo.dwCurr >= num_fragments");
-	}
+	// Client-controlled values: never ThrowError here. In Release ThrowError only asks the main
+	// loop to stop (CatchSignal) and execution went on to write fragments[dwCurr] out of bounds, so
+	// one malformed UDP packet shut the login server down. GotPacket() validates first; this is a
+	// second line of defence.
+	if (pack->fraginfo.dwSeq != fragseq || pack->fraginfo.dwCurr >= num_fragments)
+		return;
 #endif
 	timeout_timer->Start();
 	if (fragments[pack->fraginfo.dwCurr])
@@ -1821,9 +1822,8 @@ bool EQNetworkFragmentGroup::Ready() {
 		if (!fragments[i])
 			return false;
 #ifdef _DEBUG
-		if (!fragment_sizes[i]) {
-			ThrowError("EQNetworkFragmentGroup::Ready(): fragment_sizes[i] == 0");
-		}
+		if (!fragment_sizes[i])
+			return false;
 #endif
 	}
 	return true;
@@ -1855,17 +1855,29 @@ void EQNetworkFragmentGroupList::CheckTimers() {
 	}
 }
 
+// Returns the group the fragment belongs to, or 0 if the fragment was rejected.
 EQNetworkFragmentGroup* EQNetworkFragmentGroupList::GotPacket(EQNetworkPacket* pack) {
+	// The fragment header is client-controlled: validate before allocating (see FragmentLimits.h).
+	if (!FragmentInfoValid(pack->fraginfo.dwCurr, pack->fraginfo.dwTotal))
+		return 0;
+	unsigned int pending = 0;
 	LinkedListIterator<EQNetworkFragmentGroup*> iterator(list);
 
 	iterator.Reset();
 	while (iterator.MoreElements()) {
 		if (iterator.GetData()->GetFragSeq() == pack->fraginfo.dwSeq) {
+			if (iterator.GetData()->GetNumFragments() != pack->fraginfo.dwTotal) {
+				iterator.RemoveCurrent();	// same seq, different count: not the same packet
+				return 0;
+			}
 			iterator.GetData()->Add(pack);
 			return iterator.GetData();
 		}
+		pending++;
 		iterator.Advance();
 	}
+	if (pending >= MAX_PENDING_FRAGMENT_GROUPS)
+		list.Clear();	// groups also expire after 15 s, but bound them in between
 	#if EQN_DEBUG_Fragment >= 2
 		cout << "New Fragment_group 0x" << hex << setw(4) << setfill('0') << pack->fraginfo.dwSeq << dec << endl;
 	#endif

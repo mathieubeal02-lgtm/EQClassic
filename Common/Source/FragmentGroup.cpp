@@ -21,6 +21,7 @@ namespace EQC
 				this->seq = seq;
 				this->opcode = opcode;
 				this->num_fragments = num_fragments;
+				this->received = 0;
 				fragment = new Fragment[num_fragments];
 			}
 
@@ -29,12 +30,16 @@ namespace EQC
 				safe_delete_array(fragment);//delete[] fragment;
 			}
 
-			void FragmentGroup::Add(int16 frag_id, uchar* data, int32 size)
+			bool FragmentGroup::Add(int16 frag_id, uchar* data, int32 size)
 			{
 				//Yeahlight: The frag_id references a fragment within the group
 				if(frag_id < num_fragments)
 				{
+					if (fragment[frag_id].GetData() != 0)
+						return true; // resend of a fragment we already have
 					fragment[frag_id].SetData(data, size);
+					received++;
+					return true;
 				}
 				//Yeahlight: The frag_id is attempting to reference an element outside the bounds of the group array
 				else
@@ -46,6 +51,7 @@ namespace EQC
 					myfile<<"  data:    "<<&data<<endl;
 					myfile<<"  size:    "<<size<<endl;
 					myfile.close();
+					return false;
 				}
 			}
 

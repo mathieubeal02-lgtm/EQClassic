@@ -2,3 +2,12 @@
 add_executable(sql_escape_test sql_escape_test.cpp)
 target_include_directories(sql_escape_test PRIVATE ../Common/Include)
 add_test(NAME sql_escape COMMAND sql_escape_test)
+
+# Fragment reassembly bounds (FragmentLimits.h) and FragmentGroup completion logic.
+add_executable(fragment_test fragment_test.cpp
+    ../Common/Source/FragmentGroup.cpp
+    ../Common/Source/Fragment.cpp)
+target_include_directories(fragment_test PRIVATE ../Common/Include ../EQC/Include)
+# config.h is WIN32-only; linked_list.h needs this one define from it.
+target_compile_definitions(fragment_test PRIVATE ZONE_FREEZE_DEBUG=0)
+add_test(NAME fragments COMMAND fragment_test)

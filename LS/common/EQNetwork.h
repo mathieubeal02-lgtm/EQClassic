@@ -382,6 +382,7 @@ public:
 
 	inline int16	GetFragSeq()		{ return fragseq; }
 	inline int16	GetOpcode()			{ return opcode; }
+	inline int16	GetNumFragments()	{ return num_fragments; }
 protected:
 	friend class EQNetworkFragmentGroupList;
 	Timer*		timeout_timer;

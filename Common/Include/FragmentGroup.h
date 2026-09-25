@@ -25,7 +25,11 @@ namespace EQC
 				FragmentGroup(int16 seq, int16 opcode, int16 num_fragments);
 				~FragmentGroup();
 
-				void Add(int16 frag_id, uchar* data, int32 size);
+				// Returns false if frag_id is out of range. A resent fragment is ignored.
+				bool Add(int16 frag_id, uchar* data, int32 size);
+				// All num_fragments fragments received.
+				bool IsComplete() { return received == num_fragments; }
+				int16 GetNumFragments() { return num_fragments; }
 				uchar* AssembleData(int32* size);
 
 				int16 GetSeq()
@@ -42,7 +46,8 @@ namespace EQC
 				int16 seq;				// Sequence number
 				int16 opcode;			// Fragment group's opcode
 				int16 num_fragments;	//TODO: What is this one?
-				Fragment* fragment;		//TODO: What is this one?
+				Fragment* fragment;		// One entry per fragment index
+				int16 received;			// Distinct fragments received so far
 			};
 
 		}

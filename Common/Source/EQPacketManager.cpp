@@ -7,6 +7,7 @@
 // ***************************************************************
 
 #include "EQPacketManager.h"
+#include "FragmentLimits.h"
 
 #include <iostream>
 #include <cstdlib>
@@ -304,11 +305,33 @@ namespace EQC
 						cout << "pack->fraginfo.dwTotal:" << pack->fraginfo.dwTotal << endl;
 					}
 					FragmentGroup* fragment_group = 0;
+
+					// The fragment header is client-controlled: check it before allocating anything.
+					if (!FragmentInfoValid(pack->fraginfo.dwCurr, pack->fraginfo.dwTotal))
+					{
+						cerr << "Dropping fragment with invalid header: seq " << pack->fraginfo.dwSeq << ", index " << pack->fraginfo.dwCurr << " of " << pack->fraginfo.dwTotal << endl;
+						return true; // caller deletes pack
+					}
+
 					fragment_group = fragment_group_list.Get(pack->fraginfo.dwSeq);
+
+					// Same sequence, different fragment count: not the same packet. Drop both.
+					if (fragment_group != 0 && fragment_group->GetNumFragments() != pack->fraginfo.dwTotal)
+					{
+						cerr << "Dropping fragment group " << pack->fraginfo.dwSeq << ": fragment count changed from " << fragment_group->GetNumFragments() << " to " << pack->fraginfo.dwTotal << endl;
+						fragment_group_list.Remove(pack->fraginfo.dwSeq);
+						return true; // caller deletes pack
+					}
 
 					// If we dont have a fragment group with the right sequence number, create a new one
 					if (fragment_group == 0)
 					{
+						// Incomplete groups are never expired: bound how many can pile up per connection.
+						if (fragment_group_list.Count() >= MAX_PENDING_FRAGMENT_GROUPS)
+						{
+							cerr << "Too many incomplete fragment groups, discarding them" << endl;
+							fragment_group_list.Clear();
+						}
 						fragment_group = new FragmentGroup(pack->fraginfo.dwSeq,pack->dwOpCode, pack->fraginfo.dwTotal);
 						fragment_group_list.Add(fragment_group);
 					}
@@ -316,8 +339,9 @@ namespace EQC
 					// Add this fragment to the fragment group
 					fragment_group->Add(pack->fraginfo.dwCurr, pack->pExtra,pack->dwExtraSize);
 
-					// If we have all the fragments to complete this group
-					if(pack->fraginfo.dwCurr == (pack->fraginfo.dwTotal - 1) )
+					// Assemble only once every fragment has arrived (it used to fire on the last index,
+					// producing a truncated packet and a leaked group when fragments arrived out of order).
+					if(fragment_group->IsComplete())
 					{
 						if (debug_level >= 8)
 							cout << Timer::GetCurrentTime() << " Getting fragment opcode:" << fragment_group->GetOpcode() << endl;

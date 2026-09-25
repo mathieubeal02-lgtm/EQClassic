@@ -25,6 +25,8 @@ namespace EQC
 				void Add(FragmentGroup* add_group);
 				FragmentGroup* Get(int16 find_seq);
 				void Remove(int16 remove_seq);
+				unsigned int Count();
+				void Clear() { fragment_group_list.Clear(); }
 
 			private:
 				LinkedList<FragmentGroup*> fragment_group_list;
