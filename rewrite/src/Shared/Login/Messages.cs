@@ -1,3 +1,5 @@
+using System.Linq;
+using System.Collections.Generic;
 using EQClassic.Shared.Protocol;
 using LiteNetLib.Utils;
 

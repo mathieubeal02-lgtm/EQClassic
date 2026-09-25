@@ -99,6 +99,17 @@ jobs:
       - run: cmake --build build --parallel
       - run: ctest --test-dir build --output-on-failure
 
+  rewrite:
+    name: Rewrite (.NET, rewrite/)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet build rewrite/EQClassic.Rewrite.sln
+      - run: dotnet test rewrite/EQClassic.Rewrite.sln --no-build
+
   # The Release servers from windows-cmake, under Wine with MariaDB, played by eqbot:
   # login, character creation, zone entry, twice (see tools/eqbot/ci-e2e.sh).
   e2e:

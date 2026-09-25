@@ -1,0 +1,113 @@
+# EQClassic rewrite — target architecture
+
+Status: proposal and first bricks, branch `lantern-rewrite`. The existing C++ servers (`Common/`,
+`World/`, `Zone/`, `LS/`) keep running unchanged; nothing here replaces them until a milestone below
+is met and demonstrated.
+
+## Why a rewrite, and why this shape
+
+The 2010 C++ servers work, but every session this year hit the same limits: a UDP layer copied
+between four programs, Windows-only builds, global state shared across threads (the reused-zone
+crash), and a 2001 client that crashes on data it does not expect (Permafrost). The rewrite keeps
+the *game* (rules, data, database) and replaces the *technology* around it:
+
+- a **Unity client** that renders the original zones and models, imported with the Lantern tools
+  from the player's own Trilogy install;
+- a **C# server** (.NET 10, Linux first) that owns all game state;
+- **one set of message contracts** compiled into both.
+
+```
+ Trilogy client files (player's install)
+        │ tools/lantern/extract.sh  (LanternExtractor, externals/)
+        ▼
+ Lantern intermediate exports ──► Unity importer (LanternUnityTools, externals/) ──► Unity client
+        │                                                                              │
+        │ collision meshes (<zone>_collision.txt)                     EQClassic.Shared (netstandard2.1)
+        ▼                                                                              │ LiteNetLib UDP
+ EQClassic.Server (net10.0)  ◄───────────────────────────────────────────────────────────┘
+   Login ─ key hand-off ─► World ─► Zone instances (tick loop, NPC AI, combat)
+        │
+        ▼
+ MariaDB (same schema as today: login_accounts, account, character_, npc_types, spawn2, grid...)
+```
+
+### Components
+
+| Component | Role | Status |
+|---|---|---|
+| `rewrite/src/Shared` | Message contracts, codec, client library (`LoginClient`), zone collision mesh. Targets `net10.0` and `netstandard2.1` (Unity 2021.3). | Started |
+| `rewrite/src/Server` | Login (authentication, world list, world keys), then World and Zone. One process, one tick loop per zone. | Login done |
+| `rewrite/tests/Tests` | xUnit: unit tests and UDP end-to-end tests on localhost. | 66 tests |
+| Unity client | New Unity project using LanternUnityTools for assets and `EQClassic.Shared.dll` for networking. | Not started |
+| `tools/lantern/extract.sh` | Builds LanternExtractor and exports zones from a client install (exports are not in git). | Done |
+
+### Choices already made
+
+1. **Server-authoritative.** The client sends intentions (move, attack, cast); the server decides and
+   broadcasts. Same model as EverQuest and our current servers, and the only one that keeps a
+   multiplayer game honest.
+2. **One server process, zones as isolated instances.** Today each zone is a Windows process, and a
+   process reused for another zone crashed twice on stale global state. In the rewrite a zone is an
+   object with its own tick loop and no statics: booting or dropping one cannot affect another.
+   Splitting zones across machines stays possible later because zones only talk through World.
+3. **Same database schema.** The rewrite reads the MariaDB tables the current servers use, so both can
+   run side by side on the same data during the transition, and the data work (patches 004–006)
+   carries over.
+4. **Behaviour parity first.** Each server feature starts as a port of the current logic with tests
+   that pin its behaviour. Login is the first: `LoginServiceTests` encode every branch of
+   `LS/Login/client.cpp`: messages, SHA-1 passwords, the 20-character limit, and the lsadmin bypass.
+5. **Shared contracts compile for Unity.** `EQClassic.Shared` targets `netstandard2.1` next to
+   `net10.0`, so the Unity client uses the exact types and codec the server uses. The project must
+   not use APIs newer than netstandard2.1 (a polyfill covers records).
+
+## Protocol choice
+
+The transport carries login, world and zone traffic: many small unreliable updates (positions),
+some ordered reliable messages (chat, inventory, combat results), and occasional large ones
+(zone entry, spawn lists).
+
+| Option | For | Against |
+|---|---|---|
+| **Legacy Trilogy UDP protocol** (what `Common/Source/EQPacket*` implements) | The original client would keep working; the code exists and eqbot speaks it. | Reverse-engineered and full of edge cases (acks, fragments; we fixed several this year); fixed 2001 message layouts; DES "encryption"; ties the rewrite to the client we are trying to leave. |
+| **LiteNetLib** (reliable UDP library, MIT) — **chosen** | Reliable-ordered, reliable-unordered, sequenced and unreliable channels over one UDP socket; fragmentation, MTU discovery, NAT punch; pure C#, works in Unity and .NET; small and maintained. | No built-in encryption; we write the message layer ourselves (done: `MessageCodec`); fewer ready-made tools than HTTP. |
+| ENet (via ENet-CSharp) | Proven in games, similar channel model. | Native library to ship per platform (including Unity); C interop. |
+| TCP + WebSocket (+ protobuf) | Simple, firewall-friendly, encryption with TLS for free, web clients possible. | Head-of-line blocking: one lost packet stalls position updates; poor fit for 20 Hz movement. |
+| QUIC / gRPC | Encrypted, multiplexed streams. | Heavy for Unity; QUIC support in .NET on Linux depends on libmsquic; still stream-oriented for movement. |
+
+**Decision: LiteNetLib with our own binary messages** (`EQClassic.Shared.Protocol`): one type byte,
+then the fields, decoded strictly (unknown type, truncation or trailing bytes are errors). The
+protocol version is the connection key (`EQClassic/1`), so mismatched builds are refused at
+connect time. Movement will use unreliable-sequenced delivery, everything else reliable-ordered.
+
+**Known gap: encryption.** LiteNetLib sends plaintext. Today the login password crosses the network
+in clear (acceptable on a LAN, not on the Internet). Milestone M1 adds a key exchange (X25519) at
+connection and AES-GCM on the login channel, or moves authentication to HTTPS and uses only a
+signed token over UDP. Until then the server must not be exposed publicly.
+
+The legacy credential block (`TrilogyCredentials`) is kept in Shared, tested against OpenSSL, for an
+optional bridge that would let the original client log in to the new login server.
+
+## Milestones
+
+Each milestone ends with automated tests plus one manual check, and is merged only when both pass.
+
+| # | Milestone | Done when |
+|---|---|---|
+| M0 | **Foundations** (this branch): Lantern tools, solution, login server, shared client library, collision mesh, waypoint walker. | `dotnet build` and `dotnet test` pass in `rewrite/`; Permafrost and Qeynos export with `tools/lantern/extract.sh`; `EQClassic.Server` accepts `test`/`test`. |
+| M1 | **Real accounts and a secure login**: `login_accounts` read from MariaDB (MySqlConnector), key exchange + encrypted login, CLI client. | Tests against a MariaDB container in CI; the runbook's `test` account and the bot account log in; a captured login packet shows no plaintext password. |
+| M2 | **World**: character list and creation (same `character_` rows, profile blob decoded into typed fields), world key redemption (`WorldDirectory.TryRedeem`), zone assignment. | A character created by the rewrite loads in the current C++ zone server and vice versa; tests for creation rules and key reuse/expiry. |
+| M3 | **Zone core**: zone instance with a 20 Hz tick, spawns from `spawn2`/`spawngroup`, NPC waypoints on the Lantern collision mesh, player movement with server validation, position broadcast. | Headless test: a client enters Qeynos, sees the guards patrol without leaving the street (`WaypointWalker` on real exports), and is refused a teleport-like move. |
+| M4 | **Unity client, first light**: Unity 2021.3 + URP 12 project, LanternUnityTools import of one zone, `EQClassic.Shared.dll` networking: login screen → zone, walk, see NPCs move. | Manual play test on Linux and Windows; the client runs against the M3 server with two players seeing each other. |
+| M5 | **Combat and spells**: port `CombatFormulas` (already pure functions with tests) and the spell data (`spdat.eff`/`spells_en.txt`). | Formula parity tests against the C++ versions; a scripted fight produces the same hit/damage distribution. |
+| M6 | **Parity for play**: loot, inventory, merchants, factions, quests (Perl replaced by C# scripts or Lua). | A list of classic play scenarios, each automated with the bot client. |
+| M7 | Optional **legacy bridge**: accept the Trilogy client on the new server through the legacy protocol. | eqbot's `play` scenario passes against the rewrite. |
+
+## How to run what exists
+
+```sh
+cd rewrite
+dotnet build && dotnet test
+dotnet run --project src/Server -- --port 5999      # login server with the test account (test / test)
+
+tools/lantern/extract.sh ~/eq-client permafrost qeynos2   # from the repo root; needs libgdiplus on Linux
+```

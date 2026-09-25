@@ -2,8 +2,7 @@ using EQClassic.Server.Accounts;
 using EQClassic.Server.Login;
 using EQClassic.Shared.Login;
 using EQClassic.Shared.Protocol;
-using LiteNetLib;
-using LiteNetLib.Utils;
+using EQClassic.Shared.Client;
 
 namespace EQClassic.Tests.Login;
 
@@ -91,43 +90,39 @@ public sealed class LoginServerTests : IDisposable
         Assert.Equal(LoginResult.Malformed, response.Result);
     }
 
-    /// <summary>A LiteNetLib client that pumps both itself and the server while waiting.</summary>
+    /// <summary>Drives the real client library (EQClassic.Shared.Client.LoginClient) and pumps the server while waiting.</summary>
     private sealed class TestClient : IDisposable
     {
         private readonly LoginServer _server;
-        private readonly EventBasedNetListener _listener = new();
-        private readonly NetManager _net;
+        private readonly LoginClient _client = new();
         private readonly Queue<IMessage> _received = new();
-        private NetPeer? _peer;
-        private bool _connected;
 
-        public TestClient(LoginServer server)
-        {
-            _server = server;
-            _net = new NetManager(_listener) { AutoRecycle = true };
-            _listener.PeerConnectedEvent += _ => _connected = true;
-            _listener.PeerDisconnectedEvent += (_, _) => _connected = false;
-            _listener.NetworkReceiveEvent += (_, reader, _, _) => _received.Enqueue(MessageCodec.Read(reader));
-            _net.Start();
-        }
+        public TestClient(LoginServer server) => _server = server;
 
-        public bool IsConnected => _connected;
+        public bool IsConnected => _client.State == ConnectionState.Connected;
 
         public bool Connect(string key)
         {
-            _peer = _net.Connect("127.0.0.1", _server.Port, key);
-            return WaitUntil(() => _connected, TimeSpan.FromSeconds(3));
+            _client.Connect("127.0.0.1", _server.Port, key);
+            return WaitUntil(() => _client.State != ConnectionState.Connecting, TimeSpan.FromSeconds(3)) && IsConnected;
         }
 
-        public void Send(IMessage message) => SendRaw(MessageCodec.Encode(message));
+        public void Send(IMessage message) => _client.Send(message);
 
-        public void SendRaw(byte[] data) => _peer!.Send(data, DeliveryMethod.ReliableOrdered);
-
-        public IMessage Exchange(IMessage message) => ExchangeRaw(MessageCodec.Encode(message));
+        public IMessage Exchange(IMessage message)
+        {
+            _client.Send(message);
+            return Next();
+        }
 
         public IMessage ExchangeRaw(byte[] data)
         {
-            SendRaw(data);
+            _client.SendRaw(data);
+            return Next();
+        }
+
+        private IMessage Next()
+        {
             Assert.True(WaitUntil(() => _received.Count > 0), "no answer from the login server");
             return _received.Dequeue();
         }
@@ -138,7 +133,8 @@ public sealed class LoginServerTests : IDisposable
             while (DateTime.UtcNow < deadline)
             {
                 _server.PollEvents();
-                _net.PollEvents();
+                foreach (var m in _client.Poll())
+                    _received.Enqueue(m);
                 if (condition())
                     return true;
                 Thread.Sleep(5);
@@ -146,6 +142,6 @@ public sealed class LoginServerTests : IDisposable
             return false;
         }
 
-        public void Dispose() => _net.Stop();
+        public void Dispose() => _client.Dispose();
     }
 }

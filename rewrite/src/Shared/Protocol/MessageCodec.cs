@@ -1,3 +1,4 @@
+using System;
 using EQClassic.Shared.Login;
 using LiteNetLib.Utils;
 

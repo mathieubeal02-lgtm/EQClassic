@@ -1,3 +1,7 @@
+using System.IO;
+using System;
+using System.Linq;
+using System.Collections.Generic;
 using System.Globalization;
 
 namespace EQClassic.Shared.World;

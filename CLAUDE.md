@@ -21,6 +21,8 @@ See `docs/ARCHITECTURE.md` (components, data flow, hotspots) and `docs/BUILD.md`
 | `runtime/` | Files the servers read from their working directory: `cfg/`, `spdat.eff`, `spells_en.txt`, `Maps/` skeleton, Perl plugins, boot scripts, `*.ini.example`. Installed by `cmake --install`. |
 | `sql/` | DB schema, patches, import notes, `eqclassic_db` submodule (data dump) |
 | `cmake/` | `EQCDependencies.cmake`: imported targets for the prebuilt libs in `Dependencies/` |
+| `rewrite/` | C# rewrite (branch `lantern-rewrite`): .NET solution Shared / Server (LiteNetLib login) / Tests. Plan: `docs/architecture-rewrite.md`. `dotnet build && dotnet test` in `rewrite/`. |
+| `externals/` | Submodules LanternExtractor and LanternUnityTools; `tools/lantern/extract.sh` exports zones from a client install into `build/lantern-work/` (not in git). |
 | `legacy/` | Dead code moved out of the build (unused parts of `LS/common`, `LS/zone`, stale makefiles). Not compiled. |
 
 ## Conventions and gotchas
