@@ -57,6 +57,8 @@ jobs:
         with:
           name: eqclassic-server-${{ matrix.config }}
           path: server
+          # keep the .keep files, otherwise the empty Maps/* folders are dropped
+          include-hidden-files: true
 
   windows-msbuild:
     name: Windows x86 (legacy EQCEmu.sln, Debug)
