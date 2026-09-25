@@ -16,7 +16,6 @@
 #include <mysql.h>
 #include <queue>
 #include <string>
-#include <functional>
 
 #include "DatabaseHandler.h"
 #include "types.h"
@@ -218,7 +217,9 @@ public:
 	Item_Struct* GetItemNonBlob(sint32 itemID);
 	static std::string AxclassicItemSelect();
 	bool	ItemFromAxclassicRow(MYSQL_ROW row, Item_Struct* item);
-	int32	LoadAxclassicItems(const std::function<void(int32, const Item_Struct&)>& store);
+	// No std::function here: <functional> brings std::bind, which breaks Winsock bind() in files using namespace std.
+	typedef void (*ItemStoreFn)(int32 item_id, const Item_Struct& item, void* ctx);
+	int32	LoadAxclassicItems(ItemStoreFn store, void* ctx);
 
 #ifndef EQC_SHAREDMEMORY
 	uint32			max_item;

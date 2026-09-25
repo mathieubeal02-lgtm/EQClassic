@@ -12,7 +12,6 @@
 #include <cstring>
 #include <errmsg.h>
 #include <string>
-#include <functional>
 #include "config.h"
 #include "EQCUtils.hpp"
 #include "database.h"
@@ -1771,13 +1770,14 @@ bool Database::LoadItems()
 				mysql_free_result(result);
 
 				// Same as SharedMemory::LoadItems: clean column data overrides the corrupted blobs.
-				int32 from_columns = LoadAxclassicItems([this](int32 item_id, const Item_Struct& item) {
-					if (item_id > 0 && (uint32)item_id <= max_item) {
-						if (item_array[item_id] == 0)
-							item_array[item_id] = new Item_Struct;
-						*item_array[item_id] = item;
+				int32 from_columns = LoadAxclassicItems([](int32 item_id, const Item_Struct& item, void* ctx) {
+					Database* db = (Database*)ctx;
+					if (item_id > 0 && (uint32)item_id <= db->max_item) {
+						if (db->item_array[item_id] == 0)
+							db->item_array[item_id] = new Item_Struct;
+						*db->item_array[item_id] = item;
 					}
-				});
+				}, this);
 				cout << "Items: " << from_columns << " loaded from items_axclassic, "
 				     << invalid_blobs << " raw_data blobs with a wrong size ignored." << endl;
 			}
@@ -2345,8 +2345,8 @@ Item_Struct* Database::GetItemNonBlob(sint32 itemID) {
 }
 
 // Loads every item listed in `items` (the era's item set) from items_axclassic in one query and
-// hands each one to store(id, item). Returns the number of items loaded, or -1 on query error.
-int32 Database::LoadAxclassicItems(const std::function<void(int32, const Item_Struct&)>& store)
+// hands each one to store(id, item, ctx). Returns the number of items loaded, or -1 on query error.
+int32 Database::LoadAxclassicItems(ItemStoreFn store, void* ctx)
 {
 	char errbuf[MYSQL_ERRMSG_SIZE];
 	MYSQL_RES *result;
@@ -2359,7 +2359,7 @@ int32 Database::LoadAxclassicItems(const std::function<void(int32, const Item_St
 		Item_Struct item;
 		while ((row = mysql_fetch_row(result))) {
 			ItemFromAxclassicRow(row, &item);
-			store((int32)item.item_nr, item);
+			store((int32)item.item_nr, item, ctx);
 			count++;
 		}
 		mysql_free_result(result);
