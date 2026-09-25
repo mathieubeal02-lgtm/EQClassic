@@ -39,6 +39,7 @@ private:
 	int		roamRange;
 	int16	myRoamBox;
 	int16	myPathGrid;
+	int16	myWaypointGrid;	// spawn2.pathgrid as in the DB, also for roamers (see NPC::SetWaypointGrid)
 	int16	myPathGridStart;
 	SPAWN_TIME_OF_DAY time_of_day_flag;
 };

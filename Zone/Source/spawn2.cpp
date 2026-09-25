@@ -21,6 +21,7 @@ Spawn2::Spawn2(int32 in_spawn2_id, int32 spawngroup_id, float in_x, float in_y, 
 	spawn2_id = in_spawn2_id;
 	spawngroup_id_ = spawngroup_id;
 	roamRange = in_roamRange;
+	myWaypointGrid = in_pathgrid;
 	//Yeahlight: Table grid_entries has grids for our roamers, we only want to use grids for patrollers (spawn2s with NO roam range)
 	if(roamRange == 0)
 		myPathGrid = in_pathgrid;
@@ -166,6 +167,7 @@ bool Spawn2::Process() {
 			if (tmp && tmp->race != 72 && tmp->race != 73) {
 				tmp->time_of_day = tmp_time_of_day; // Kibanu
 				NPC* npc = new NPC(tmp, this, x, y, z, heading, false, roamRange, myRoamBox, myPathGrid, myPathGridStart);
+				npc->SetWaypointGrid(myWaypointGrid);
 				npc->AddLootTable();
 				npc->GetMeleeWeapons();
 				npc->CalcBonuses(true, true);

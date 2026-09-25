@@ -1,4 +1,6 @@
 
+#include <algorithm>
+#include <vector>
 #include <cmath>
 #include <fstream>
 #include "moremath.h"
@@ -183,6 +185,13 @@ NPC::NPC(NPCType* d, Spawn2* in_respawn, float x, float y, float z, float headin
 	isPatrolling = false;
 	randomTimer = (int32)(fRandomNum(0.125, 0.999) * 10000) + 5000;
 	patrolPause_timer = new Timer(randomTimer);
+	usesWaypoints = false;
+	waypointIndex = 0;
+	waypointDirection = 1;
+	waypointType = -1;
+	waypointMoving = false;
+	waypoint_timer = new Timer(1000);
+	waypoint_timer->Disable();
 	if(myPathGrid != 0)
 	{
 		if(GetMyGridPath())
@@ -407,6 +416,7 @@ NPC::~NPC()
 	safe_delete(checkLoS_timer);
 	safe_delete(faceTarget_timer);
 	safe_delete(roam_timer);
+	safe_delete(waypoint_timer);
 	safe_delete(patrolPause_timer);
 	safe_delete(offensiveCast_timer);
 	safe_delete(debuffCounterRegen_timer);
@@ -940,6 +950,11 @@ bool NPC::Process()
 					CheckMyRoamStatus();
 				}
 
+				//NPC walks its grid_entries waypoints
+				if(this->usesWaypoints && this->waypoint_timer->Check())
+				{
+					CheckMyWaypointStatus();
+				}
 				//Yeahlight: NPC is a patroller and is ready to continue its grid path
 				if(this->isPatroller && this->patrolPause_timer->Check())
 				{
@@ -2303,6 +2318,14 @@ void NPC::CheckMyRoamStatus()
 	//Yeahlight: Reset timer to random range between 20 and 60 seconds
 	int32 randomTimer = int32(fRandomNum(0.125, 0.999) * 40000) + 20000;
 	this->roam_timer->Start(randomTimer);
+	// No roam box for this NPC (myRoamBox 999 when Spawn2 found none; most zones have no
+	// zone_roam_boxes rows): roamBoxes[myRoamBox] would read past the array. Don't roam.
+	if(this->myRoamBox >= zone->numberOfRoamBoxes)
+	{
+		this->roam_timer->Disable();
+		onRoamPath = false;
+		return;
+	}
 	float tempX, tempY, tempZ;
 	int abortCounter = 0;
 	bool permit = false;
@@ -3892,4 +3915,117 @@ void NPC::CheckSignal() {
 		#endif
 		signaled=false;
 	}
+}
+
+//o--------------------------------------------------------------
+//| SetWaypointGrid
+//o--------------------------------------------------------------
+//| Makes the NPC follow its spawn's grid (grid_entries) point by
+//| point, like EQEmu/EQMacEmu. EQClassic's own patrol system maps
+//| grids onto a node graph (Maps/Nodes) that only exists for a few
+//| zones, so everywhere else NPCs never moved.
+//o--------------------------------------------------------------
+void NPC::SetWaypointGrid(int16 gridID)
+{
+	if (gridID == 0 || isPatroller || IsBoat())
+		return;
+	waypoints.clear();
+	for (int i = 0; i < zone->numberOfPatrollingNodes; i++)
+	{
+		if (zone->patrollingNodes[i].gridID == gridID)
+			waypoints.push_back(zone->patrollingNodes[i]);
+	}
+	if (waypoints.size() < 2)
+	{
+		waypoints.clear();
+		return;
+	}
+	std::sort(waypoints.begin(), waypoints.end(),
+		[](const PatrollingNode& a, const PatrollingNode& b) { return a.number < b.number; });
+	waypointType = zone->GetGridType(gridID);
+	// Start from the waypoint closest to where we spawned.
+	float best = -1;
+	for (size_t i = 0; i < waypoints.size(); i++)
+	{
+		float d = fdistance(waypoints[i].x, waypoints[i].y, GetX(), GetY());
+		if (best < 0 || d < best)
+		{
+			best = d;
+			waypointIndex = (int)i;
+		}
+	}
+	waypointDirection = 1;
+	waypointMoving = false;
+	usesWaypoints = true;
+	// The grid replaces random roaming (which needs zone_roam_boxes data we do not have).
+	isRoamer = false;
+	roam_timer->Disable();
+	waypoint_timer->Start((int32)(fRandomNum(0.1, 1.0) * 10000));
+}
+
+//o--------------------------------------------------------------
+//| MoveToWaypoint
+//o--------------------------------------------------------------
+void NPC::MoveToWaypoint(int index)
+{
+	waypointIndex = index;
+	const PatrollingNode& wp = waypoints[waypointIndex];
+	faceDestination(wp.x, wp.y);
+	SetDestination(wp.x, wp.y, wp.z);
+	StartWalking();
+	walking_timer->Trigger();
+	SendPosUpdate(false, NPC_UPDATE_RANGE * 2.5, false);
+	onRoamPath = true;	// reuse the roaming movement: stop at 1 unit, ground Z on arrival
+	waypointMoving = true;
+	waypoint_timer->Start(1000);
+}
+
+//o--------------------------------------------------------------
+//| CheckMyWaypointStatus
+//o--------------------------------------------------------------
+//| Called by the idle AI: waits for arrival, pauses for the
+//| waypoint's pause (seconds), then heads to the next waypoint
+//| according to grid.type: 0 circular, 1/2 random, others
+//| (3 = patrol, the common case) back and forth.
+//o--------------------------------------------------------------
+void NPC::CheckMyWaypointStatus()
+{
+	if (waypoints.empty())
+	{
+		usesWaypoints = false;
+		return;
+	}
+	if (waypointMoving)
+	{
+		// Still walking (MoveTowards clears onRoamPath on arrival).
+		if (onRoamPath)
+		{
+			waypoint_timer->Start(1000);
+			return;
+		}
+		// Arrived: pause there.
+		waypointMoving = false;
+		int pause = waypoints[waypointIndex].pause;
+		waypoint_timer->Start((int32)((pause > 0 ? pause : 1) * 1000));
+		return;
+	}
+	int n = (int)waypoints.size();
+	int next;
+	if (waypointType == 0)
+	{
+		next = (waypointIndex + 1) % n;
+	}
+	else if (waypointType == 1 || waypointType == 2)
+	{
+		next = rand() % n;
+		if (next == waypointIndex)
+			next = (next + 1) % n;
+	}
+	else
+	{
+		if (waypointIndex + waypointDirection < 0 || waypointIndex + waypointDirection >= n)
+			waypointDirection = -waypointDirection;
+		next = waypointIndex + waypointDirection;
+	}
+	MoveToWaypoint(next);
 }

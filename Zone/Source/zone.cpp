@@ -245,6 +245,8 @@ bool Zone::Init() {
 	if (!Database::Instance()->LoadPatrollingNodes(zoneID))
 		cout << "PATROLLINGNODE load failed" << endl;
 
+	LoadGridTypes();
+
 	spawn_group_list = new SpawnGroupList();
 	if (!Database::Instance()->PopulateZoneLists(short_name, &zone_point_list, spawn_group_list))
 		return false;
@@ -1676,3 +1678,29 @@ bool Zone::IsDaytime() {
 }
 
 
+
+//o--------------------------------------------------------------
+//| LoadGridTypes
+//o--------------------------------------------------------------
+//| Loads grid.type for this zone's grids, used by NPCs that walk
+//| their grid_entries waypoints directly (see NPC::SetWaypointGrid).
+//o--------------------------------------------------------------
+void Zone::LoadGridTypes()
+{
+	char errbuf[MYSQL_ERRMSG_SIZE];
+	char *query = 0;
+	MYSQL_RES *result;
+	MYSQL_ROW row;
+	gridTypes.clear();
+	if (Database::Instance()->RunQuery(query, MakeAnyLenString(&query, "SELECT id, type FROM grid WHERE zoneid = %i", zoneID), errbuf, &result))
+	{
+		while ((row = mysql_fetch_row(result)))
+			gridTypes[(int16)atoi(row[0])] = atoi(row[1]);
+		mysql_free_result(result);
+	}
+	else
+	{
+		cerr << "Error in LoadGridTypes query '" << query << "' " << errbuf << endl;
+	}
+	safe_delete_array(query);
+}

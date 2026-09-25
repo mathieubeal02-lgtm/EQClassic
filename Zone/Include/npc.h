@@ -1,6 +1,7 @@
 #ifndef NPC_H
 #define NPC_H
 
+#include <vector>
 #include "database.h"
 #include "mob.h"
 #include "spawn2.h"
@@ -168,6 +169,12 @@ public:
 	void	CheckMyDebuffRefundStatus(bool engaged);
 	void	CheckMyFleeStatus(bool debugFlag);
 	void	CheckMyPatrolStatus();
+	// Walk the spawn's grid_entries waypoints directly (EQEmu/EQMacEmu style). Only used when the
+	// node-based patrol system above does not handle this NPC (no Maps/Nodes data for the zone).
+	void	SetWaypointGrid(int16 gridID);
+	void	CheckMyWaypointStatus();
+	void	MoveToWaypoint(int index);
+	bool	UsesWaypoints() { return usesWaypoints; }
 	void	CheckMyRoamStatus();
 	void	CheckMyAgroStatus();
 	void	CheckMyDefenseCastStatus();
@@ -298,6 +305,13 @@ protected:
 	bool	isPatroller;
 	bool	isPatrolling;
 	Timer*	patrolPause_timer;
+	bool	usesWaypoints;
+	std::vector<PatrollingNode>	waypoints;	// sorted by grid_entries.number
+	int		waypointIndex;
+	int		waypointDirection;			// +1/-1 for back-and-forth grids
+	int		waypointType;				// grid.type
+	bool	waypointMoving;				// walking to waypoints[waypointIndex]
+	Timer*	waypoint_timer;
 	bool	requiresNewPath;
 	bool	preventPatrolling;
 

@@ -3,6 +3,7 @@
 
 #define ZONE_AUTOSHUTDOWN_DELAY	30000
 
+#include <map>
 #include "Mutex.h"
 #include "linked_list.h"
 #include "types.h"
@@ -90,6 +91,9 @@ public:
 	char*	GetShortName() { return short_name; }
 	int16	GetPort() { return port; }
 	int16	GetZoneID() { return zoneID; }
+	// grid.type for a grid id (0 circular, 1/2 random, 3 patrol back and forth...), -1 if unknown.
+	int		GetGridType(int16 gridID) { std::map<int16,int>::iterator it = gridTypes.find(gridID); return it == gridTypes.end() ? -1 : it->second; }
+	void	LoadGridTypes();
 	float	safe_x() { return psafe_x; }
 	float	safe_y() { return psafe_y; }
 	float	safe_z() { return psafe_z; }
@@ -158,6 +162,7 @@ public:
 	PatrollingNode patrollingNodes[25000];//PatrollingNode patrollingNodes[15000]; //newage: Crashes at 15252 in freportw. That zone has 21757 patrolling nodes.
 	int16	zoneID;
 	int16	numberOfPatrollingNodes;
+	std::map<int16,int>	gridTypes;	// grid.id -> grid.type, for this zone
 	bool	ParseGridData(Mob* parser);
 	bool	LoadProcessedGridData();
 	GridPath zoneGrids[MAX_GRIDS];
