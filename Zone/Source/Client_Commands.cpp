@@ -129,6 +129,11 @@ Access Levels:
  */
 int command_init(void) {
 
+	// A dynamic zone process boots a new zone each time it wakes up: start from an empty list,
+	// otherwise the first command_add() of the second boot is a duplicate, the whole chain fails
+	// and command_deinit() leaves the zone with no # commands at all.
+	command_deinit();
+
 	int GM_MASTER_ACESSS = 250;
 	int GM_MANAGEMENT_ACESSS = 200;
 	int GM_ADMIN = 10;
