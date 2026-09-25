@@ -2086,11 +2086,12 @@ static void CopyItemString(char* dst, size_t size, const char* src)
 // "select source,`id`,`minstatus`,...,updated from items_axclassic": the column order matches ItemField::*.
 std::string Database::AxclassicItemSelect()
 {
-	return std::string("select source,")
+	static const char select[] = "select source,"
 #define F(x) "`" #x "`,"
 #include "item_fieldlist.h"
 #undef F
 		"updated from items_axclassic";
+	return select;
 }
 
 // Harakiri - Load an Item from nonblob table into Item_Struct.
