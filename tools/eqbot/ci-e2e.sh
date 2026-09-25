@@ -15,8 +15,8 @@ SERVER=$(realpath "$1")
 EQBOT=$(realpath "$2")
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 DB_CONTAINER=eqc-ci-db
-USER=ci
-PASS=ci
+LS_USER=ci
+LS_PASS=ci
 CHAR=Qcibot
 export WINEDEBUG=-all WINEPREFIX=${WINEPREFIX:-$HOME/.wine-eqc-ci}
 
@@ -55,7 +55,7 @@ for p in "$REPO"/sql/patches/*.sql; do
   db eqclassic < "$p"
 done
 db eqclassic -e "INSERT INTO login_accounts (name, password, lsadmin, lsstatus, worldadmin, user_active)
-                 VALUES ('$USER', SHA1('$PASS'), 0, 0, '0', '1');"
+                 VALUES ('$LS_USER', SHA1('$LS_PASS'), 0, 0, '0', '1');"
 
 echo "== Server configuration"
 cd "$SERVER"
@@ -77,7 +77,7 @@ wine ./zone.exe . 127.0.0.1 7000 127.0.0.1 > logs/zone0.log 2>&1 < /dev/null &
 # Ready when world is listed by the login server with a status answer.
 ready=0
 for _ in $(seq 30); do
-  if "$EQBOT" login 127.0.0.1 "$USER" "$PASS" > logs/eqbot-wait.log 2>&1; then
+  if "$EQBOT" login 127.0.0.1 "$LS_USER" "$LS_PASS" > logs/eqbot-wait.log 2>&1; then
     ready=1
     break
   fi
@@ -90,10 +90,10 @@ if [ $ready -ne 1 ]; then
 fi
 
 echo "== eqbot"
-"$EQBOT" login 127.0.0.1 "$USER" "$PASS"
-"$EQBOT" create 127.0.0.1 "$USER" "$PASS" "$CHAR"
-"$EQBOT" play 127.0.0.1 "$USER" "$PASS" "$CHAR"
+"$EQBOT" login 127.0.0.1 "$LS_USER" "$LS_PASS"
+"$EQBOT" create 127.0.0.1 "$LS_USER" "$LS_PASS" "$CHAR"
+"$EQBOT" play 127.0.0.1 "$LS_USER" "$LS_PASS" "$CHAR"
 sleep 5
 echo "-- second session (the first one must have been logged out)"
-"$EQBOT" play 127.0.0.1 "$USER" "$PASS" "$CHAR"
+"$EQBOT" play 127.0.0.1 "$LS_USER" "$LS_PASS" "$CHAR"
 echo "== end-to-end OK"
