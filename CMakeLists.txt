@@ -16,8 +16,10 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED OFF)
 set(CMAKE_CXX_EXTENSIONS ON)
 
-# Same runtime as the .vcxproj files: static CRT in Debug (/MTd), DLL CRT otherwise (/MD).
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+# Static CRT (/MTd Debug, /MT Release), as the Debug .vcxproj configurations upstream used: the
+# executables then run on a plain Windows (or Wine) without the VC++ redistributable, and the Debug
+# build does not need Visual Studio's non-redistributable debug CRT DLLs.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug CACHE STRING "" FORCE)
 endif()
@@ -55,7 +57,8 @@ endif()
 # `cmake --install build --prefix <server dir>` lays out a runnable server folder.
 if(EQC_BUILD_SERVERS)
   # runtime/: cfg/, spdat.eff, spells_en.txt, *.bat, *.pl, Maps/ skeleton, *.ini.example (see runtime/README.md)
-  install(DIRECTORY runtime/ DESTINATION . PATTERN ".keep" EXCLUDE PATTERN "README.md" EXCLUDE)
+  # .keep files are installed on purpose: they keep the empty Maps/* folders in CI artifacts.
+  install(DIRECTORY runtime/ DESTINATION . PATTERN "README.md" EXCLUDE)
   install(FILES ${EQC_RUNTIME_DLLS} DESTINATION .)
   install(FILES sql/schema.sql sql/patches/001_boat_passengers.sql DESTINATION sql)
 endif()

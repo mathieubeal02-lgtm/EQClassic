@@ -15,6 +15,8 @@
 #include <winsock.h>
 #include <mysql.h>
 #include <queue>
+#include <string>
+#include <functional>
 
 #include "DatabaseHandler.h"
 #include "types.h"
@@ -214,6 +216,9 @@ public:
 	bool GetTradeRecipe(Combine_Struct* combin, DBTradeskillRecipe_Struct *spec);
 	bool SearchTradeRecipe(const char* recipeName, int recipeID,  std::vector<DBTradeskillRecipe_Struct*>* specList);
 	Item_Struct* GetItemNonBlob(sint32 itemID);
+	static std::string AxclassicItemSelect();
+	bool	ItemFromAxclassicRow(MYSQL_ROW row, Item_Struct* item);
+	int32	LoadAxclassicItems(const std::function<void(int32, const Item_Struct&)>& store);
 
 #ifndef EQC_SHAREDMEMORY
 	uint32			max_item;

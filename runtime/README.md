@@ -7,6 +7,7 @@ executables. Copy manually if you use the legacy `.sln` build.
 |---|---|---|
 | `db.ini.example` | all | Rename to `db.ini`, fill `[Database]` host/user/pass/data. |
 | `LoginServer.ini.example` | world (`[LoginServer]`), login (`[LoginConfig]`) | Rename to `LoginServer.ini`. Use 127.0.0.1 locally, your LAN/public IP otherwise. |
+| `run-wine.sh` | — | Linux: start/stop/status of login, world and N dynamic zones under Wine (`docs/RUNBOOK.md` §3b). |
 | `startserver.bat`, `boot1zone.bat`, `Boot5zones.bat`, `BootAll.bat` | — | Launch scripts. `zone . <ip> <port> <world ip>` starts a *dynamic* zone; `BootAll.bat` starts every zone statically on ports 30000+. |
 | `cfg/*.cfg` | zone | Binary zone headers (weather, sky, fog…), one per zone. `#zsave` writes them. |
 | `spdat.eff`, `spells_en.txt` | zone | Spell data. `spells_en.txt` is the file from the Trilogy client. Zones crash without it. |

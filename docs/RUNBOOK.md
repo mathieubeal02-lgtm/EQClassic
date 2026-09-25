@@ -24,13 +24,24 @@ renamed to `Perl512.dll`; try the plain 5.12 install first.
    CREATE USER 'eqc'@'localhost' IDENTIFIED WITH mysql_native_password BY 'eqc';
    GRANT ALL ON eqclassic.* TO 'eqc'@'localhost';
    ```
+   MariaDB ≥ 11 needs two server settings for the 2017 MySQL 5.7 client library and the
+   2010-era SQL (e.g. `/etc/mysql/mariadb.conf.d/60-eqclassic.cnf`):
+   ```ini
+   [mariadb]
+   sql_mode = NO_ENGINE_SUBSTITUTION   # no strict mode
+   skip-ssl                            # the old client cannot negotiate modern TLS (error 2026)
+   bind-address = 127.0.0.1
+   ```
 2. Import the dump (`git submodule update --init` first), then the patches:
    ```sh
    cat sql/eqclassic_db/sql/*.sql | mysql -u root -p eqclassic
    cat sql/patches/*.sql        | mysql -u root -p eqclassic
    ```
    (MySQL Workbench: Server → Data Import → "Import from Dump Project Folder" → `sql/eqclassic_db/sql`,
-   then run `sql/patches/001_boat_passengers.sql`.)
+   then run every file in `sql/patches/` in order.)
+   `002_items_raw_data_encoding.sql` matters: the dump's item blobs are corrupted; without the patch
+   (and without `items_axclassic`, which the servers now read first) the world logs thousands of
+   "Invalid items" and no item exists in game.
 3. Create a login account (password is checked as `SHA()`):
    ```sql
    INSERT INTO login_accounts (name, password, lsadmin, lsstatus) VALUES ('test', SHA1('test'), 0, 0);
@@ -78,6 +89,15 @@ In `C:\eqc`:
   - `quests/` → PEQ Velious quest pack (unzip so that `quests/<zone>/*.pl` exists; merge the
     pack's `plugins/` into the existing `quests/plugins/`).
   - `spells_en.txt` is already in `runtime/`; if your client's file differs, copy the client's.
+
+## 3b. Running on Linux with Wine (tested)
+
+The Win32 servers run under Wine 10 (`sudo dpkg --add-architecture i386 && sudo apt install wine wine32:i386 mariadb-server`).
+Use the **Release** build (or any build made after the static-CRT change): older Debug artifacts need
+Visual Studio's debug CRT DLLs (`MSVCP140D.dll`…), which exist on no normal machine.
+`run-wine.sh start [zones]` / `stop` / `status` starts login, world and N dynamic zones with logs in
+`logs/`. The servers' own logs (`logs/eqc_debug_*.log`) are more complete than stdout, which is buffered.
+Zones that print `Entering sleep mode` are healthy: they wait for world to assign them a zone.
 
 ## 4. Start
 

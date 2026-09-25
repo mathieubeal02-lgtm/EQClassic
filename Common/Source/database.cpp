@@ -12,6 +12,7 @@
 #include <cstring>
 #include <errmsg.h>
 #include <string>
+#include <functional>
 #include "config.h"
 #include "EQCUtils.hpp"
 #include "database.h"
@@ -1703,14 +1704,14 @@ bool Database::LoadItems()
 		{ 
 			max_item = atoi(row[0]);
 			item_array = new Item_Struct*[max_item+1];
-			for(int i=0; i<max_item; i++)
+			for(int i=0; i<=max_item; i++)
 			{
 				item_array[i] = 0;
 			}
 			mysql_free_result(result);
 			
 			MakeAnyLenString(&query, "SELECT id,raw_data FROM items");
-
+			int32 invalid_blobs = 0;
 			if (RunQuery(query, strlen(query), errbuf, &result))
 			{
 				safe_delete_array(query);//delete[] query;
@@ -1763,11 +1764,22 @@ bool Database::LoadItems()
 					}
 					else
 					{
-						cout << "Invalid items in database..." << endl;
+						invalid_blobs++;
 					}
 					Sleep(0);
 				}
 				mysql_free_result(result);
+
+				// Same as SharedMemory::LoadItems: clean column data overrides the corrupted blobs.
+				int32 from_columns = LoadAxclassicItems([this](int32 item_id, const Item_Struct& item) {
+					if (item_id > 0 && (uint32)item_id <= max_item) {
+						if (item_array[item_id] == 0)
+							item_array[item_id] = new Item_Struct;
+						*item_array[item_id] = item;
+					}
+				});
+				cout << "Items: " << from_columns << " loaded from items_axclassic, "
+				     << invalid_blobs << " raw_data blobs with a wrong size ignored." << endl;
 			}
 			else {
 				cerr << "Error in PopulateZoneLists query '" << query << "' " << errbuf << endl;
@@ -2064,251 +2076,298 @@ bool Database::LoadItems()
 //	return true;
 //}
 
-// Harakiri - Load an Item from nonblob table into Item_Struct
-// This is still in testing, this should replace the GetItem method sooner or later
-Item_Struct* Database::GetItemNonBlob(sint32 itemID) {
-	
-	char errbuf[MYSQL_ERRMSG_SIZE];
-	MYSQL_RES *result;
-	MYSQL_ROW row;
-	bool ret = false;
-	Item_Struct *item;
-	EQC::Common::Log(EQCLog::Status,CP_DATABASE, "Loading item from database: id=%i", itemID);
-		
-	
-	// Retrieve all items from database
-	// use inline function to automatically expand all fieldnames
-	char query2[] = "select source,"
+// Copies a DB string into a fixed-size Item_Struct field, always terminated.
+static void CopyItemString(char* dst, size_t size, const char* src)
+{
+	strncpy(dst, src ? src : "", size - 1);
+	dst[size - 1] = 0;
+}
+
+// "select source,`id`,`minstatus`,...,updated from items_axclassic": the column order matches ItemField::*.
+std::string Database::AxclassicItemSelect()
+{
+	return std::string("select source,")
 #define F(x) "`" #x "`,"
 #include "item_fieldlist.h"
 #undef F
-		"updated"
-		" from items_axclassic where id=%i order by id";
-	char *query = 0;
-	query = new char[2000];
-	MakeAnyLenString(&query,query2,itemID);	
-		
-	if (RunQuery(query, strlen(query), errbuf, &result)) {
-                while((row = mysql_fetch_row(result))) {
-#if EQDEBUG >= 6
-				EQC::Common::Log(EQCLog::Status,CP_DATABASE, "Loading %s:%i", row[ItemField::name], row[ItemField::id]);
-#endif				
-				
-			item = new Item_Struct;
-					
-			memset(item, 0, sizeof(Item_Struct));
-			
-			
-			// ItemClass = type
-			item->type = (uint8)atoi(row[ItemField::itemclass]);
-			strcpy(item->name,row[ItemField::name]);
-			strcpy(item->lore,row[ItemField::lore]);
-			strcpy(item->idfile,row[ItemField::idfile]);
-			// id = item_nr
-			item->item_nr = (uint32)atoul(row[ItemField::id]);
-			// Harakiri - this needs later to be fixed to be a real unique ID per item
-			// the client uses this for example for apply poison - since it waits 7sec to
-			// sent the apply poison opcode to the server - it needs to remember which item was clicked
-			// it uses a unique ID for this - so even if you move around the poison item, the right slot
-			// will still be found
-			item->uniqueID = item->item_nr;
+		"updated from items_axclassic";
+}
 
-			item->weight = (uint8)atoi(row[ItemField::weight]);
-			// Norent == norent
+// Harakiri - Load an Item from nonblob table into Item_Struct.
+// Builds an Item_Struct from one items_axclassic row (columns as in AxclassicItemSelect()).
+// items.raw_data in the public eqclassic_db dump is corrupted (see sql/patches/002), so this is the
+// primary item source; the server rules the blob loader applied are applied here too.
+bool Database::ItemFromAxclassicRow(MYSQL_ROW row, Item_Struct* item)
+{
+		memset(item, 0, sizeof(Item_Struct));
+		// ItemClass = type
+		item->type = (uint8)atoi(row[ItemField::itemclass]);
+		CopyItemString(item->name, sizeof(item->name), row[ItemField::name]);
+		CopyItemString(item->lore, sizeof(item->lore), row[ItemField::lore]);
+		CopyItemString(item->idfile, sizeof(item->idfile), row[ItemField::idfile]);
+		// id = item_nr
+		item->item_nr = (uint32)atoul(row[ItemField::id]);
+		// Harakiri - this needs later to be fixed to be a real unique ID per item
+		// the client uses this for example for apply poison - since it waits 7sec to
+		// sent the apply poison opcode to the server - it needs to remember which item was clicked
+		// it uses a unique ID for this - so even if you move around the poison item, the right slot
+		// will still be found
+		item->uniqueID = item->item_nr;
+
+		item->weight = (uint8)atoi(row[ItemField::weight]);
+		// Norent == norent
             item->norent = (uint8)atoi(row[ItemField::norent]);
 
-			if(item->norent == 1) {
-				// Harakiri blobs were FF, but 01 also works, just to be sure tho
-				/// i guess everything non zero counts as it
-				item->norent = 0xFF;
-			}
-			item->nodrop = (uint8)atoi(row[ItemField::nodrop]);
+		if(item->norent == 1) {
+			// Harakiri blobs were FF, but 01 also works, just to be sure tho
+			/// i guess everything non zero counts as it
+			item->norent = 0xFF;
+		}
+		item->nodrop = (uint8)atoi(row[ItemField::nodrop]);
 
-			if(item->nodrop == 1) {
-				// Harakiri blobs were FF, but 01 also works, just to be sure tho
-				/// i guess everything non zero counts as it
-				item->nodrop = 0xFF;
-			}
+		if(item->nodrop == 1) {
+			// Harakiri blobs were FF, but 01 also works, just to be sure tho
+			/// i guess everything non zero counts as it
+			item->nodrop = 0xFF;
+		}
 
-			item->nodropFirionaVie = (uint8)atoi(row[ItemField::fvnodrop]);
+		item->nodropFirionaVie = (uint8)atoi(row[ItemField::fvnodrop]);
 
-			if(item->nodropFirionaVie == 1) {
-				// Harakiri blobs were FF, but 01 also works, just to be sure tho
-				/// i guess everything non zero counts as it
-				item->nodropFirionaVie = 0xFF;
-			}
-			
-			
-			item->size = (uint8)atoi(row[ItemField::size]);
-			// Slots == equipableSlots
-			item->equipableSlots = (uint32)atoul(row[ItemField::slots]);
-			// Price == cost
-			item->cost = (uint32)atoul(row[ItemField::price]);
-			// Icon == icon_nr
-			item->icon_nr = (uint32)atoul(row[ItemField::icon]);
-
-			if(item->type == ItemClassCommon) {
-				item->common.CR = (sint8)atoi(row[ItemField::cr]);
-				item->common.DR = (sint8)atoi(row[ItemField::dr]);
-				item->common.PR = (sint8)atoi(row[ItemField::pr]);
-				item->common.MR = (sint8)atoi(row[ItemField::mr]);
-				item->common.FR = (sint8)atoi(row[ItemField::fr]);
-				item->common.STR = (sint8)atoi(row[ItemField::astr]);
-				item->common.STA = (sint8)atoi(row[ItemField::asta]);
-				item->common.AGI = (sint8)atoi(row[ItemField::aagi]);
-				item->common.DEX = (sint8)atoi(row[ItemField::adex]);
-				item->common.CHA = (sint8)atoi(row[ItemField::acha]);
-				item->common.INT = (sint8)atoi(row[ItemField::aint]);
-				item->common.WIS = (sint8)atoi(row[ItemField::awis]);
-				item->common.HP = (sint32)atoul(row[ItemField::hp]);
-				item->common.MANA = (sint32)atoul(row[ItemField::mana]);
-				item->common.AC = (sint32)atoul(row[ItemField::ac]);								
-				// TODO item->BaneDmgRace = (uint32)atoul(row[ItemField::banedmgrace]);
-				// TODOitem->BaneDmgAmt = (sint8)atoi(row[ItemField::banedmgamt]);
-				// TODO item->BaneDmgBody = (uint32)atoul(row[ItemField::banedmgbody]);
-				item->common.magic = (atoi(row[ItemField::magic])==0) ? false : true;
-				item->common.casttime = (sint32)atoul(row[ItemField::casttime_]);
-				// TODO item->ReqLevel = (uint8)atoi(row[ItemField::reqlevel]);
-				// TODO item->BardType = (uint32)atoul(row[ItemField::bardtype]);
-				// TODO item->BardValue = (sint32)atoul(row[ItemField::bardvalue]);
-				item->common.light = (sint8)atoi(row[ItemField::light]);
-				item->common.delay = (uint8)atoi(row[ItemField::delay]);
-				// RecLevel = recommendedLevel
-				item->common.recommendedLevel = (uint8)atoi(row[ItemField::reclevel]);
-				//TODO item->RecSkill = (uint8)atoi(row[ItemField::recskill]);
-				//TODO item->ElemDmgType = (uint8)atoi(row[ItemField::elemdmgtype]);
-				//TODO item->ElemDmgAmt = (uint8)atoi(row[ItemField::elemdmgamt]);
-				item->common.range = (uint8)atoi(row[ItemField::range]);
-				item->common.damage = (uint8)atoi(row[ItemField::damage]);
-				item->common.color = (uint32)atoul(row[ItemField::color]);
-				// Harakiri the new colors are now padded by FF and no longer RGB value
-				// FF is transparency, but the older client only works with RGB
-				if(item->common.color >= 0xFF000000) {
-					item->common.color = item->common.color - 0xFF000000;
-				}
-				item->common.classes = (uint32)atoul(row[ItemField::classes]);
-				item->common.normal.races = (uint32)atoul(row[ItemField::races]);
-				item->common.deity = (uint32)atoul(row[ItemField::deity]);
-				
-				// ItemType = common.itemType
-				item->common.itemType= (uint8)atoi(row[ItemField::itemtype]);
-				item->common.material = (uint8)atoi(row[ItemField::material]);
-				//TODO item->SellRate = (float)atof(row[ItemField::sellrate]);			
-				item->common.casttime = (uint32)atoul(row[ItemField::casttime]);			
-				// TODO item->ProcRate = (sint32)atoi(row[ItemField::procrate]);		
-				
-				item->common.clicktype = (uint8)atoul(row[ItemField::clicktype]);
-
-				//Harakiri, for scrolls we need to take from another column, for items its just clickeffect
-				if(item->common.itemType==ItemTypeSpell) {
-
-					item->common.click_effect_id = (uint32)atoul(row[ItemField::scrolleffect]);
-					// Harakiri for some reasons, spell scrolls are never magic - the client doesnt bother if it is set to 1
-					// but just to be sure, we always make a spell non magic
-					item->common.magic=0;
-				// Harakiri for poison we need the proceffect field
-				} else if(item->common.itemType==ItemTypePoison) {
-					item->common.click_effect_id = (uint32)atoul(row[ItemField::proceffect]);									
-					
-					// Harakiri poisons seems to be broken on the client, we could try mark them as potions
-					// item->common.clicktype = effect;
-					// item->common.itemType = ItemTypePotion;
-				// for all others use the click effect for now
-				} else {										
-					item->common.click_effect_id = (uint32)atoul(row[ItemField::clickeffect]);
-					
-				}								
-								    		
-								
-				item->common.charges = (uint8)atoi(row[ItemField::maxcharges]);  // for clickies				
-
-				// Harakiri this is a legacy field not found in newer item tables
-				// the client needs to display the EFFECT = spell if 3
-				// the value is also 3 for spells				
-				item->common.normal.click_effect_type = 3; // items with effect 
-				
-
-				ItemInst *i = new ItemInst(item, 0);
-
-				// Harakiri for stackable items, at least one is needed or else client prints error 
-				// BAD CHARGES ON STACKABLE.  DELETING
-				if(item->common.charges == 0 && i->IsConsumable()) {
-					item->common.charges = 1;
-				}
-
-				if(item->common.charges > 0 && i->IsConsumable()) {
-					item->common.stackable = 1;
-				}				 
-
-				// Harakiri items with limited charge of effects need stackable to be set to be > 0
-				// or else the charges are not shown i.e. soulfire with 5 charges of complete heal
-				if(item->common.clicktype != 0 &&  item->common.charges > 0) {
-					/*1 would also be fine, but original itemblobs had always stackable == maxcharges*/
-					item->common.stackable = (uint8)atoi(row[ItemField::maxcharges]);
-				}
-				
-
-				item->common.clicklevel2 = (uint8)atoul(row[ItemField::clicklevel2]);
-				// Harakiri clicklevel2 and level seem to be always the same in itemblob
-				item->common.level = item->common.clicklevel2;
-				
-				// Harakiri exception for haste, see NPC::GetItemHaste() 
-				// the old client had the spell ID of haste (998) on any haste item
-				// the actual haste value is however not the one from the spell haste but different for each item
-				// we store the haste in the level field
-				int haste = (uint8)atoul(row[ItemField::haste]);
-
-				if(haste > 0) {
-					item->common.level = haste;
-					item->common.effecttype = ET_WornEffect;
-					item->common.clicktype = ET_WornEffect;					
-					item->common.click_effect_id = 998;					
-				} else {
-					item->common.effecttype = item->common.clicktype;	
-				}
-				
-				// Harakiri spell_effect == click_effect_id - no idea if it is ever different
-				item->common.spell_effect_id = item->common.click_effect_id;			
-			}
-
-			if(item->type == ItemClassContainer) {
-				// BagType = common.container.BagType
-				item->common.container.BagType = (uint8)atoi(row[ItemField::bagtype]);
-				// BagSlots = BagSlots
-				item->common.container.BagSlots = (uint8)atoi(row[ItemField::bagslots]);
-				// BagSize = BagSize
-				item->common.container.BagSize = (uint8)atoi(row[ItemField::bagsize]);
-				// BagWr =weightReduction
-				item->common.container.weightReduction = (uint8)atoi(row[ItemField::bagwr]);
-			}
-
-			if(item->type == ItemClassBook) {
-								
-				// Filename = file
-				strcpy(item->book.file,row[ItemField::filename]);
-				item->book.book = (uint8)atoi(row[ItemField::book]);
-				item->book.bookType = (uint16)atoul(row[ItemField::booktype]);
-			}
-			
-			
-			// Harakiri: Remove 'BST' (01000000 00000000) from item classes as long as the list does not compute to 'ALL' (11111111 11111111)
-			if(item->common.classes - 16384 >= 0 && item->common.classes != 65535)
-				item->common.classes -= 16384;
-			// Harakiri: Remove 'VAH' (00100000 00000000) from item races as long as the list does not compute to 'ALL' (11111111 11111111)
-			if(item->common.normal.races - 8192 >= 0 && item->common.normal.races != 65535)
-				item->common.normal.races -= 8192;
-			// Harakiri: Our client cannot handle H2H skill weapons, so flag them as 1HB
-			if(item->common.itemType == ItemTypeHand2Hand)
-				item->common.itemType = ItemType1HB;					
+		if(item->nodropFirionaVie == 1) {
+			// Harakiri blobs were FF, but 01 also works, just to be sure tho
+			/// i guess everything non zero counts as it
+			item->nodropFirionaVie = 0xFF;
 		}
 		
+		
+		item->size = (uint8)atoi(row[ItemField::size]);
+		// Slots == equipableSlots
+		item->equipableSlots = (uint32)atoul(row[ItemField::slots]);
+		// Price == cost
+		item->cost = (uint32)atoul(row[ItemField::price]);
+		// Icon == icon_nr
+		item->icon_nr = (uint32)atoul(row[ItemField::icon]);
+
+		if(item->type == ItemClassCommon) {
+			item->common.CR = (sint8)atoi(row[ItemField::cr]);
+			item->common.DR = (sint8)atoi(row[ItemField::dr]);
+			item->common.PR = (sint8)atoi(row[ItemField::pr]);
+			item->common.MR = (sint8)atoi(row[ItemField::mr]);
+			item->common.FR = (sint8)atoi(row[ItemField::fr]);
+			item->common.STR = (sint8)atoi(row[ItemField::astr]);
+			item->common.STA = (sint8)atoi(row[ItemField::asta]);
+			item->common.AGI = (sint8)atoi(row[ItemField::aagi]);
+			item->common.DEX = (sint8)atoi(row[ItemField::adex]);
+			item->common.CHA = (sint8)atoi(row[ItemField::acha]);
+			item->common.INT = (sint8)atoi(row[ItemField::aint]);
+			item->common.WIS = (sint8)atoi(row[ItemField::awis]);
+			item->common.HP = (sint32)atoul(row[ItemField::hp]);
+			item->common.MANA = (sint32)atoul(row[ItemField::mana]);
+			item->common.AC = (sint32)atoul(row[ItemField::ac]);								
+			// TODO item->BaneDmgRace = (uint32)atoul(row[ItemField::banedmgrace]);
+			// TODOitem->BaneDmgAmt = (sint8)atoi(row[ItemField::banedmgamt]);
+			// TODO item->BaneDmgBody = (uint32)atoul(row[ItemField::banedmgbody]);
+			item->common.magic = (atoi(row[ItemField::magic])==0) ? false : true;
+			item->common.casttime = (sint32)atoul(row[ItemField::casttime_]);
+			// TODO item->ReqLevel = (uint8)atoi(row[ItemField::reqlevel]);
+			// TODO item->BardType = (uint32)atoul(row[ItemField::bardtype]);
+			// TODO item->BardValue = (sint32)atoul(row[ItemField::bardvalue]);
+			item->common.light = (sint8)atoi(row[ItemField::light]);
+			item->common.delay = (uint8)atoi(row[ItemField::delay]);
+			// RecLevel = recommendedLevel
+			item->common.recommendedLevel = (uint8)atoi(row[ItemField::reclevel]);
+			//TODO item->RecSkill = (uint8)atoi(row[ItemField::recskill]);
+			//TODO item->ElemDmgType = (uint8)atoi(row[ItemField::elemdmgtype]);
+			//TODO item->ElemDmgAmt = (uint8)atoi(row[ItemField::elemdmgamt]);
+			item->common.range = (uint8)atoi(row[ItemField::range]);
+			item->common.damage = (uint8)atoi(row[ItemField::damage]);
+			item->common.color = (uint32)atoul(row[ItemField::color]);
+			// Harakiri the new colors are now padded by FF and no longer RGB value
+			// FF is transparency, but the older client only works with RGB
+			if(item->common.color >= 0xFF000000) {
+				item->common.color = item->common.color - 0xFF000000;
+			}
+			item->common.classes = (uint32)atoul(row[ItemField::classes]);
+			item->common.normal.races = (uint32)atoul(row[ItemField::races]);
+			item->common.deity = (uint32)atoul(row[ItemField::deity]);
+			
+			// ItemType = common.itemType
+			item->common.itemType= (uint8)atoi(row[ItemField::itemtype]);
+			item->common.material = (uint8)atoi(row[ItemField::material]);
+			//TODO item->SellRate = (float)atof(row[ItemField::sellrate]);			
+			item->common.casttime = (uint32)atoul(row[ItemField::casttime]);			
+			// TODO item->ProcRate = (sint32)atoi(row[ItemField::procrate]);		
+			
+			item->common.clicktype = (uint8)atoul(row[ItemField::clicktype]);
+
+			//Harakiri, for scrolls we need to take from another column, for items its just clickeffect
+			if(item->common.itemType==ItemTypeSpell) {
+
+				item->common.click_effect_id = (uint32)atoul(row[ItemField::scrolleffect]);
+				// Harakiri for some reasons, spell scrolls are never magic - the client doesnt bother if it is set to 1
+				// but just to be sure, we always make a spell non magic
+				item->common.magic=0;
+			// Harakiri for poison we need the proceffect field
+			} else if(item->common.itemType==ItemTypePoison) {
+				item->common.click_effect_id = (uint32)atoul(row[ItemField::proceffect]);									
+				
+				// Harakiri poisons seems to be broken on the client, we could try mark them as potions
+				// item->common.clicktype = effect;
+				// item->common.itemType = ItemTypePotion;
+			// for all others use the click effect for now
+			} else {										
+				item->common.click_effect_id = (uint32)atoul(row[ItemField::clickeffect]);
+				
+			}								
+							    		
+							
+			item->common.charges = (uint8)atoi(row[ItemField::maxcharges]);  // for clickies				
+
+			// Harakiri this is a legacy field not found in newer item tables
+			// the client needs to display the EFFECT = spell if 3
+			// the value is also 3 for spells				
+			item->common.normal.click_effect_type = 3; // items with effect 
+			
+
+			ItemInst i(item, 0);
+
+			// Harakiri for stackable items, at least one is needed or else client prints error 
+			// BAD CHARGES ON STACKABLE.  DELETING
+			if(item->common.charges == 0 && i.IsConsumable()) {
+				item->common.charges = 1;
+			}
+
+			if(item->common.charges > 0 && i.IsConsumable()) {
+				item->common.stackable = 1;
+			}				 
+
+			// Harakiri items with limited charge of effects need stackable to be set to be > 0
+			// or else the charges are not shown i.e. soulfire with 5 charges of complete heal
+			if(item->common.clicktype != 0 &&  item->common.charges > 0) {
+				/*1 would also be fine, but original itemblobs had always stackable == maxcharges*/
+				item->common.stackable = (uint8)atoi(row[ItemField::maxcharges]);
+			}
+			
+
+			item->common.clicklevel2 = (uint8)atoul(row[ItemField::clicklevel2]);
+			// Harakiri clicklevel2 and level seem to be always the same in itemblob
+			item->common.level = item->common.clicklevel2;
+			
+			// Harakiri exception for haste, see NPC::GetItemHaste() 
+			// the old client had the spell ID of haste (998) on any haste item
+			// the actual haste value is however not the one from the spell haste but different for each item
+			// we store the haste in the level field
+			int haste = (uint8)atoul(row[ItemField::haste]);
+
+			if(haste > 0) {
+				item->common.level = haste;
+				item->common.effecttype = ET_WornEffect;
+				item->common.clicktype = ET_WornEffect;					
+				item->common.click_effect_id = 998;					
+			} else {
+				item->common.effecttype = item->common.clicktype;	
+			}
+			
+			// Harakiri spell_effect == click_effect_id - no idea if it is ever different
+			item->common.spell_effect_id = item->common.click_effect_id;			
+		}
+
+		if(item->type == ItemClassContainer) {
+			// BagType = common.container.BagType
+			item->common.container.BagType = (uint8)atoi(row[ItemField::bagtype]);
+			// BagSlots = BagSlots
+			item->common.container.BagSlots = (uint8)atoi(row[ItemField::bagslots]);
+			// BagSize = BagSize
+			item->common.container.BagSize = (uint8)atoi(row[ItemField::bagsize]);
+			// BagWr =weightReduction
+			item->common.container.weightReduction = (uint8)atoi(row[ItemField::bagwr]);
+		}
+
+		if(item->type == ItemClassBook) {
+							
+			// Filename = file
+			CopyItemString(item->book.file, sizeof(item->book.file), row[ItemField::filename]);
+			item->book.book = (uint8)atoi(row[ItemField::book]);
+			item->book.bookType = (uint16)atoul(row[ItemField::booktype]);
+		}
+		
+		
+		// Harakiri: Remove 'BST' (01000000 00000000) from item classes as long as the list does not compute to 'ALL' (11111111 11111111)
+		if(item->common.classes - 16384 >= 0 && item->common.classes != 65535)
+			item->common.classes -= 16384;
+		// Harakiri: Remove 'VAH' (00100000 00000000) from item races as long as the list does not compute to 'ALL' (11111111 11111111)
+		if(item->common.normal.races - 8192 >= 0 && item->common.normal.races != 65535)
+			item->common.normal.races -= 8192;
+		// Harakiri: Our client cannot handle H2H skill weapons, so flag them as 1HB
+		if(item->common.itemType == ItemTypeHand2Hand)
+			item->common.itemType = ItemType1HB;					
+
+		if(item->type == ItemClassCommon)
+		{
+			//Yeahlight: There will be no gear with recommended levels on the server, so zero out this field
+			item->common.recommendedLevel = 0;
+			//Yeahlight: This purges focus effects from our items
+			if(item->common.click_effect_id >= 2330 && item->common.click_effect_id <= 2374)
+			{
+				item->common.click_effect_id = 0;
+				item->common.spell_effect_id = 0;
+				item->common.charges = 0;
+				item->common.normal.click_effect_type = 0;
+				item->common.effecttype = 0;
+				item->common.clicktype = 0;
+			}
+		}
+		return true;
+}
+
+// Returns a new Item_Struct (caller owns it) or 0 if the item does not exist.
+Item_Struct* Database::GetItemNonBlob(sint32 itemID) {
+	char errbuf[MYSQL_ERRMSG_SIZE];
+	MYSQL_RES *result;
+	MYSQL_ROW row;
+	Item_Struct *item = 0;
+	char *query = 0;
+	EQC::Common::Log(EQCLog::Status,CP_DATABASE, "Loading item from database: id=%i", itemID);
+
+	if (RunQuery(query, MakeAnyLenString(&query, "%s where id=%i", AxclassicItemSelect().c_str(), itemID), errbuf, &result)) {
+		if ((row = mysql_fetch_row(result))) {
+			item = new Item_Struct;
+			ItemFromAxclassicRow(row, item);
+		}
 		mysql_free_result(result);
-		ret = true;
 	}
 	else {
-		EQC::Common::Log(EQCLog::Error,CP_DATABASE, "DBLoadItems query '%s', %s", query, errbuf);		
+		EQC::Common::Log(EQCLog::Error,CP_DATABASE, "GetItemNonBlob query '%s', %s", query, errbuf);
 	}
-	return item;	
+	safe_delete_array(query);
+	return item;
+}
+
+// Loads every item listed in `items` (the era's item set) from items_axclassic in one query and
+// hands each one to store(id, item). Returns the number of items loaded, or -1 on query error.
+int32 Database::LoadAxclassicItems(const std::function<void(int32, const Item_Struct&)>& store)
+{
+	char errbuf[MYSQL_ERRMSG_SIZE];
+	MYSQL_RES *result;
+	MYSQL_ROW row;
+	char *query = 0;
+	int32 count = -1;
+
+	if (RunQuery(query, MakeAnyLenString(&query, "%s where id in (select id from items)", AxclassicItemSelect().c_str()), errbuf, &result)) {
+		count = 0;
+		Item_Struct item;
+		while ((row = mysql_fetch_row(result))) {
+			ItemFromAxclassicRow(row, &item);
+			store((int32)item.item_nr, item);
+			count++;
+		}
+		mysql_free_result(result);
+	}
+	else {
+		EQC::Common::Log(EQCLog::Error,CP_DATABASE, "LoadAxclassicItems query failed: %s", errbuf);
+	}
+	safe_delete_array(query);
+	return count;
 }
 
 bool Database::LoadNPCTypes(char* zone_name) {

@@ -36,6 +36,7 @@ bool SharedMemory::LoadItems(){
 
 			MakeAnyLenString(&query, "SELECT id,raw_data FROM items");
 
+			int32 invalid_blobs = 0;
 			if (Database::Instance()->RunQuery(query, strlen(query), errbuf, &result))
 			{
 				safe_delete_array(query);//delete[] query;
@@ -88,11 +89,21 @@ bool SharedMemory::LoadItems(){
 					}
 					else
 					{
-						cout << "Invalid items in database..." << endl;
+						invalid_blobs++;
 					}
 					Sleep(0);
 				}
 				mysql_free_result(result);
+
+				// items.raw_data is corrupted in the public dump (sql/patches/002 repairs most of it);
+				// items_axclassic holds clean column data for most items, so it overrides the blobs.
+				int32 from_columns = Database::Instance()->LoadAxclassicItems(
+					[this](int32 item_id, const Item_Struct& item) {
+						if (item_id > 0 && item_id < MAXITEMID)
+							getPtr()->item_array[item_id] = item;
+					});
+				cout << "Items: " << from_columns << " loaded from items_axclassic, "
+				     << invalid_blobs << " raw_data blobs with a wrong size ignored." << endl;
 			}
 			else {
 				cerr << "Error in PopulateZoneLists query '" << query << "' " << errbuf << endl;
