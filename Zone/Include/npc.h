@@ -318,6 +318,8 @@ protected:
 	int		waypointDirection;			// +1/-1 for back-and-forth grids
 	int		waypointType;				// grid.type
 	bool	waypointMoving;				// walking to waypoints[waypointIndex]
+	float	waypointFromX, waypointFromY, waypointFromZ;	// where the current leg started
+	float	WaypointPathZ(float x, float y);	// ground under the current leg, see npc.cpp
 	Timer*	waypoint_timer;
 	bool	requiresNewPath;
 	bool	preventPatrolling;

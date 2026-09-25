@@ -193,6 +193,7 @@ NPC::NPC(NPCType* d, Spawn2* in_respawn, float x, float y, float z, float headin
 	waypointDirection = 1;
 	waypointType = -1;
 	waypointMoving = false;
+	waypointFromX = waypointFromY = waypointFromZ = 0;
 	waypoint_timer = new Timer(1000);
 	waypoint_timer->Disable();
 	if(myPathGrid != 0)
@@ -1036,7 +1037,9 @@ void NPC::MoveTowards(float x, float y, float d)
 		else
 		{
 			//Yeahlight: Roamers are given such a large z-axis offset due to the randomness of the terrain for zone wide roamers
-			if(onRoamPath)
+			if(onRoamPath && usesWaypoints && waypointMoving)
+				z_pos = WaypointPathZ(GetX(), GetY());
+			else if(onRoamPath)
 				FindGroundZ(GetX(), GetY(), 75);
 			else
 				FindGroundZ(GetX(), GetY(), 6);
@@ -1144,7 +1147,13 @@ void NPC::MoveTowards(float x, float y, float d)
 	if(this->IsBoat() == false)
 	{
 		//Yeahlight: Update the mob's z-axis
-		if(this->onPath == false)
+		if(this->onRoamPath && this->usesWaypoints && this->waypointMoving)
+		{
+			// Waypoint legs come from grid data: follow the leg's height, no roof search or
+			// line-of-sight fallback (which teleported the NPC back to its spawn point).
+			NPC::z_pos = WaypointPathZ(new_x, new_y);
+		}
+		else if(this->onPath == false)
 		{
 			float new_z = 0;
 			//Yeahlight: Roamers are given such a large z-axis offset due to the randomness of the terrain for zone wide roamers
@@ -3982,6 +3991,9 @@ void NPC::MoveToWaypoint(int index)
 {
 	waypointIndex = index;
 	const PatrollingNode& wp = waypoints[waypointIndex];
+	waypointFromX = GetX();
+	waypointFromY = GetY();
+	waypointFromZ = GetZ();
 	faceDestination(wp.x, wp.y);
 	SetDestination(wp.x, wp.y, wp.z);
 	StartWalking();
@@ -3990,6 +4002,31 @@ void NPC::MoveToWaypoint(int index)
 	onRoamPath = true;	// reuse the roaming movement: stop at 1 unit, ground Z on arrival
 	waypointMoving = true;
 	waypoint_timer->Start(1000);
+}
+
+//o--------------------------------------------------------------
+//| WaypointPathZ
+//o--------------------------------------------------------------
+//| Ground under (x, y) for an NPC walking a waypoint leg. The
+//| roaming code searches the highest surface up to 150 units above
+//| the NPC, which in cities is a roof, arch or balcony: patrolling
+//| guards popped up there and fell back down ("falling from the
+//| sky"). The leg's own height (interpolated between its two
+//| waypoints) is known, so search just above it, and keep that
+//| height when the map has nothing there.
+//o--------------------------------------------------------------
+float NPC::WaypointPathZ(float x, float y)
+{
+	float total = fdistance(waypointFromX, waypointFromY, x_dest, y_dest);
+	float left = fdistance(x, y, x_dest, y_dest);
+	float t = total > 0.1f ? 1.0f - left / total : 1.0f;
+	if (t < 0) t = 0;
+	if (t > 1) t = 1;
+	float pathZ = waypointFromZ + (z_dest - waypointFromZ) * t;
+	float ground = FindGroundZWithZ(x, y, pathZ, 10);
+	if (ground == -999999 || ground < pathZ - 50)
+		return pathZ;
+	return ground;
 }
 
 //o--------------------------------------------------------------
