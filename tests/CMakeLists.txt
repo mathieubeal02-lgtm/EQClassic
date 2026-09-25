@@ -8,7 +8,7 @@ add_executable(fragment_test fragment_test.cpp
     ../Common/Source/FragmentGroup.cpp
     ../Common/Source/Fragment.cpp)
 target_include_directories(fragment_test PRIVATE ../Common/Include ../EQC/Include)
-# config.h is WIN32-only; linked_list.h needs this one define from it.
+# linked_list.h needs this one define from config.h (not included here).
 target_compile_definitions(fragment_test PRIVATE ZONE_FREEZE_DEBUG=0)
 add_test(NAME fragments COMMAND fragment_test)
 

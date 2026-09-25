@@ -41,7 +41,9 @@ See `docs/ARCHITECTURE.md` (components, data flow, hotspots) and `docs/BUILD.md`
   match on-disk names; keep new entries case-exact.
 - Unit tests live in `tests/` (portable, no MySQL): `ctest --test-dir build`. CI
   (`.github/workflows/build.yml`) builds Windows Debug/Release via CMake, the legacy solution,
-  azone on Linux, and runs the tests on both; push to see it run.
+  azone and `tools/eqbot` on Linux, and runs the tests on both. Job `e2e` then runs the Release
+  servers under Wine + MariaDB and plays them with eqbot: login, character creation, zone entry
+  (`tools/eqbot/README.md`). Push to see it run.
 - Melee combat uses `Zone/Include/CombatFormulas.h` (pure functions, EQMacEmu/Quarm model, tested in
   `tests/combat_test.cpp`); NPC stats come from `sql/patches/004`. Keep formulas and stats in step.
 - EQMacEmu (GPLv3) is a reference, not a source: reimplement, never paste its code (ours is GPLv2).

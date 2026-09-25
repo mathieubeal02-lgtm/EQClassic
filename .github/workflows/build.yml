@@ -90,11 +90,49 @@ jobs:
         run: msbuild EQCEmu.sln /m /p:Configuration=Debug /p:Platform=Win32
 
   linux-azone:
-    name: Linux (azone + unit tests)
+    name: Linux (azone + eqbot + unit tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y zlib1g-dev
+      - run: sudo apt-get update && sudo apt-get install -y zlib1g-dev libssl-dev
       - run: cmake -S . -B build -DEQC_BUILD_SERVERS=OFF -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build --parallel
       - run: ctest --test-dir build --output-on-failure
+
+  # The Release servers from windows-cmake, under Wine with MariaDB, played by eqbot:
+  # login, character creation, zone entry, twice (see tools/eqbot/ci-e2e.sh).
+  e2e:
+    name: End-to-end (servers under Wine, eqbot)
+    needs: windows-cmake
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Wine and build tools
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends wine wine32:i386 wine64 libssl-dev zlib1g-dev
+
+      - name: Build eqbot
+        run: |
+          cmake -S . -B build -DEQC_BUILD_SERVERS=OFF -DEQC_BUILD_AZONE=OFF -DEQC_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target eqbot --parallel
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: eqclassic-server-Release
+          path: server
+
+      - name: Servers + eqbot
+        run: tools/eqbot/ci-e2e.sh server build/bin/eqbot
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-logs
+          path: server/logs
+          if-no-files-found: ignore
