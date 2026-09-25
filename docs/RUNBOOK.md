@@ -98,6 +98,10 @@ Visual Studio's debug CRT DLLs (`MSVCP140D.dll`…), which exist on no normal ma
 `run-wine.sh start [zones]` / `stop` / `status` starts login, world and N dynamic zones with logs in
 `logs/`. The servers' own logs (`logs/eqc_debug_*.log`) are more complete than stdout, which is buffered.
 Zones that print `Entering sleep mode` are healthy: they wait for world to assign them a zone.
+Zone UDP ports start at 7000 under Wine: on Linux, ports below 1024 need root, and a zone that cannot
+bind its port logs `NetConnection::Init failed` (the client then gets "That zone is unavailable").
+First successful end-to-end session (2026-09-25): Trilogy client on Windows → login → world →
+character creation → zone (grobb) on this setup.
 
 ## 4. Start
 
@@ -114,12 +118,22 @@ Ports: login **5999/udp+tcp**, world **9000/tcp** (zones/console) + UDP client p
 
 1. Install EverQuest Trilogy (CD images: https://archive.org/details/EverQuestTrilogy). Do not
    run the installed shortcuts (they patch).
-2. Edit `eqhost.txt` in the game folder:
+2. Edit `eqhost.txt` in the game folder. The Trilogy client uses this brace format (not the
+   `Host=` format of later EQEmu clients); change **both** entries, quotes included, no `host=`:
    ```
-   [LoginServer]
-   Host=127.0.0.1:5999
+   [Registration Servers]
+   {
+   "192.168.1.2:5999"
+   }
+   [Login Servers]
+   {
+   "192.168.1.2:5999"
+   }
    ```
-   (server IP for remote clients).
+   Save it (Notepad marks unsaved tabs with a dot) and restart EQW: it reads the file at start-up.
+   If the game is under `Program Files`, Windows may redirect the old client to a stale copy in
+   `%LOCALAPPDATA%\VirtualStore\…`; install it somewhere like `C:\EverQuest` instead.
+   Error 1001 with no packet reaching the server means the client is not using this address.
 3. Launch through **EQW.exe** (https://archive.org/details/eqwindow-beta-v-2.32), pointing it
    at `eqgame.exe`; on modern Windows add dgVoodoo2 + `d3drm.dll` for rendering. The README's
    warning: the `patchme` suffix gets you disconnected — do not use it.
@@ -132,6 +146,8 @@ Ports: login **5999/udp+tcp**, world **9000/tcp** (zones/console) + UDP client p
 | `Couldn't open the db.ini file` | Working directory: the exes read `db.ini` from *where they are started*, not from where they live. |
 | world: `[LoginServer] block not found` | `LoginServer.ini` must contain both `[LoginServer]` and `[LoginConfig]` sections. |
 | zone exits at start about `spells_en.txt` | File missing from the zone's working directory. |
+| "That zone is unavailable" | Zone log shows `NetConnection::Init failed`: its UDP port is taken or < 1024 on Linux. |
+| Character in the list cannot enter the world, name starts with `��` | Corrupted character from the dump: run `sql/patches/003`. |
 | Zone loads, no NPCs | `Maps/Maps/<zone>.map` missing (names lowercase). |
 | NPCs never move | Roaming needs `Maps/Nodes|Paths/<zone>*.txt` and grid data in DB (`grid`, `grid_entries`). |
 | Login accepted, world list empty | `world.exe` not connected to login: `loginserver=`/`loginport=` in `LoginServer.ini`, or login started after world. |
