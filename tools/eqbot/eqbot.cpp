@@ -357,6 +357,8 @@ namespace
 			for (size_t i = 0; i < got.size(); i++)
 			{
 				Packet* p = got[i];
+				if (getenv("EQBOT_VERBOSE") && p->opcode != kMobUpdate)
+					printf("       stay <- 0x%04x %4d bytes  %s\n", (unsigned)(unsigned short)p->opcode, (int)p->size, HexDump(p->pBuffer, p->size, 48).c_str());
 				if (p->opcode != kMobUpdate || p->size < 4)
 					continue;
 				int n = p->pBuffer[0] | (p->pBuffer[1] << 8);
