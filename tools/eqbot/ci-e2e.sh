@@ -20,7 +20,7 @@ PASS=ci
 CHAR=Qcibot
 export WINEDEBUG=-all WINEPREFIX=${WINEPREFIX:-$HOME/.wine-eqc-ci}
 
-db() { docker exec -i "$DB_CONTAINER" mariadb -uroot -proot "$@"; }
+db() { docker exec -i "$DB_CONTAINER" mariadb --skip-ssl -uroot -proot "$@"; }
 
 stop_servers() {
   wineserver -k 2>/dev/null || true
