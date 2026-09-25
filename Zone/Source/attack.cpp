@@ -2101,8 +2101,13 @@ void NPC::AddToHateList(Mob* other, sint32 damage, sint32 hate)
 	//Yeahlight: NPC is not on the list but is now fully agroed; add them to the agro list
 	if(requiresAdding && this->IsEngaged())
 	{
-		zone->zoneAgro[zone->zoneAgroCounter] = this->GetID();
-		zone->zoneAgroCounter++;
+		// zoneAgro is a fixed array followed by the counter and then the zone's own fields
+		// (short_name...): never write past its end.
+		if(zone->zoneAgroCounter >= 0 && zone->zoneAgroCounter < MAX_ZONE_AGRO)
+		{
+			zone->zoneAgro[zone->zoneAgroCounter] = this->GetID();
+			zone->zoneAgroCounter++;
+		}
 		checkLoS_timer->Trigger();
 		faceTarget_timer->Trigger();
 		emergencyFlee_timer->Trigger();

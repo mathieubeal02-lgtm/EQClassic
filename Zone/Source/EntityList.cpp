@@ -640,7 +640,9 @@ void EntityList::Clear()
 
 void EntityList::UpdateWho()
 {
-	if ((!worldserver.Connected()) || !ZoneLoaded)
+	// A zone process crashed here (null short_name) after being reused for a second zone; do
+	// not take the whole zone down for a "who" refresh.
+	if ((!worldserver.Connected()) || !ZoneLoaded || zone == 0 || zone->GetShortName() == 0)
 		return;
 	ServerPacket* pack = new ServerPacket(ServerOP_ClientList, sizeof(ServerClientList_Struct));
 	

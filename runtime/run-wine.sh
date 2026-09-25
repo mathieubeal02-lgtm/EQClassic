@@ -3,7 +3,7 @@
 cd "$(dirname "$0")"
 export WINEPREFIX=$HOME/.wine-eqc WINEDEBUG=-all
 IP=$(ip -4 route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}')
-ZONES=${2:-3}
+ZONES=${2:-5}
 # Zone UDP ports start at 7000: on Linux, ports below 1024 need root (the .bat files use 1000).
 case "$1" in
   start)
