@@ -29,13 +29,20 @@ Spawn2::Spawn2(int32 in_spawn2_id, int32 spawngroup_id, float in_x, float in_y, 
 		myPathGrid = 0;
 	x = in_x;
 	y = in_y;
-	if(roamRange == 0)
-		z = mob->FindGroundZWithZ(x, y, in_z, 2);
+	// NPCs walking a grid (nearly every grid spawn also has a roam range) are placed on the ground
+	// just under their spawn point: the roamers' 200-unit search put them on roofs, from where they
+	// fell on their first leg (NPC::WaypointPathZ). They do not take a random roam spot either.
+	if(roamRange == 0 || in_pathgrid > 0)
+		z = mob->FindGroundZWithZ(x, y, in_z, in_pathgrid > 0 ? 10 : 2);
 	else
 		z = mob->FindGroundZWithZ(x, y, in_z, 200);
+	// No map for this zone, or nothing under the point: keep the spawn's own height (the search
+	// returns -999999, which put every NPC of a zone without .map far under the world).
+	if(z == -999999)
+		z = in_z;
 	myRoamBox = 999;
 	//Yeahlight: roamRange is not zero, meaning the mob is not static (does not stand still; moves around)
-	if(roamRange != 0) //newage: I wanna see stuff move
+	if(roamRange != 0 && in_pathgrid == 0) //newage: I wanna see stuff move
 	{
 		int tempRange = roamRange;
 		//Yeahlight: If tempRange is -1, then the roam range is infinite
