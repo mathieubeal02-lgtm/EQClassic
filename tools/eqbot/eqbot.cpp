@@ -13,12 +13,14 @@
 //         clean disconnect.
 // Exit code 0 when every step succeeded. Output is one line per step, for CI logs.
 // EQBOT_VERBOSE=1 lists the zone packets, EQBOT_RAW=1 dumps every datagram received.
+// EQBOT_STAY=<seconds> keeps `play` in the zone and checks the height of moving mobs.
 #include <openssl/des.h>
 #include <sys/time.h>
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -340,6 +342,63 @@ namespace
 		return failures ? 1 : 0;
 	}
 
+	const int16 kMobUpdate = 0xa120;	// SpawnPositionUpdates_Struct: int32 count, then 15-byte updates
+
+	// Stays `seconds` in the zone and reports, per mob, how its height moved between position
+	// updates: a walking NPC that jumps tens of units up and down is landing on roofs.
+	void WatchMobs(EqSession& z, int seconds)
+	{
+		struct Track { int updates; float minZ, maxZ, lastZ, maxJump; };
+		std::map<int, Track> mobs;
+		long end = NowMs() + seconds * 1000L;
+		while (NowMs() < end)
+		{
+			std::vector<Packet*> got = z.Poll(500);
+			for (size_t i = 0; i < got.size(); i++)
+			{
+				Packet* p = got[i];
+				if (p->opcode != kMobUpdate || p->size < 4)
+					continue;
+				int n = p->pBuffer[0] | (p->pBuffer[1] << 8);
+				for (int k = 0; k < n && 4 + (k + 1) * 15 <= (int)p->size; k++)
+				{
+					const unsigned char* u = p->pBuffer + 4 + k * 15;
+					int id = u[0] | (u[1] << 8);
+					float zz = (short)(u[9] | (u[10] << 8)) / 10.0f;	// NPC z is sent x10
+					if (getenv("EQBOT_TRACE") && atoi(getenv("EQBOT_TRACE")) == id)
+						printf("       trace %d: x %d y %d z %.1f\n", id, (short)(u[7] | (u[8] << 8)), (short)(u[5] | (u[6] << 8)), zz);
+					Track& t = mobs[id];
+					if (t.updates == 0)
+					{
+						t.minZ = t.maxZ = t.lastZ = zz;
+						t.maxJump = 0;
+					}
+					float jump = zz > t.lastZ ? zz - t.lastZ : t.lastZ - zz;
+					if (jump > t.maxJump)
+						t.maxJump = jump;
+					if (zz < t.minZ) t.minZ = zz;
+					if (zz > t.maxZ) t.maxZ = zz;
+					t.lastZ = zz;
+					t.updates++;
+				}
+			}
+			DeleteAll(got);
+		}
+		int jumpy = 0;
+		for (std::map<int, Track>::iterator it = mobs.begin(); it != mobs.end(); ++it)
+		{
+			const Track& t = it->second;
+			if (t.updates < 2)
+				continue;
+			printf("       mob %5d  %3d updates  z %7.1f .. %7.1f  largest step %6.1f\n", it->first, t.updates, t.minZ, t.maxZ, t.maxJump);
+			if (t.maxJump > 20)
+				jumpy++;
+		}
+		char b[96];
+		snprintf(b, sizeof(b), "%d moving mob(s), %d with a height jump over 20 units", (int)mobs.size(), jumpy);
+		Step(jumpy == 0, "mob heights", b);
+	}
+
 	// login -> world -> character select -> enter world -> zone handshake.
 	int Play(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname)
 	{
@@ -425,6 +484,8 @@ namespace
 		z.Send(kZoneDone, 0, 0);
 		z.Poll(2000);
 		Step(true, "in zone", charname + " in " + zname);
+		if (getenv("EQBOT_STAY"))
+			WatchMobs(z, atoi(getenv("EQBOT_STAY")));
 		z.Disconnect();
 		return failures ? 1 : 0;
 	}
