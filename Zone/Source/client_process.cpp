@@ -6752,9 +6752,7 @@ void Client::ProcessOP_ClientError(APPLAYER* pApp)
 //| http://web.archive.org/web/20001109195100/http://eq.castersrealm.com/poison/
 //---------------------------------------------------------------
 void Client::ProcessOP_ApplyPoison(APPLAYER* pApp)
-{
-	if (!PacketFits<ApplyPoison_Struct>(pApp, "ProcessOP_ApplyPoison"))
-		return;	
+{	
 	// Harakiri the correct SLOT ID will only be sent by the client
 	// when  the unique item id is set for each client
 	// currently, only the command #si2 will do this, because its taken the items from the nonblob table
@@ -6771,6 +6769,8 @@ void Client::ProcessOP_ApplyPoison(APPLAYER* pApp)
 	};
 
 	uint32 ApplyPoisonSuccessResult = 0;
+	if (!PacketFits<ApplyPoison_Struct>(pApp, "ProcessOP_ApplyPoison"))
+		return;
 	ApplyPoison_Struct* ApplyPoisonData = (ApplyPoison_Struct*)pApp->pBuffer;
 		
 	const ItemInst* PrimaryWeapon =  new ItemInst(GetItemAt(SLOT_PRIMARY), 0);
