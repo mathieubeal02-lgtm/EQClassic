@@ -2151,8 +2151,11 @@ int16 Client::AutoPutItemInInventory(Item_Struct* item, sint8 charges,int trades
 			}
 		}
 	}
-	//Yeahlight: First, attempt to find the best equipable slot not currently in use
-	int16 tmpslot = FindBestEquipmentSlot(item);
+	//Yeahlight: First, attempt to find the best equipable slot not currently in use.
+	// Only for loot and purchases (tradeslot == -1): items coming back from a trade (a cancelled
+	// NPC trade, or received from a player) go to the bags. Auto-equipping them made a cancelled
+	// NPC hand-in look like the item vanished (it ended up worn, e.g. a cap on the head).
+	int16 tmpslot = (tradeslot == -1) ? FindBestEquipmentSlot(item) : 0xFFFF;
 	//Yeahlight: Failed to find an inventory slot not in use, continue on with general inventory search
 	if(tmpslot > 50)
 		tmpslot = FindFreeInventorySlot(0, (item->type == 0x01), false);
