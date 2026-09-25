@@ -17,8 +17,9 @@ case "$1" in
     done ;;
   stop)
     /usr/lib/i386-linux-gnu/wine/wineserver -k 2>/dev/null
-    ps -eo pid,args | awk '/[.]exe/ && /(login|world|zone)\.exe/ {print $1}' | xargs -r kill ;;
+    # match the program name exactly, never a shell whose command line merely mentions it
+    ps -eo pid,args | awk '$2 ~ /^[.]\/(login|world|zone)[.]exe$/ {print $1}' | xargs -r kill ;;
   status)
-    ps -eo pid,args | awk '/(login|world|zone)[.]exe/ && !/awk/'
+    ps -eo pid,args | awk '$2 ~ /^[.]\/(login|world|zone)[.]exe$/'
     ss -lntu | awk 'NR==1 || /:(5999|9000|100[0-9]) /' ;;
 esac
