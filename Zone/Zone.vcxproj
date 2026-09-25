@@ -201,6 +201,7 @@
     <ClInclude Include="Include\questmgr.h" />
     <ClInclude Include="Include\perlpacket.h" />
     <ClInclude Include="Include\client.h" />
+    <ClInclude Include="Include\CombatFormulas.h" />
     <ClInclude Include="Include\Client_Commands.h" />
   </ItemGroup>
   <ItemGroup>
@@ -232,6 +233,7 @@
     <ClCompile Include="..\Common\Source\ServerPacketFactory.cpp" />
     <ClCompile Include="..\Common\Source\timer.cpp" />
     <ClCompile Include="Source\attack.cpp" />
+    <ClCompile Include="Source\CombatFormulas.cpp" />
     <ClCompile Include="Source\boats.cpp" />
     <ClCompile Include="Source\Debug.cpp" />
     <ClCompile Include="Source\entity.cpp" />

@@ -65,6 +65,10 @@ struct NPCType
 	bool	passiveSeeInvis;
 	bool	passiveSeeInvisToUndead;
 	int8	spawn_limit; // Kibanu - 8/12/2009
+	// npc_types.ATK / Accuracy / avoidance (sql/patches/004), used by the melee model
+	int16	db_ATK;
+	int16	accuracy;
+	int16	avoidance;
 	SPAWN_TIME_OF_DAY time_of_day;
 };
 

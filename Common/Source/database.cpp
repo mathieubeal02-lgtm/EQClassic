@@ -2396,7 +2396,7 @@ bool Database::LoadNPCTypes(char* zone_name) {
 			//MakeAnyLenString(&query, "SELECT id,name,level,race,class,hp,gender,texture,helmtexture,size,loottable_id, merchant_id FROM npc_types");//WHERE zone='%s'", zone_name
 			//This new way will only load the NPCS that are inside the current zone.
 			MakeAnyLenString(&query, "SELECT npc_types_without.id,name,level,race,class,hp,gender,texture,helmtexture,size,runspeed,\
-									 loottable_id, merchant_id, bodytype, mindmg, maxdmg, MR, CR, DR, FR, PR, AC, STR, STA, DEX, AGI, _INT, WIS, CHA, npcspecialattks, attack_speed, d_meele_texture1, d_meele_texture2, hp_regen_rate, see_invis, see_invis_undead, npc_types_without.spawn_limit FROM npc_types_without inner join spawnentry on \
+									 loottable_id, merchant_id, bodytype, mindmg, maxdmg, MR, CR, DR, FR, PR, AC, STR, STA, DEX, AGI, _INT, WIS, CHA, npcspecialattks, attack_speed, d_meele_texture1, d_meele_texture2, hp_regen_rate, see_invis, see_invis_undead, npc_types_without.spawn_limit, npc_types_without.ATK, npc_types_without.Accuracy, npc_types_without.avoidance FROM npc_types_without inner join spawnentry on \
 									 npc_types_without.id = spawnentry.npcID inner join spawn2 on \
 									 spawn2.spawngroupID=spawnentry.spawngroupID where spawn2.zone='%s'", zone_name);
 			if (RunQuery(query, strlen(query), errbuf, &result))
@@ -2468,6 +2468,9 @@ bool Database::LoadNPCTypes(char* zone_name) {
 					npc_type_array[atoi(row[0])]->passiveSeeInvis = atoi(row[34]);
 					npc_type_array[atoi(row[0])]->passiveSeeInvisToUndead = atoi(row[35]);
 					npc_type_array[atoi(row[0])]->spawn_limit = atoi(row[36]);
+					npc_type_array[atoi(row[0])]->db_ATK = atoi(row[37]);
+					npc_type_array[atoi(row[0])]->accuracy = atoi(row[38]);
+					npc_type_array[atoi(row[0])]->avoidance = atoi(row[39]);
 
 					//Database has wrong race type for skelectons (they show as human w/o this fix).
 					if(atoi(row[3]) == 367){

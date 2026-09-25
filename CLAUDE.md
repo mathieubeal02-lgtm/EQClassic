@@ -42,6 +42,9 @@ See `docs/ARCHITECTURE.md` (components, data flow, hotspots) and `docs/BUILD.md`
 - Unit tests live in `tests/` (portable, no MySQL): `ctest --test-dir build`. CI
   (`.github/workflows/build.yml`) builds Windows Debug/Release via CMake, the legacy solution,
   azone on Linux, and runs the tests on both; push to see it run.
+- Melee combat uses `Zone/Include/CombatFormulas.h` (pure functions, EQMacEmu/Quarm model, tested in
+  `tests/combat_test.cpp`); NPC stats come from `sql/patches/004`. Keep formulas and stats in step.
+- EQMacEmu (GPLv3) is a reference, not a source: reimplement, never paste its code (ours is GPLv2).
 - SQL: wrap every string interpolated into a quoted SQL literal with
   `SQLEscape(x).c_str()` (`Common/Include/SQLEscape.h`). Never interpolate into unquoted SQL.
 - Database: `sql/schema.sql` (structure), `sql/eqclassic_db` (submodule with the data dump).

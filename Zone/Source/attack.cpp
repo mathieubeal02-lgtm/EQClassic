@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <math.h>
+#include "CombatFormulas.h"
 #include "EQCException.hpp"
 #include "EQCUtils.hpp"
 #include "client.h"
@@ -111,64 +112,62 @@ void Client::Attack(Mob* other, int hand, bool procEligible, bool riposte)
 //o--------------------------------------------------------------
 int16 Mob::GetHitChance(Mob* attacker, Mob* defender, int skill_num)
 {
-	bool debugFlag = true;
-
 	//Yeahlight: If the target is sitting, the chance to hit them is 100%
 	if(defender->GetAppearance() == SittingAppearance)
 		return 999;
 
-	sint16 ATKadjustment = (attacker->GetLevel() - defender->GetLevel()) * 3;
-	sint16 hitRateAdjustment = (attacker->GetLevel() - defender->GetLevel());
-	int16 hitChance = 70;
-	int16 weaponSkill = 0;
-	if(ATKadjustment < 0)
-		ATKadjustment = 0;
-	if(attacker->IsClient())
-		weaponSkill = attacker->CastToClient()->GetSkill(skill_num);
-	else
-		weaponSkill = attacker->GetSkill(skill_num);
-	int16 accuracyATK = (int)((float)weaponSkill * 2.70f) + 5 + ATKadjustment;
-	if(accuracyATK == 0)
-		accuracyATK = 1;
-	int16 avoidanceAC = defender->GetAvoidanceAC();
+	// To-hit vs avoidance (Zone/Include/CombatFormulas.h). Callers test rand()%100 <= hitChance,
+	// which succeeds (hitChance + 1) times out of 100.
+	int toHit = attacker->CombatToHit(skill_num);
+	int avoidance = defender->CombatAvoidance();
+	double chance = Combat::HitChance(toHit, avoidance);
+	sint16 hitChance = (sint16)(chance * 100.0 + 0.5) - 1;
+	if(hitChance < -1)
+		hitChance = -1;
 
-	//Yeahlight: 5% bonus evasion for defensive monks
-	if(defender->GetClass() == MONK || defender->GetClass() == MONKGM)
-		hitChance = hitChance - 5;
-	//Yeahlight: 5% bonus accuracy for offensive rogues
-	if(attacker->GetClass() == ROGUE || attacker->GetClass() == ROGUEGM)
-		hitChance = hitChance + 5;
-
-	//Yeahlight: As the attacker falls further under the level of the defender, it becomes harder to land a hit
-	//           Note: This will become a major tweak for class balancing! We must keep this on par with spell casting level penalties
-	if(hitRateAdjustment < 0)
-	{
-		hitRateAdjustment = abs(hitRateAdjustment);
-		if(hitRateAdjustment > 15)
-			hitRateAdjustment = 15;
-		float tempAdjustment = (float)hitRateAdjustment * 2.00f / 3.00f;
-		hitRateAdjustment = (int)tempAdjustment;
-		hitChance = hitChance - hitRateAdjustment;
-	}
-
-	//Yeahlight: Adjust hit rate based on the gap between accuracy and avoidance AC
-	sint16 gapPercent = (sint16)(((float)(accuracyATK - avoidanceAC) / (float)(accuracyATK)) * 100.00f);
-	sint16 gapAdjustment = ((float)gapPercent / 5.00f);
-	if(gapAdjustment > 5)
-		gapAdjustment = 5;
-	else if(gapAdjustment < -5)
-		gapAdjustment = -5;
-	hitChance = hitChance + gapAdjustment;
-
-	//Yeahlight: Debug messages
-	if(debugFlag && defender->IsClient() && defender->CastToClient()->GetDebugMe())
-		defender->Message(LIGHTEN_BLUE, "Debug: %s's ATK accuracy: %i; Your AC evasion: %i; Hit rate: %i%s", attacker->GetName(), accuracyATK, avoidanceAC, hitChance, "%");
-	if(debugFlag && attacker->IsClient() && attacker->CastToClient()->GetDebugMe())
-		attacker->Message(LIGHTEN_BLUE, "Debug: Your ATK accuracy: %i; %s's AC evasion: %i; Hit rate: %i%s", accuracyATK, defender->GetName(), avoidanceAC, hitChance, "%");
-	CAST_CLIENT_DEBUG_PTR(attacker)->Log(CP_ATTACK, "Mob::GetHitChance: Your hit chance: %f", hitChance);
-	CAST_CLIENT_DEBUG_PTR(defender)->Log(CP_ATTACK, "Mob::GetHitChance: %s's hit chance: %f", attacker->GetName(), hitChance);
-
+	if(defender->IsClient() && defender->CastToClient()->GetDebugMe())
+		defender->Message(LIGHTEN_BLUE, "Debug: %s's to-hit: %i; your avoidance: %i; hit chance: %i%%", attacker->GetName(), toHit, avoidance, hitChance + 1);
+	if(attacker->IsClient() && attacker->CastToClient()->GetDebugMe())
+		attacker->Message(LIGHTEN_BLUE, "Debug: your to-hit: %i; %s's avoidance: %i; hit chance: %i%%", toHit, defender->GetName(), avoidance, hitChance + 1);
+	CAST_CLIENT_DEBUG_PTR(attacker)->Log(CP_ATTACK, "Mob::GetHitChance: to-hit %i vs avoidance %i: %i%%", toHit, avoidance, hitChance + 1);
 	return hitChance;
+}
+
+// Skill value for either a client (profile skills) or an NPC.
+static int CombatSkill(Mob* m, int skill)
+{
+	return m->IsClient() ? m->CastToClient()->GetSkill(skill) : m->GetSkill(skill);
+}
+
+int Mob::CombatToHit(int skill)
+{
+	int accuracy = IsNPC() ? CastToNPC()->GetAccuracyRating() : 0;
+	return Combat::ToHit(CombatSkill(this, OFFENSE), CombatSkill(this, skill), accuracy, IsNPC(), GetLevel());
+}
+
+int Mob::CombatAvoidance()
+{
+	if(IsClient())
+		return Combat::ClientAvoidance(CombatSkill(this, DEFENSE), GetAGI(), GetLevel());
+	int bonus = IsNPC() ? CastToNPC()->GetAvoidanceBonus() : 0;
+	return Combat::NpcAvoidance(GetLevel(), itembonuses.AGI + spellbonuses.AGI, bonus);
+}
+
+int Mob::CombatOffense(int skill)
+{
+	if(IsClient())
+		return Combat::ClientOffense(CombatSkill(this, skill), GetSTR(), itembonuses.ATK + spellbonuses.ATK, GetClass(), GetLevel());
+	// Not GetATK(): NPC::NPC overwrites BaseStats.ATK with a skill-based estimate.
+	int atk = (IsNPC() ? CastToNPC()->GetDbATK() : 0) + spellbonuses.ATK;
+	return Combat::NpcOffense(GetLevel(), itembonuses.STR + spellbonuses.STR, atk);
+}
+
+int Mob::CombatMitigation()
+{
+	if(IsClient())
+		return Combat::ClientMitigation(GetLevel(), GetClass(), GetBaseRace(), itembonuses.AC, spellbonuses.AC,
+		                                CombatSkill(this, DEFENSE), GetAGI(), 0);
+	return Combat::NpcMitigation(GetLevel(), BaseStats.AC, itembonuses.AC, spellbonuses.AC);
 }
 
 ///////////////////////////////////////////////////
@@ -788,7 +787,9 @@ void NPC::Attack(Mob* other, int Hand, bool procEligible, bool riposte)	 // Kaiy
 								if(min_hit == 0)
 									min_hit = (int)abs((((int)mylevel - 20)/3) + hit_modifier * mylevel/5);
 							}
-							damage = GetIntervalDamage(this, other, chosenDI, max_hit, min_hit);
+							// d20 damage model: DB min/max hits give Sony's damage bonus and base damage.
+							int roll = Combat::RollD20(CombatOffense(skillinuse), other->CombatMitigation());
+							damage = Combat::NpcDamageBonus(min_hit, max_hit) + Combat::MeleeDamage(roll, Combat::NpcBaseDamage(min_hit, max_hit), 0);
 							CAST_CLIENT_DEBUG_PTR(other)->Log(CP_ATTACK, "NPC::Attack: %s min hit: %i, max hit: %i, damage: %i.", GetName(), min_hit, max_hit, damage);
 						}
 					}
@@ -2441,73 +2442,28 @@ sint32 Client::CalculateAttackDamage(Mob* defender, Item_Struct* attacking_weapo
 	int weapon_damage = GetWeaponDamage(skill, attacking_weapon, defender);
 	if(this->GetPlayerProfilePtr()->inventory[12] == 10652) // Jester: Check for epic fists.
 		weapon_damage = 9;
-	int min_hit = 1;
-	int16 STRBonus = 0;
-	if(GetSTR() > 75)
-		STRBonus = GetSTR() - 75;
-	else
-		STRBonus = 0;
-	int max_hit = (2 * weapon_damage) + (weapon_damage * (STRBonus + GetSkill(OFFENSE))/225);
-	int bonus = 0;
-	int damage = 0;
+	// Immune to this weapon (e.g. needs a magic weapon)
+	if(weapon_damage <= 0)
+		return 0;
 
-	//Yeahlight: Caps on early game weapon damage
-	if(GetLevel() < 10 && max_hit > 20)
-		max_hit = 20;
-	else if(GetLevel() < 20 && max_hit > 40)
-		max_hit = 40;
+	// d20 damage model (Zone/Include/CombatFormulas.h): offense vs the defender's mitigation.
+	int offense = CombatOffense(skill);
+	int roll = (defender->GetAppearance() == SittingAppearance) ? 20 : Combat::RollD20(offense, defender->CombatMitigation());
 
-	//Yeahlight: Monks are granted a melee bonus over every other class
-	if(GetClass() == MONK)
-		bonus += 10;
-	if(GetLevel() > 50)
-		bonus += 15;
-	if(GetLevel() >= 55)
-		bonus += 15;
-	if(GetLevel() >= 60)
-		bonus += 15;
-	
-	//Yeahlight: Apply bonuses to each hit
-	min_hit += (min_hit * bonus / 100);
-	max_hit += (max_hit * bonus / 100);
-
-	//Yeahlight: Damage bonus applies to main hand only
+	// The damage bonus only applies to the main hand.
+	int damage_bonus = 0;
 	if(hand == 13)
 	{
-		int damage_bonus = GetWeaponDamageBonus(attacking_weapon);
-		min_hit += damage_bonus;
-		max_hit += damage_bonus;
+		bool two_handed = attacking_weapon && (attacking_weapon->common.itemType == ItemType2HS ||
+			attacking_weapon->common.itemType == ItemType2HB || attacking_weapon->common.itemType == ItemType2HPierce);
+		int delay = attacking_weapon ? attacking_weapon->common.delay : 36;
+		damage_bonus = Combat::ClientDamageBonus(GetLevel(), GetClass(), two_handed, delay);
 	}
 
-	//Yeahlight: If max_hit is smaller than min_hit for some reason, use min_hit
-	if(max_hit < min_hit)
-		max_hit = min_hit;
-
-	//Yeahlight: Find the PC's favored damage interval
-	damageInterval chosenDI = GetRandomInterval(this, defender);
-
-	//Yeahlight: Players sitting take maximum damage per hit
-	if(defender->GetAppearance() == SittingAppearance)
-	{
-		CAST_CLIENT_DEBUG_PTR(defender)->Log(CP_ATTACK, "Client::CalculateAttackDamage: You're sitting, getting max damage.");
-		//Yeahlight: Apply innate mitigation to sitting warriors
-		if(defender->GetClass() == WARRIOR)
-		{
-			int16 damageInterval = (max_hit - min_hit) / 19;
-			int16 damageBonus = min_hit - damageInterval;
-			damage = max_hit - damageInterval;
-		}
-		else
-		{
-			damage = max_hit;
-		}
-	}
-	else
-	{
-		damage = GetIntervalDamage(this, defender, chosenDI, max_hit, min_hit);
-	}
-
-	CAST_CLIENT_DEBUG_PTR(this)->Log(CP_ATTACK, "Client::CalculateAttackDamage: Weapon damage: %i, min hit: %i, max hit: %i, final damage: %i", weapon_damage, min_hit, max_hit, damage);
+	sint32 damage = damage_bonus + Combat::MeleeDamage(roll, weapon_damage, 0);
+	damage = Combat::ClientDamageMultiplier(damage, offense, GetLevel(), GetClass());
+	CAST_CLIENT_DEBUG_PTR(this)->Log(CP_ATTACK, "Client::CalculateAttackDamage: weapon %i, bonus %i, offense %i, d20 %i: %i damage",
+		weapon_damage, damage_bonus, offense, roll, damage);
 	return damage;
 }
 

@@ -175,6 +175,10 @@ public:
 	void	CheckMyWaypointStatus();
 	void	MoveToWaypoint(int index);
 	bool	UsesWaypoints() { return usesWaypoints; }
+	// Melee model inputs from the DB (npc_types ATK / Accuracy / avoidance)
+	int		GetDbATK() { return dbATK; }
+	int		GetAccuracyRating() { return accuracyRating; }
+	int		GetAvoidanceBonus() { return avoidanceBonus; }
 	void	CheckMyRoamStatus();
 	void	CheckMyAgroStatus();
 	void	CheckMyDefenseCastStatus();
@@ -305,6 +309,9 @@ protected:
 	bool	isPatroller;
 	bool	isPatrolling;
 	Timer*	patrolPause_timer;
+	int		dbATK;
+	int		accuracyRating;
+	int		avoidanceBonus;
 	bool	usesWaypoints;
 	std::vector<PatrollingNode>	waypoints;	// sorted by grid_entries.number
 	int		waypointIndex;

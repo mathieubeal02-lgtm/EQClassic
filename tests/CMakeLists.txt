@@ -11,3 +11,7 @@ target_include_directories(fragment_test PRIVATE ../Common/Include ../EQC/Includ
 # config.h is WIN32-only; linked_list.h needs this one define from it.
 target_compile_definitions(fragment_test PRIVATE ZONE_FREEZE_DEBUG=0)
 add_test(NAME fragments COMMAND fragment_test)
+
+# Melee combat formulas (Zone/Source/CombatFormulas.cpp), pure functions.
+add_executable(combat_test combat_test.cpp ../Zone/Source/CombatFormulas.cpp)
+add_test(NAME combat COMMAND combat_test)

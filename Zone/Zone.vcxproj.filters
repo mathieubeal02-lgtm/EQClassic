@@ -385,6 +385,9 @@
     <ClCompile Include="Source\attack.cpp">
       <Filter>Zone Sources</Filter>
     </ClCompile>
+    <ClCompile Include="Source\CombatFormulas.cpp">
+      <Filter>Zone Sources</Filter>
+    </ClCompile>
     <ClCompile Include="Source\boats.cpp">
       <Filter>Zone Sources</Filter>
     </ClCompile>

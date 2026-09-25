@@ -8,7 +8,7 @@ login, world and zone.
 | `schema.sql` | Structure only (81 `CREATE TABLE`), extracted from the dump below. Convenient for reading and diffing. |
 | `eqclassic_db/` | Git submodule → https://github.com/erfg12/eqclassic_db (one `.sql` per table, ~114 MB, structure + data, MariaDB 10.0 dump). `git submodule update --init` to fetch. |
 | `extract_schema.py` | Regenerates `schema.sql` from the submodule. |
-| `patches/*.sql` | Fixes to apply **after** the dump, in order (tables the code needs but the dump lacks). |
+| `patches/*.sql` | Apply **after** the dump, in order: `001` missing `boat_passengers`, `002` item blob encoding repair, `003` corrupted sample character, `004` NPC combat stats from Quarm (needed by the melee model, see below). |
 | `../LS/Login/loginserver.sql` | Original login schema; the dump above already contains the `login_*` tables. |
 
 ## Import
@@ -41,3 +41,12 @@ GRANT ALL ON eqclassic.* TO 'eqc'@'localhost';
 - Several tables look like leftovers (`*_old`, `*_new`, `*_copy`, `*_backup`, `*_test`,
   `tradeskillrecipe` vs `tradeskill_recipe`, `items_axclassic` vs `items`). Which one the
   code reads is in `Common/Source/database.cpp`.
+
+## NPC combat stats (patch 004)
+
+The melee model (`Zone/Include/CombatFormulas.h`, from EQMacEmu/Quarm) and NPC stats must match:
+the original dump used its own AC scale (4-8x Quarm's) and lower HP. Patch 004 adds `ATK`,
+`Accuracy`, `avoidance` to `npc_types` and `npc_types_without` (the server reads the latter) and sets
+hp/min/max damage/AC/ATK/Accuracy/avoidance from the Quarm DB for the 19,919 NPCs matched on
+name + zone (id / 1000) + level range (NPC ids differ between the two DBs), AC rescaled for the rest.
+Regenerate it with `tools/npc_stats/gen_004.sh` from a newer Quarm dump imported as `quarm_ref`.

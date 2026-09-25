@@ -28,6 +28,7 @@ add_executable(zone
     ../Common/Source/ServerPacketFactory.cpp
     ../Common/Source/timer.cpp
     Source/attack.cpp
+    Source/CombatFormulas.cpp
     Source/boats.cpp
     Source/Debug.cpp
     Source/entity.cpp

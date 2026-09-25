@@ -450,6 +450,11 @@ public:
 	sint16	rogueacmod();
 	int16	GetMitigationAC() {return myMitigationAC;}
 	int16	GetAvoidanceAC() {return myAvoidanceAC;}
+	// Inputs of the melee model in Zone/Include/CombatFormulas.h (see attack.cpp)
+	int		CombatToHit(int skill);
+	int		CombatAvoidance();
+	int		CombatOffense(int skill);
+	int		CombatMitigation();
 
 	bool	IsInvulnerable() {return invulnerable;}
 	void	SetInvulnerable(bool in) {invulnerable = in;}
