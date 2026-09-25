@@ -642,8 +642,14 @@ void EntityList::UpdateWho()
 {
 	// A zone process crashed here (null short_name) after being reused for a second zone; do
 	// not take the whole zone down for a "who" refresh.
-	if ((!worldserver.Connected()) || !ZoneLoaded || zone == 0 || zone->GetShortName() == 0)
+	if ((!worldserver.Connected()) || !ZoneLoaded)
 		return;
+	if (zone == 0 || zone->GetShortName() == 0)
+	{
+		EQC::Common::Log(EQCLog::Error, CP_ZONESERVER, "UpdateWho: zone %p loaded but has no short name (thread %lu)",
+			(void*)zone, (unsigned long)GetCurrentThreadId());
+		return;
+	}
 	ServerPacket* pack = new ServerPacket(ServerOP_ClientList, sizeof(ServerClientList_Struct));
 	
 	pack->pBuffer = new uchar[pack->size];

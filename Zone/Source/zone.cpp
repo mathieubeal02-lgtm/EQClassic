@@ -65,6 +65,8 @@ bool Zone::Bootup(char* zone_name)
 
 	numclients = 0;
 	zone = new Zone(zone_name, net.GetZoneAddress(), net.GetZonePort());
+	EQC::Common::Log(EQCLog::Debug, CP_ZONESERVER, "Zone lifecycle: Bootup('%s') zone %p (thread %lu)",
+		zone_name, (void*)zone, (unsigned long)GetCurrentThreadId());
 
 	if (!zone->Init())
 	{
@@ -141,6 +143,8 @@ void Zone::Shutdown(bool quite) {
 	if (!ZoneLoaded)
 		return;
 	LockMutex lock2(&MNetLoop);
+	EQC::Common::Log(EQCLog::Debug, CP_ZONESERVER, "Zone lifecycle: Shutdown zone %p '%s' (thread %lu)",
+		(void*)zone, zone && zone->GetShortName() ? zone->GetShortName() : "?", (unsigned long)GetCurrentThreadId());
 	worldserver.SetZone("");
 	EQC::Common::PrintF(CP_ZONESERVER, "----SERVER SHUTDOWN----\n");
 	petition_list.ClearPetitions();
@@ -336,6 +340,8 @@ bool Zone::Init() {
 
 Zone::~Zone()
 {
+	EQC::Common::Log(EQCLog::Debug, CP_ZONESERVER, "Zone lifecycle: ~Zone %p '%s', global zone %p, ZoneLoaded %d (thread %lu)",
+		(void*)this, short_name ? short_name : "?", (void*)zone, (int)ZoneLoaded, (unsigned long)GetCurrentThreadId());
 	safe_delete(map);//delete map;
 	safe_delete(spawn_group_list);
 	if (worldserver.Connected()) {
