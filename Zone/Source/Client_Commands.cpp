@@ -694,6 +694,20 @@ void command_addexp(Client *c, const Seperator *sep)
 			c->Message(BLACK, "Usage: #addexp number");
 }
 
+// #si / #si2 with something already on the cursor used to queue the item server side
+// (Client::summonedItems) and hand it over on a later item move. The client does not queue:
+// the server's and the client's inventories drifted apart and, after zoning (the client reloads
+// the server's copy), the summoned item showed up several times in place of other items.
+static bool CursorFreeForSummon(Client *c)
+{
+	if (c->GetPlayerProfilePtr()->inventory[0] != 0xFFFF)
+	{
+		c->Message(RED, "Your cursor is not empty: put that item away before summoning another.");
+		return false;
+	}
+	return true;
+}
+
 void command_summonitem(Client *c, const Seperator *sep)		
 {
 	if (!sep->IsNumber(1)) {
@@ -703,7 +717,7 @@ void command_summonitem(Client *c, const Seperator *sep)
 			int16 itemid = atoi(sep->arg[1]);
 			if (c->Admin() < 100 && ((itemid >= 32768) || (itemid >= 19900 && itemid <= 19943) || (itemid >= 31814 && itemid <= 31815) || (itemid >= 19917 && itemid <= 19928) || (itemid >= 11500 && itemid <= 11535) || (itemid >=32740 && itemid <=32758))) { 					c->Death(c, 0);
 			}
-			else
+			else if (CursorFreeForSummon(c))
 				c->SummonItem(itemid,1);
 	}
 }	
@@ -1024,7 +1038,8 @@ void command_summonitemnonblob(Client *c, const Seperator *sep)
 		}
 		else {
 			int16 itemid = atoi(sep->arg[1]);			
-			c->SummonItemNonBlob(itemid);
+			if (CursorFreeForSummon(c))
+				c->SummonItemNonBlob(itemid);
 		}
 } 
 
