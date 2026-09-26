@@ -31,7 +31,7 @@ public class EquipTests
             Sta = 100, Agi = 75, Str = 100, Skills = new int[74], Inventory = inventory.Items.ToArray(),
         }, Items);
         var player = zone.AddPlayer("Qbot", Troll, 0, 10, new Vec3(0, 0, 0),
-            progress: new ZoneInstance.PlayerProgress(0, "", default, At, inventory));
+            progress: new ZoneInstance.PlayerProgress(0, "", default, (level, _) => At(level), inventory));
         zone.DrainEvents();
         return (zone, player);
     }

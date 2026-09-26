@@ -16,7 +16,7 @@ public class ExperienceZoneTests
     private static (ZoneInstance, ZoneInstance.Entity) Zone(NpcTemplate npc, int level, uint exp, string bindZone = "qeynos2", Vec3 bind = default)
     {
         var zone = new ZoneInstance(new ZoneData("qeynos2", [new SpawnPoint(1, new Vec3(5, 0, 0), 0, 0, [(npc, 100)], 600, 0)], new Dictionary<int, Grid>()), seed: 1);
-        var progress = new ZoneInstance.PlayerProgress(exp, bindZone, bind, Striker);
+        var progress = new ZoneInstance.PlayerProgress(exp, bindZone, bind, (l, _) => Striker(l));
         var player = zone.AddPlayer("Qbot", Troll, 0, level, new Vec3(0, 0, 0), progress: progress);
         zone.DrainEvents();
         return (zone, player);

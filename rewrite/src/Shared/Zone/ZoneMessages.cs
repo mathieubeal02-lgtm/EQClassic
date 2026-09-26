@@ -709,4 +709,38 @@ namespace EQClassic.Shared.Zone
         public void WriteFields(NetDataWriter writer) => writer.Put((byte)Slot);
         public static ScribeScroll ReadFields(NetDataReader reader) => new ScribeScroll(reader.GetByte());
     }
+
+    /// <summary>A buff on the player as the buff window shows it.</summary>
+    public sealed record BuffView(int SpellId, string Name, int TicsLeft, bool Beneficial);
+
+    /// <summary>
+    /// Zone server to the player: their buffs (the buff window), and the movement speed they add up
+    /// to (percent: spirit of wolf, snares), which the client applies to its own movement.
+    /// </summary>
+    public sealed record PlayerBuffs(IReadOnlyList<BuffView> Buffs, int MovementSpeed) : IMessage
+    {
+        public MessageType Type => MessageType.PlayerBuffs;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put((byte)Buffs.Count);
+            foreach (var b in Buffs)
+            {
+                writer.Put(b.SpellId);
+                writer.Put(b.Name);
+                writer.Put(b.TicsLeft);
+                writer.Put(b.Beneficial);
+            }
+            writer.Put((short)MovementSpeed);
+        }
+
+        public static PlayerBuffs ReadFields(NetDataReader reader)
+        {
+            int count = reader.GetByte();
+            var buffs = new List<BuffView>(count);
+            for (int n = 0; n < count; n++)
+                buffs.Add(new BuffView(reader.GetInt(), reader.GetString(), reader.GetInt(), reader.GetBool()));
+            return new PlayerBuffs(buffs, reader.GetShort());
+        }
+    }
 }

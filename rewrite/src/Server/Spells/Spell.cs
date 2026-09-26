@@ -6,7 +6,10 @@ namespace EQClassic.Server.Spells;
 /// <summary>Spell effect ids used by the rewrite (legacy spdat.h TSpellEffect).</summary>
 public static class SpellEffect
 {
-    public const int CurrentHp = 0, ArmorClass = 1, Cha = 10, CurrentMana = 15, CurrentHpOnce = 79;
+    public const int CurrentHp = 0, ArmorClass = 1, Atk = 2, MovementSpeed = 3, Str = 4, Dex = 5, Agi = 6, Sta = 7, Int = 8, Wis = 9,
+        Cha = 10, AttackSpeed = 11, SeeInvis = 13, WaterBreathing = 14, CurrentMana = 15, Blind = 20, ResistFire = 46, ResistCold = 47,
+        ResistPoison = 48, ResistDisease = 49, ResistMagic = 50, DamageShield = 59, InfraVision = 65, UltraVision = 66, TotalHp = 69,
+        CurrentHpOnce = 79, MagnifyVision = 87, HealOverTime = 100, CompleteHeal = 101;
     /// <summary>Unused effect slot.</summary>
     public const int Blank = 254;
 }
@@ -55,7 +58,8 @@ public sealed record Spell(int Id, string Name)
     /// <summary>Level at which each class (index class − 1) gets the spell; above 60 when it never does.</summary>
     public byte[] Classes { get; init; } = new byte[ClassCount];
 
-    public bool IsBuff => Duration > 0 || DurationFormula > 0;
+    /// <summary>Spell::IsBuffSpell: a spell with a duration formula lasts (as a buff or a debuff).</summary>
+    public bool IsBuff => DurationFormula > 0;
     /// <summary>A real spell (records with no name or no effect are holes in the file).</summary>
     public bool IsValid => Name.Length > 0 && Effect.Any(e => e != SpellEffect.Blank);
 

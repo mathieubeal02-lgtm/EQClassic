@@ -16,6 +16,8 @@ namespace EQClassic.ClientCore
         /// <summary>Walking (Shift held): about a third of the run speed, as in the Trilogy client.</summary>
         public const float WalkSpeed = 15f;
         public const float TurnDegreesPerSecond = 120f;
+        /// <summary>Movement speed from buffs (1.4 with a +40% spirit of wolf, 0.6 snared by 40%), set by the server's buff list.</summary>
+        public float SpeedFactor { get; set; } = 1f;
         public const float SendRate = 10f;
         /// <summary>Highest step (units) the character climbs without jumping.</summary>
         public const float StepUp = 6f;
@@ -140,7 +142,7 @@ namespace EQClassic.ClientCore
             float sx = fy, sy = -fx;                                      // right of the heading
             float length = Math.Min(1f, (float)Math.Sqrt(forward * forward + strafe * strafe));
             float norm = length / (float)Math.Sqrt(forward * forward + strafe * strafe);
-            float speed = Walking ? WalkSpeed : RunSpeed;
+            float speed = (Walking ? WalkSpeed : RunSpeed) * SpeedFactor;
             float dx = (fx * forward + sx * strafe) * norm * speed * seconds;
             float dy = (fy * forward + sy * strafe) * norm * speed * seconds;
             float x = Position.X + dx, y = Position.Y + dy;

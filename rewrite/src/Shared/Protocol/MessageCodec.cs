@@ -87,6 +87,7 @@ public static class MessageCodec
                 MessageType.SpellCast => SpellCast.ReadFields(reader),
                 MessageType.PlayerMana => PlayerMana.ReadFields(reader),
                 MessageType.ScribeScroll => ScribeScroll.ReadFields(reader),
+                MessageType.PlayerBuffs => PlayerBuffs.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

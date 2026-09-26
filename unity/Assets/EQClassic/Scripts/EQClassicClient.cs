@@ -263,6 +263,24 @@ namespace EQClassic.Unity
             }
         }
 
+        /// <summary>The buff window: each spell lasting on you with the time left (a tic is 6 s), detrimental ones in red.</summary>
+        private void DrawBuffs()
+        {
+            if (_client.Buffs == null || _client.Buffs.Buffs.Count == 0)
+                return;
+            float y = 30;
+            foreach (var buff in _client.Buffs.Buffs)
+            {
+                int seconds = buff.TicsLeft * 6;
+                string left = buff.TicsLeft >= 32767 ? "" : $"  {seconds / 60}:{seconds % 60:00}";
+                var colour = GUI.color;
+                GUI.color = buff.Beneficial ? Color.white : new Color(1f, 0.5f, 0.5f);
+                GUI.Label(new Rect(Screen.width - 260, y, 250, 20), buff.Name + left);
+                GUI.color = colour;
+                y += 18;
+            }
+        }
+
         /// <summary>The spell book (B): every scribed spell by level; a gem button memorises it there.</summary>
         private void DrawBook()
         {
@@ -374,6 +392,7 @@ namespace EQClassic.Unity
                 if (_client.Casting is { } casting)
                     DrawBar(new Rect(Screen.width / 2 - 150, Screen.height - 320, 300, 16), _client.CastProgress, new Color(0.7f, 0.3f, 0.9f), casting.SpellName);
                 DrawGems();
+                DrawBuffs();
                 if (_client.TargetId is int target && _client.Zone?.Get(target) is { } t)
                 {
                     var colour = GUI.color;

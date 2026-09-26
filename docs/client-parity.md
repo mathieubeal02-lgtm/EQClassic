@@ -54,10 +54,10 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Inventory | Worn slots, bags, weight, money | Partial: window (I) with every worn and general slot and money; click an item then a slot to move or equip it (server checks slot, class, race, two-handed; armour and weapon apply to combat); saved in the profile. No bags, weight or icons | 2 |
 | Loot | Corpse window | Done: NPCs leave corpses with their loot table's items and coins (legacy rolls, rot timers, killer's rights then free for all), L opens the loot window, Take / Done | — |
 | Merchants, bank, trade | | Todo | 3 |
-| Spell book, spell gems, casting bar | Book pages, 8 gems, memorising, scribing scrolls, casting bar | Partial: book window (B, memorise by gem number), 8 gems (keys 1-8 or click, /cast N), casting bar, Scribe button on scrolls in the inventory, casting animation (t05). Direct damage and heals only; no icons, no memorising time, no spell particles | 2 |
+| Spell book, spell gems, casting bar | Book pages, 8 gems, memorising, scribing scrolls, casting bar | Partial: book window (B, memorise by gem number), 8 gems (keys 1-8 or click, /cast N), casting bar, Scribe button on scrolls in the inventory, casting animation (t05). Direct damage, heals and buffs (stats, AC, HP, haste, slow, speed, damage and heals over time); no AE, group, root, mez, charm, pets or teleports yet; no icons, no memorising time, no spell particles | 2 |
 | Hot buttons, abilities, skills window | | Todo | 2 |
 | Group and guild windows | | Todo | 3 |
-| Buff window | | Todo (buff spells are refused until the server applies them) | 3 |
+| Buff window | | Partial: list of buffs with time left, detrimental ones in red; no icons, no clicking off | 3 |
 | Options, key bindings | | Todo | 3 |
 | Login and server select | | Done (IMGUI, to restyle) | — |
 | Character select and creation | 3D models, race/class/deity/city choices, stat points | Partial: race, gender, class, deity, city among the start_zones combinations, bonus points, name; no 3D preview, no face choice | 2 |

@@ -61,4 +61,5 @@ public enum MessageType : byte
     SpellCast = 53,
     PlayerMana = 54,
     ScribeScroll = 55,
+    PlayerBuffs = 56,
 }

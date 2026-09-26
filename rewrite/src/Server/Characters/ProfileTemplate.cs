@@ -74,6 +74,20 @@ public static class ProfileTemplate
             BinaryPrimitives.WriteUInt16LittleEndian(p.AsSpan(PlayerProfile.SpellGemsOffset + 2 * i), gems[i] < 0 ? (ushort)0xFFFF : (ushort)gems[i]);
     }
 
+    /// <summary>The 15 buff slots (SpellBuff_Struct); unused slots get spell 0xFFFF.</summary>
+    public static void SetBuffs(byte[] p, IReadOnlyList<(int SpellId, int CasterLevel, int Tics)> buffs)
+    {
+        for (int i = 0; i < PlayerProfile.BuffSlots; i++)
+        {
+            var b = p.AsSpan(PlayerProfile.BuffsOffset + PlayerProfile.BuffSize * i, PlayerProfile.BuffSize);
+            b.Clear();
+            bool used = i < buffs.Count;
+            b[1] = used ? (byte)buffs[i].CasterLevel : (byte)0;
+            BinaryPrimitives.WriteUInt16LittleEndian(b[4..], used ? (ushort)buffs[i].SpellId : (ushort)0xFFFF);
+            BinaryPrimitives.WriteInt32LittleEndian(b[6..], used ? buffs[i].Tics : 0);
+        }
+    }
+
     public static void SetStats(byte[] p, int str, int sta, int cha, int dex, int @int, int agi, int wis)
     {
         p[123] = (byte)str; p[124] = (byte)sta; p[125] = (byte)cha; p[126] = (byte)dex;

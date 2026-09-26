@@ -8,7 +8,7 @@ namespace EQClassic.Tests.Zone;
 /// <summary>Casting in the zone after Mob::CastSpell / SpellFinished (Zone/Source/spells.cpp).</summary>
 public class SpellCastingTests
 {
-    private const int BurstOfFlame = 93, MinorHealing = 200, FlashOfLight = 201, LightHealing = 17;
+    private const int BurstOfFlame = 93, MinorHealing = 200, Root = 230, LightHealing = 17;
 
     private static NpcTemplate Rat(int hp, int fireResist = 0) =>
         new(1, "a_rat", 36, 2, 1, 2f) { Combat = new NpcCombatStats(1, hp, 1, 2) { FR = fireResist } };
@@ -16,7 +16,7 @@ public class SpellCastingTests
     private static readonly int[] Skilled = Enumerable.Repeat(200, 74).ToArray();
 
     private static ZoneInstance.PlayerMagic Magic(int? mana = null, params int[] gems) =>
-        new(Wis: 75, Int: 150, Skilled, Book: [BurstOfFlame, MinorHealing, FlashOfLight, LightHealing], Gems: gems, Mana: mana);
+        new(Wis: 75, Int: 150, Skilled, Book: [BurstOfFlame, MinorHealing, Root, LightHealing], Gems: gems, Mana: mana);
 
     /// <summary>A zone with one rat and a level 20 caster of <paramref name="classId"/> (magician by default).</summary>
     private static (ZoneInstance Zone, ZoneInstance.Entity Player, ZoneInstance.Entity Rat) Setup(
@@ -29,7 +29,7 @@ public class SpellCastingTests
         items.Items[9993] = new ItemStats(9993, "Spell: Minor Healing*", 0, 0, ItemStats.SpellScroll, 0) { ScrollSpell = MinorHealing };
         var zone = new ZoneInstance(data, seed: seed) { Spells = SpellRulesTests.File(), Items = items };
         var fighter = new Combatant(true, 20, classId, 200, 100, 100, 100, 100, 0, 5, 3f);
-        var progress = new ZoneInstance.PlayerProgress(0, "", default, null, inventory, Magic(mana, BurstOfFlame, MinorHealing, FlashOfLight));
+        var progress = new ZoneInstance.PlayerProgress(0, "", default, null, inventory, Magic(mana, BurstOfFlame, MinorHealing, Root));
         var player = zone.AddPlayer("Qcaster", 1, 0, 20, new Vec3(0, 0, 0), fighter: fighter, progress: progress);
         zone.DrainEvents();
         return (zone, player, zone.Entities.Single(e => !e.IsPlayer));
@@ -52,7 +52,7 @@ public class SpellCastingTests
         var (_, mage, _) = Setup();
         Assert.Equal((30 + 2) * 20, mage.MaxMana);
         Assert.Equal(mage.MaxMana, mage.Mana);
-        Assert.Equal([BurstOfFlame, MinorHealing, FlashOfLight, -1, -1, -1, -1, -1], mage.Gems);
+        Assert.Equal([BurstOfFlame, MinorHealing, Root, -1, -1, -1, -1, -1], mage.Gems);
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public class SpellCastingTests
     {
         var (zone, player, rat) = Setup();
         zone.SetTarget(player.Id, rat.Id);
-        zone.CastSpell(player.Id, 2); // Flash of Light: blindness, a buff
+        zone.CastSpell(player.Id, 2); // Root: not written yet
         Assert.Contains(new ZoneInstance.Told(player.Id, ZoneInstance.NotYetMessage), zone.DrainEvents());
         Assert.Equal(player.MaxMana, player.Mana);
     }

@@ -6,35 +6,42 @@ namespace EQClassic.Server.Combat;
 
 /// <summary>
 /// One fighter's melee numbers, computed once from its stats (Mob::CombatToHit / CombatAvoidance /
-/// CombatOffense / CombatMitigation in Zone/Source/attack.cpp). Buffs and item stat bonuses are
-/// not modelled yet (0), nor dual wield, double attack, ripostes and the like.
+/// CombatOffense / CombatMitigation in Zone/Source/attack.cpp), with the bonuses of the buffs on
+/// them (AC, ATK, STR, STA, AGI, hit points, haste and slow). Item stat bonuses are not modelled
+/// yet, nor dual wield, double attack, ripostes and the like.
 /// </summary>
 public sealed record Combatant(bool IsPlayer, int Level, int Class, int MaxHp, int Offense, int ToHit, int Avoidance, int Mitigation,
     int DamageBonus, int BaseDamage, float DelaySeconds)
 {
     /// <summary>An NPC: skills at their class caps, damage from its DB min/max hit (NPC::Attack).</summary>
-    public static Combatant ForNpc(NpcTemplate npc)
+    public static Combatant ForNpc(NpcTemplate npc, Spells.StatBonuses? bonuses = null)
     {
+        var b = bonuses ?? Spells.StatBonuses.None;
         var c = npc.Combat;
         int offenseSkill = SkillCaps.Cap(SkillCaps.Offense, c.Class, npc.Level);
         int weaponSkill = SkillCaps.NpcMelee(c.Class, npc.Level);
-        int strBonus = 0; // item and spell STR: none yet
-        return new Combatant(false, npc.Level, c.Class, c.Hp,
-            Offense: NpcOffense(npc.Level, strBonus, c.Atk),
+        return new Combatant(false, npc.Level, c.Class, Math.Max(1, c.Hp + b.Hp),
+            Offense: NpcOffense(npc.Level, b.Str, c.Atk + b.Atk),
             ToHit: CombatFormulas.ToHit(offenseSkill, weaponSkill, c.Accuracy, true, npc.Level),
-            Avoidance: NpcAvoidance(npc.Level, 0, c.Avoidance),
-            Mitigation: NpcMitigation(npc.Level, c.AC, 0, 0),
+            Avoidance: NpcAvoidance(npc.Level, b.Agi, c.Avoidance),
+            Mitigation: NpcMitigation(npc.Level, c.AC, 0, b.AC),
             DamageBonus: NpcDamageBonus(c.MinDamage, c.MaxDamage),
             BaseDamage: NpcBaseDamage(c.MinDamage, c.MaxDamage),
-            DelaySeconds: c.DelaySeconds);
+            DelaySeconds: WithAttackSpeed(c.DelaySeconds, b));
     }
+
+    /// <summary>Haste shortens the delay between swings, slow lengthens it (percentages).</summary>
+    public static float WithAttackSpeed(float delaySeconds, Spells.StatBonuses b) =>
+        b.Haste == 0 && b.Slow == 0 ? delaySeconds : delaySeconds * (100f + b.Slow) / (100f + b.Haste);
 
     /// <summary>
     /// A player from their profile: skills and stats as saved, the main-hand weapon (slot 13) or bare
     /// hands, and the AC of the worn items (slots 0-21). Max HP: Client::CalcBaseHP (no item HP yet).
     /// </summary>
-    public static Combatant ForPlayer(PlayerProfile p, IItemSource? items)
+    public static Combatant ForPlayer(PlayerProfile p, IItemSource? items, Spells.StatBonuses? bonuses = null)
     {
+        var b = bonuses ?? Spells.StatBonuses.None;
+        p = p with { Str = p.Str + b.Str, Sta = p.Sta + b.Sta, Agi = p.Agi + b.Agi, Dex = p.Dex + b.Dex };
         var worn = Enumerable.Range(0, Math.Min(22, p.Inventory.Count))
             .Select(slot => items?.Get(p.Inventory[slot])).Where(i => i is not null).ToList();
         int itemAC = worn.Sum(i => i!.AC);
@@ -51,15 +58,15 @@ public sealed record Combatant(bool IsPlayer, int Level, int Class, int MaxHp, i
             (weaponSkillId, twoHanded) = (SkillCaps.HandToHand, false);
         }
         int weaponSkill = p.Skill(weaponSkillId), defense = p.Skill(SkillCaps.Defense);
-        int offense = ClientOffense(weaponSkill, p.Str, 0, p.Class, p.Level);
-        return new Combatant(true, p.Level, p.Class, ClientBaseHp(p.Level, p.Class, p.Sta),
+        int offense = ClientOffense(weaponSkill, p.Str, b.Atk, p.Class, p.Level);
+        return new Combatant(true, p.Level, p.Class, ClientBaseHp(p.Level, p.Class, p.Sta) + b.Hp,
             Offense: offense,
             ToHit: CombatFormulas.ToHit(p.Skill(SkillCaps.Offense), weaponSkill, 0, false, 0),
             Avoidance: ClientAvoidance(defense, p.Agi, p.Level),
-            Mitigation: ClientMitigation(p.Level, p.Class, p.Race, itemAC, 0, defense, p.Agi, 0),
+            Mitigation: ClientMitigation(p.Level, p.Class, p.Race, itemAC, b.AC, defense, p.Agi, 0),
             DamageBonus: ClientDamageBonus(p.Level, p.Class, twoHanded, delay),
             BaseDamage: damage,
-            DelaySeconds: delay / 10f);
+            DelaySeconds: WithAttackSpeed(delay / 10f, b));
     }
 }
 

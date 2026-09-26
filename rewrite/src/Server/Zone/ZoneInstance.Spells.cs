@@ -6,8 +6,10 @@ namespace EQClassic.Server.Zone;
 /// <summary>
 /// Spell casting after Mob::CastSpell / SpellFinished / SpellOnTarget (Zone/Source/spells.cpp):
 /// memorised gems, mana, fizzles, cast time, interruption by moving or by damage (channeling),
-/// resists, and the instant hit point effects (direct damage and heals). Buffs, damage over time
-/// and the other effects come later: such spells are refused before any mana is spent.
+/// resists, the instant hit point effects (direct damage and heals), and buffs (Mob::AddBuff,
+/// ApplySpellsBonuses, the tic processing): stats, AC, ATK, hit points, resists, haste and slow,
+/// movement speed, damage and heals over time, mana over time. Spells with other effects (roots,
+/// mez, charm, pets, teleports...) are refused before any mana is spent.
 /// </summary>
 public sealed partial class ZoneInstance
 {
@@ -20,8 +22,9 @@ public sealed partial class ZoneInstance
     public const string NeedTargetMessage = "You must first select a target for this spell!";
     public const string NotYetMessage = "That spell is not available yet.";
 
-    /// <summary>What a player brings for casting: stats, skills, spell book, gems and saved mana.</summary>
-    public sealed record PlayerMagic(int Wis, int Int, IReadOnlyList<int> Skills, IReadOnlyList<int> Book, IReadOnlyList<int> Gems, int? Mana = null)
+    /// <summary>What a player brings for casting: stats, skills, spell book, gems, saved mana and buffs.</summary>
+    public sealed record PlayerMagic(int Wis, int Int, IReadOnlyList<int> Skills, IReadOnlyList<int> Book, IReadOnlyList<int> Gems, int? Mana = null,
+        IReadOnlyList<SavedBuff>? Buffs = null)
     {
         public int Skill(int id) => id < Skills.Count ? Skills[id] : 0;
     }
@@ -37,6 +40,9 @@ public sealed partial class ZoneInstance
         internal double EndsAt { get; }
     }
 
+    /// <summary>A buff as the profile keeps it (SpellBuff_Struct): spell, caster level, tics left.</summary>
+    public readonly record struct SavedBuff(int SpellId, int CasterLevel, int TicsLeft);
+
     public enum CastOutcome { Finished, Fizzled, Interrupted, Resisted }
 
     public sealed record CastStarted(int CasterId, int SpellId, string SpellName, int CastMs) : ZoneEvent;
@@ -45,17 +51,35 @@ public sealed partial class ZoneInstance
     public sealed record SpellLanded(int CasterId, int TargetId, int SpellId, int Amount) : ZoneEvent;
     public sealed record ManaChanged(int PlayerId, int Mana, int MaxMana) : ZoneEvent;
     public sealed record GemsChanged(int PlayerId) : ZoneEvent;
+    /// <summary>The buffs on an entity changed (added, faded, a tic went by).</summary>
+    public sealed record BuffsChanged(int EntityId) : ZoneEvent;
+    public sealed record BuffFaded(int EntityId, int SpellId) : ZoneEvent;
+    public const string DidNotTakeHoldMessage = "Your spell did not take hold.";
 
     /// <summary>The spells of spdat.eff by id; null: nobody can cast.</summary>
     public IReadOnlyList<Spell>? Spells { get; init; }
 
     public Spell? SpellById(int id) => Spells is { } s && id >= 0 && id < s.Count && s[id].IsValid ? s[id] : null;
 
-    /// <summary>Whether the rewrite can apply every effect of the spell (instant hit points on one target so far).</summary>
+    private static readonly HashSet<int> SupportedEffects =
+    [
+        SpellEffect.Blank, SpellEffect.CurrentHp, SpellEffect.CurrentHpOnce, SpellEffect.ArmorClass, SpellEffect.Atk, SpellEffect.MovementSpeed,
+        SpellEffect.Str, SpellEffect.Dex, SpellEffect.Agi, SpellEffect.Sta, SpellEffect.Int, SpellEffect.Wis, SpellEffect.Cha,
+        SpellEffect.AttackSpeed, SpellEffect.SeeInvis, SpellEffect.WaterBreathing, SpellEffect.CurrentMana, SpellEffect.Blind,
+        SpellEffect.ResistFire, SpellEffect.ResistCold, SpellEffect.ResistPoison, SpellEffect.ResistDisease, SpellEffect.ResistMagic,
+        SpellEffect.InfraVision, SpellEffect.UltraVision, SpellEffect.TotalHp, SpellEffect.MagnifyVision, SpellEffect.HealOverTime,
+        BuffRules.StackingBlock, BuffRules.StackingOverwrite,
+        BuffRules.DiseaseCounter, BuffRules.PoisonCounter, BuffRules.CurseCounter, // what cures count down: nothing to do until cures exist
+    ];
+
+    /// <summary>
+    /// Whether the rewrite applies every effect of the spell: hit points now or over time, stat and
+    /// resist buffs and debuffs, haste and slow, movement speed, mana over time, and the effects the
+    /// client shows by itself (vision, blindness), on one target.
+    /// </summary>
     public static bool IsSupported(Spell spell) =>
-        !spell.IsBuff
-        && spell.TargetType is not (SpellTarget.AECaster or SpellTarget.AETarget or SpellTarget.GroupV1 or SpellTarget.GroupV2)
-        && spell.Effect.All(e => e is SpellEffect.Blank or SpellEffect.CurrentHp or SpellEffect.CurrentHpOnce);
+        spell.TargetType is not (SpellTarget.AECaster or SpellTarget.AETarget or SpellTarget.GroupV1 or SpellTarget.GroupV2)
+        && spell.Effect.All(e => SupportedEffects.Contains(e));
 
     private void SetUpMagic(Entity player, PlayerMagic? magic)
     {
@@ -64,7 +88,16 @@ public sealed partial class ZoneInstance
         player.Gems = Enumerable.Range(0, GemCount).Select(i => magic is not null && i < magic.Gems.Count ? magic.Gems[i] : -1).ToArray();
         player.MaxMana = magic is null ? 0 : SpellRules.MaxMana(player.Fighter.Class, player.Level, magic.Wis, magic.Int);
         player.Mana = magic?.Mana is int m && m >= 0 && m <= player.MaxMana ? m : player.MaxMana;
+        foreach (var saved in magic?.Buffs ?? Array.Empty<SavedBuff>())
+            if (SpellById(saved.SpellId) is { IsBuff: true } spell && saved.TicsLeft > 0 && player.BuffList.Count < BuffRules.Slots)
+                player.BuffList.Add(new Buff(spell, 0, saved.CasterLevel, saved.TicsLeft));
+        if (player.BuffList.Count > 0)
+            UpdateBonuses(player);
     }
+
+    /// <summary>The buffs as the profile keeps them.</summary>
+    public static IReadOnlyList<SavedBuff> SaveBuffs(Entity e) =>
+        e.BuffList.Select(b => new SavedBuff(b.Spell.Id, b.CasterLevel, b.TicsLeft)).ToList();
 
     /// <summary>Memorises a spell of the book in a gem (the client's scribing time is not enforced).</summary>
     public void MemorizeSpell(int playerId, int gem, int spellId)
@@ -285,7 +318,16 @@ public sealed partial class ZoneInstance
             AfterHarm(caster, target, 0); // a resisted spell still angers
             return;
         }
+        if (spell.IsBuff && !AddBuff(caster, target, spell))
+        {
+            _events.Add(new Told(caster.Id, DidNotTakeHoldMessage));
+            _events.Add(new CastEnded(caster.Id, spell.Id, CastOutcome.Resisted));
+            if (hostile)
+                AfterHarm(caster, target, 0);
+            return;
+        }
         _events.Add(new CastEnded(caster.Id, spell.Id, CastOutcome.Finished));
+        // SpellEffect: the hit point effects apply at once, for buffs too (then every tic).
         int change = 0;
         for (int i = 0; i < Spell.EffectCount; i++)
             if (spell.Effect[i] is SpellEffect.CurrentHp or SpellEffect.CurrentHpOnce)
@@ -297,6 +339,108 @@ public sealed partial class ZoneInstance
             AfterHarm(caster, target, before - target.Hp);
         else if (target.IsPlayer && target.Hp != before)
             _events.Add(new HealthChanged(target.Id, target.Hp, target.Fighter.MaxHp));
+    }
+
+    /// <summary>Mob::AddBuff + HandleBuffSpellEffects: false when stacking keeps it out.</summary>
+    private bool AddBuff(Entity caster, Entity target, Spell spell)
+    {
+        int tics = BuffRules.Tics(spell, caster.Level);
+        if (tics <= 0)
+            return true; // not a lasting spell after all: only its instant part
+        var replaced = BuffRules.Add(target.BuffList, new Buff(spell, caster.Id, caster.Level, tics), onNpc: !target.IsPlayer);
+        if (replaced is null)
+            return false;
+        UpdateBonuses(target);
+        return true;
+    }
+
+    /// <summary>Mob::CalcBonuses after a buff comes or goes: the fighter, hit points and mana follow.</summary>
+    private void UpdateBonuses(Entity e)
+    {
+        e.Bonuses = StatBonuses.From(e.BuffList);
+        RebuildFighter(e);
+        if (e.Magic is { } magic)
+        {
+            e.MaxMana = SpellRules.MaxMana(e.Fighter.Class, e.Level, magic.Wis + e.Bonuses.Wis, magic.Int + e.Bonuses.Int);
+            if (e.Mana > e.MaxMana)
+                e.Mana = e.MaxMana;
+            _events.Add(new ManaChanged(e.Id, e.Mana, e.MaxMana));
+        }
+        _events.Add(new BuffsChanged(e.Id));
+    }
+
+    /// <summary>A new fighter from the level, the equipment and the buffs; hit points stay within the maximum.</summary>
+    private void RebuildFighter(Entity e)
+    {
+        if (e.IsPlayer)
+        {
+            if (e.Progress?.FighterAt is not { } rebuild)
+                return;
+            e.Fighter = rebuild(e.Level, e.Bonuses);
+        }
+        else if (e.Npc is { } npc)
+        {
+            e.Fighter = Combat.Combatant.ForNpc(npc, e.Bonuses);
+        }
+        e.Hp = Math.Min(e.Hp, e.Fighter.MaxHp);
+        if (e.IsPlayer)
+            _events.Add(new HealthChanged(e.Id, e.Hp, e.Fighter.MaxHp));
+    }
+
+    /// <summary>
+    /// Every tic: damage and heals over time (the caster of a damage spell gets the credit and the
+    /// kill), mana over time, then one tic less on every buff; those that run out fade.
+    /// </summary>
+    private void TickBuffs()
+    {
+        foreach (var e in _entities.Values.Where(x => x.BuffList.Count > 0 && !x.IsCorpse).ToList())
+        {
+            if (!_entities.ContainsKey(e.Id))
+                continue;
+            var b = e.Bonuses;
+            if (b.HpPerTic < 0)
+            {
+                var dot = e.BuffList.FirstOrDefault(x => !x.Spell.Beneficial && x.Spell.Effect.Contains((byte)SpellEffect.CurrentHp));
+                var caster = dot is null ? null : _entities.GetValueOrDefault(dot.CasterId);
+                int damage = Math.Min(-b.HpPerTic, Math.Max(e.Hp, 0) + 1);
+                e.Hp -= damage;
+                if (caster is not null && caster != e)
+                {
+                    caster.LastCombatTime = e.LastCombatTime = _time;
+                    AfterHarm(caster, e, damage);
+                }
+                else if (e.Hp <= 0)
+                {
+                    _events.Add(new Slain(e.Id, e.Name, 0, ""));
+                    if (e.IsPlayer) PlayerDied(e); else Kill(e.Id);
+                }
+                else if (e.IsPlayer)
+                    _events.Add(new HealthChanged(e.Id, e.Hp, e.Fighter.MaxHp));
+                if (!_entities.TryGetValue(e.Id, out var still) || still.IsCorpse || e.BuffList.Count == 0)
+                    continue;
+            }
+            else if (b.HpPerTic > 0 && e.Hp < e.Fighter.MaxHp)
+            {
+                e.Hp = Math.Min(e.Fighter.MaxHp, e.Hp + b.HpPerTic);
+                if (e.IsPlayer)
+                    _events.Add(new HealthChanged(e.Id, e.Hp, e.Fighter.MaxHp));
+            }
+            if (b.ManaPerTic != 0 && e.MaxMana > 0)
+                SetMana(e, e.Mana + b.ManaPerTic);
+            var faded = new List<Buff>();
+            foreach (var buff in e.BuffList)
+                if (buff.TicsLeft < 32767 && --buff.TicsLeft <= 0)
+                    faded.Add(buff);
+            foreach (var buff in faded)
+            {
+                e.BuffList.Remove(buff);
+                _events.Add(new BuffFaded(e.Id, buff.Spell.Id));
+            }
+            if (faded.Count > 0)
+                UpdateBonuses(e);
+            else
+                _events.Add(new BuffsChanged(e.Id));
+        }
     }
 
     private void SetMana(Entity player, int mana)

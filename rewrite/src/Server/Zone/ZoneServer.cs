@@ -148,6 +148,7 @@ public sealed class ZoneServer : IDisposable
                         Send(peer, InventoryOf(me), DeliveryMethod.ReliableOrdered);
                         Send(peer, SpellBookOf(entered.Instance, me), DeliveryMethod.ReliableOrdered);
                         Send(peer, new PlayerMana(me.Mana, me.MaxMana), DeliveryMethod.ReliableOrdered);
+                        Send(peer, BuffsOf(me), DeliveryMethod.ReliableOrdered);
                     }
                 }
                 break;
@@ -259,9 +260,10 @@ public sealed class ZoneServer : IDisposable
         var progress = profile is null ? null : new ZoneInstance.PlayerProgress(profile.Exp, profile.BindZone,
             new Vec3(profile.BindX, profile.BindY, profile.BindZ),
             // The fighter reads the inventory as it is when rebuilt (level up, equipment change).
-            level => EQClassic.Server.Combat.Combatant.ForPlayer(profile with { Level = level, Inventory = inventory!.Items.ToArray() }, Items),
+            (level, bonuses) => EQClassic.Server.Combat.Combatant.ForPlayer(profile with { Level = level, Inventory = inventory!.Items.ToArray() }, Items, bonuses),
             inventory,
-            new ZoneInstance.PlayerMagic(profile.Wis, profile.Int, profile.Skills, profile.SpellBook, profile.SpellGemIds, profile.Mana));
+            new ZoneInstance.PlayerMagic(profile.Wis, profile.Int, profile.Skills, profile.SpellBook, profile.SpellGemIds, profile.Mana,
+                profile.Buffs.Select(b => new ZoneInstance.SavedBuff(b.SpellId, b.CasterLevel, b.Tics)).ToList()));
         var entity = instance.AddPlayer(ticket.CharacterName, ticket.Race, ticket.Gender, profile?.Level ?? ticket.Level, ticket.Position,
             profile?.Heading ?? 0, null, profile?.CurHp, progress);
         _players[peer] = new Player { Instance = instance, EntityId = entity.Id, Ticket = ticket };
@@ -342,6 +344,13 @@ public sealed class ZoneServer : IDisposable
                     break;
                 case ZoneInstance.ManaChanged mana when PeerOf(instance, mana.PlayerId) is { } casterPeer:
                     Send(casterPeer, new PlayerMana(mana.Mana, mana.MaxMana), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.BuffsChanged buffs when PeerOf(instance, buffs.EntityId) is { } buffedPeer && instance.Get(buffs.EntityId) is { } buffed:
+                    Send(buffedPeer, BuffsOf(buffed), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.BuffFaded faded when PeerOf(instance, faded.EntityId) is { } fadedPeer
+                        && instance.SpellById(faded.SpellId) is { Fades.Length: > 0 } fadedSpell:
+                    Send(fadedPeer, new ZoneMessage(fadedSpell.Fades), DeliveryMethod.ReliableOrdered);
                     break;
                 case ZoneInstance.GemsChanged gems when PeerOf(instance, gems.PlayerId) is { } memPeer && instance.Get(gems.PlayerId) is { } memorizer:
                     Send(memPeer, SpellBookOf(instance, memorizer), DeliveryMethod.ReliableOrdered);
@@ -454,6 +463,9 @@ public sealed class ZoneServer : IDisposable
         }
     }
 
+    private static PlayerBuffs BuffsOf(ZoneInstance.Entity p) =>
+        new(p.Buffs.Select(b => new BuffView(b.Spell.Id, b.Spell.Name, b.TicsLeft, b.Spell.Beneficial)).ToList(), p.Bonuses.MovementSpeed);
+
     private static SpellBook SpellBookOf(ZoneInstance instance, ZoneInstance.Entity p)
     {
         var spells = p.Book.Distinct().Select(instance.SpellById).OfType<EQClassic.Server.Spells.Spell>()
@@ -513,6 +525,7 @@ public sealed class ZoneServer : IDisposable
                 Inventory = now.Inventory?.Items.ToArray() ?? p.Inventory, Charges = now.Inventory?.Charges.ToArray() ?? p.Charges,
                 Coins = now.Inventory?.Coins ?? p.Coins,
                 Mana = now.Mana, SpellBook = now.Book, SpellGemIds = now.Gems.ToArray(),
+                Buffs = ZoneInstance.SaveBuffs(now).Select(b => (b.SpellId, b.CasterLevel, b.TicsLeft)).ToArray(),
             }
             : player.Ticket.Profile;
         var ticket = player.Ticket with { Zone = crossed.Line.TargetZone, Position = d, Level = now?.Level ?? player.Ticket.Level, Profile = profile };
@@ -540,8 +553,9 @@ public sealed class ZoneServer : IDisposable
             player.Ticket.Profile is null ? null : state?.Exp, player.Ticket.Profile is null ? null : state?.Level);
         if (player.Ticket.Profile is not null && state?.Inventory is { } inventory)
             Characters?.SaveInventory(player.Ticket.CharacterName, inventory.Items, inventory.Charges, inventory.Coins);
-        if (player.Ticket.Profile is not null && state is not null && state.Book.Length > 0)
-            Characters?.SaveSpells(player.Ticket.CharacterName, state.Book, state.Gems, state.Mana);
+        if (player.Ticket.Profile is not null && state is not null)
+            Characters?.SaveSpells(player.Ticket.CharacterName, state.Book, state.Gems, state.Mana,
+                ZoneInstance.SaveBuffs(state).Select(b => (b.SpellId, b.CasterLevel, b.TicsLeft)).ToList());
         player.Instance.RemovePlayer(player.EntityId);
         foreach (var (other, p) in _players)
             if (p.Instance == player.Instance)

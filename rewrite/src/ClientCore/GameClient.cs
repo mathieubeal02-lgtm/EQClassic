@@ -141,6 +141,8 @@ namespace EQClassic.ClientCore
         public int MaxMana { get; private set; }
         /// <summary>The spell book and the memorised gems (spell ids, −1 when empty), from the server.</summary>
         public SpellBook? SpellBook { get; private set; }
+        /// <summary>The spells lasting on the player (the buff window), from the server.</summary>
+        public PlayerBuffs? Buffs { get; private set; }
         /// <summary>The spell being cast (casting bar) and when it started, or null.</summary>
         public SpellCast? Casting { get; private set; }
         public double CastingSince { get; private set; }
@@ -486,6 +488,11 @@ namespace EQClassic.ClientCore
                 case PlayerMana mana:
                     Mana = mana.Mana;
                     MaxMana = mana.MaxMana;
+                    break;
+                case PlayerBuffs buffs:
+                    Buffs = buffs;
+                    if (Player != null)
+                        Player.SpeedFactor = Math.Max(0.1f, (100 + buffs.MovementSpeed) / 100f);
                     break;
                 case SpellBook book:
                     SpellBook = book;

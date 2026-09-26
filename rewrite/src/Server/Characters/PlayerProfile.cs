@@ -33,6 +33,8 @@ public sealed record PlayerProfile(
     // mana (int16) at 70, INT 127, WIS 129; spell_book[256] and spell_memory[8] (int16, 0xFFFF: empty).
     public const int ManaOffset = 70, IntOffset = 127, WisOffset = 129;
     public const int SpellBookOffset = 1878, SpellBookSlots = 256, SpellGemsOffset = 2390, SpellGems = 8;
+    // buffs[15] at 648, SpellBuff_Struct of 10 bytes: caster level at +1, spell id (0xFFFF: none) at +4, tics at +6.
+    public const int BuffsOffset = 648, BuffSize = 10, BuffSlots = 15;
 
     // Combat fields (zone server). Empty arrays when the profile is too short to hold them.
     public int CurHp { get; init; }
@@ -57,6 +59,8 @@ public sealed record PlayerProfile(
     public IReadOnlyList<int> SpellBook { get; init; } = Array.Empty<int>();
     /// <summary>Spell ids memorised in the 8 gems, −1 for an empty gem.</summary>
     public IReadOnlyList<int> SpellGemIds { get; init; } = Array.Empty<int>();
+    /// <summary>Buffs on the character: spell id, caster level, tics left.</summary>
+    public IReadOnlyList<(int SpellId, int CasterLevel, int Tics)> Buffs { get; init; } = Array.Empty<(int, int, int)>();
 
     public uint Exp { get; init; }
     /// <summary>Where death sends the character (bind point, slot 0); empty zone when unknown.</summary>
@@ -100,6 +104,7 @@ public sealed record PlayerProfile(
             Mana = BinaryPrimitives.ReadInt16LittleEndian(profile[ManaOffset..]),
             SpellBook = ReadSpells(profile, SpellBookOffset, SpellBookSlots),
             SpellGemIds = ReadSpells(profile, SpellGemsOffset, SpellGems),
+            Buffs = ReadBuffs(profile),
             Inventory = ReadInventory(profile),
             Charges = ReadCharges(profile),
             Coins = new EQClassic.Server.Zone.Coins(
@@ -117,6 +122,20 @@ public sealed record PlayerProfile(
         for (int i = 0; i < InventorySlots; i++)
             slots[i] = BinaryPrimitives.ReadUInt16LittleEndian(profile[(InventoryOffset + 2 * i)..]) is var id && id != 0xFFFF ? id : 0; // 0xFFFF: empty
         return slots;
+    }
+
+    private static List<(int, int, int)> ReadBuffs(ReadOnlySpan<byte> profile)
+    {
+        var buffs = new List<(int, int, int)>();
+        for (int i = 0; i < BuffSlots; i++)
+        {
+            var b = profile.Slice(BuffsOffset + BuffSize * i, BuffSize);
+            int spell = BinaryPrimitives.ReadUInt16LittleEndian(b[4..]);
+            int tics = BinaryPrimitives.ReadInt32LittleEndian(b[6..]);
+            if (spell is not (0xFFFF or 0) && tics > 0)
+                buffs.Add((spell, b[1], tics));
+        }
+        return buffs;
     }
 
     private static int[] ReadSpells(ReadOnlySpan<byte> profile, int offset, int count)

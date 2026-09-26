@@ -1,4 +1,5 @@
 using EQClassic.Server.Combat;
+using EQClassic.Server.Spells;
 using EQClassic.Shared.World;
 using EQClassic.Shared.Zone;
 
@@ -94,6 +95,10 @@ public sealed partial class ZoneInstance
         public int[] Gems { get; internal set; } = Array.Empty<int>();
         public Casting? Cast { get; internal set; }
         internal PlayerMagic? Magic;
+        /// <summary>Spells lasting on the entity (at most 15), and what they add up to.</summary>
+        public IReadOnlyList<Buff> Buffs => BuffList;
+        internal readonly List<Buff> BuffList = new();
+        public StatBonuses Bonuses { get; internal set; } = StatBonuses.None;
     }
 
     public abstract record ZoneEvent;
@@ -220,7 +225,7 @@ public sealed partial class ZoneInstance
         player.Progress = progress;
         player.Exp = progress?.Exp ?? 0;
         player.Inventory = progress?.Inventory ?? new PlayerInventory();
-        player.Fighter = fighter ?? progress?.FighterAt?.Invoke(level) ?? DefaultPlayer(level);
+        player.Fighter = fighter ?? progress?.FighterAt?.Invoke(level, StatBonuses.None) ?? DefaultPlayer(level);
         player.Hp = hp is int h && h > 0 && h <= player.Fighter.MaxHp ? h : player.Fighter.MaxHp;
         player.EntryPosition = position;
         SetUpMagic(player, progress?.Magic);
@@ -228,7 +233,8 @@ public sealed partial class ZoneInstance
     }
 
     /// <summary>What a player brings besides position: experience, bind point, and their fighter at any level.</summary>
-    public sealed record PlayerProgress(uint Exp, string BindZone, Vec3 Bind, Func<int, Combatant>? FighterAt, PlayerInventory? Inventory = null,
+    /// <param name="FighterAt">The player's fighter at a level with the bonuses of their buffs (from the profile and items).</param>
+    public sealed record PlayerProgress(uint Exp, string BindZone, Vec3 Bind, Func<int, StatBonuses, Combatant>? FighterAt, PlayerInventory? Inventory = null,
         PlayerMagic? Magic = null);
 
     private static Combatant DefaultPlayer(int level) =>
@@ -382,7 +388,8 @@ public sealed partial class ZoneInstance
         double elapsed = Math.Max(_time - player.LastMoveTime, 0.05);
         float moveX = to.X - player.Position.X, moveY = to.Y - player.Position.Y;
         float distance = MathF.Sqrt(moveX * moveX + moveY * moveY);
-        if (distance > MaxPlayerSpeed * elapsed + MoveTolerance)
+        float speed = MaxPlayerSpeed * Math.Max(1f, (100 + player.Bonuses.MovementSpeed) / 100f); // spirit of wolf and the like
+        if (distance > speed * elapsed + MoveTolerance)
             return $"moved {distance:0} units in {elapsed:0.00} s";
         // Falling is free (the legacy server checked nothing); climbing is limited to jumps and steps.
         float climb = to.Z - player.Position.Z;
@@ -515,12 +522,8 @@ public sealed partial class ZoneInstance
         (inventory.Items[from], inventory.Items[to]) = (inventory.Items[to], inventory.Items[from]);
         (inventory.Charges[from], inventory.Charges[to]) = (inventory.Charges[to], inventory.Charges[from]);
         _events.Add(new InventoryChanged(playerId));
-        if ((from < PlayerInventory.FirstGeneral || to < PlayerInventory.FirstGeneral) && player.Progress?.FighterAt is { } rebuild)
-        {
-            player.Fighter = rebuild(player.Level);
-            player.Hp = Math.Min(player.Hp, player.Fighter.MaxHp);
-            _events.Add(new HealthChanged(player.Id, player.Hp, player.Fighter.MaxHp));
-        }
+        if (from < PlayerInventory.FirstGeneral || to < PlayerInventory.FirstGeneral)
+            RebuildFighter(player);
     }
 
     private const int PrimarySlot = 13, SecondarySlot = 14;
@@ -664,6 +667,8 @@ public sealed partial class ZoneInstance
 
         AdvanceCasting();
         Fight(seconds);
+        if (_time >= _nextRegen)
+            TickBuffs(); // before the regeneration below moves _nextRegen: same 6 s tic
         Regenerate();
         RotCorpses();
 
@@ -800,12 +805,7 @@ public sealed partial class ZoneInstance
             _events.Add(new Told(player.Id, level > player.Level
                 ? $"You have gained a level! Welcome to level {level}!" : $"You have lost a level! Welcome to level {level}!"));
             player.Level = level;
-            if (player.Progress?.FighterAt is { } rebuild)
-            {
-                player.Fighter = rebuild(level);
-                player.Hp = Math.Min(player.Hp, player.Fighter.MaxHp);
-                _events.Add(new HealthChanged(player.Id, player.Hp, player.Fighter.MaxHp));
-            }
+            RebuildFighter(player);
             RecalculateMana(player);
         }
         _events.Add(new ExperienceChanged(player.Id, player.Exp, player.Level));
@@ -824,6 +824,11 @@ public sealed partial class ZoneInstance
         player.PlayerTargetId = null;
         player.Sitting = false;
         player.Cast = null;
+        if (player.BuffList.Count > 0)
+        {
+            player.BuffList.Clear(); // death takes every buff away
+            UpdateBonuses(player);
+        }
         uint loss = Experience.DeathLoss(player.Level, player.Exp);
         if (loss > 0)
             SetExperience(player, player.Exp - loss);
