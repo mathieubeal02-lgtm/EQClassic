@@ -248,6 +248,30 @@ namespace EQClassic.Unity
             return File.Exists(path) ? ZoneRegions.Load(path) : null;
         }
 
+        /// <summary>
+        /// The model's armour and helmet. A helmet the model has no mesh for makes Lantern's variant
+        /// handlers hide the bare head (or, on one-mesh models like the Qeynos guards, the whole body):
+        /// when meshes went missing, the armour is set again without the helmet.
+        /// </summary>
+        private static void ApplyVariant(GameObject model, int texture, int helm)
+        {
+            if (texture == 0 && helm == 0)
+                return;
+            int before = model.GetComponentsInChildren<SkinnedMeshRenderer>(false).Length;
+            void Set(int h)
+            {
+                var npc = model.GetComponentInChildren<Lantern.EQ.Equipment.NonPlayableVariantHandler>();
+                if (npc != null)
+                    npc.SetCurrentActiveVariant(texture, h);
+                var armour = model.GetComponentInChildren<Lantern.EQ.Equipment.Equipment2dHandler>();
+                if (armour != null)
+                    armour.SetArmorSetActive(texture, h);
+            }
+            Set(helm);
+            if (helm != 0 && model.GetComponentsInChildren<SkinnedMeshRenderer>(false).Length < before)
+                Set(0);
+        }
+
         private void AddEntity(ZoneView.EntityView entity)
         {
             if (!ModelCodes.IsKnown(entity.Spawn.Race) && _missingModels.Add("race " + entity.Spawn.Race))
@@ -266,12 +290,7 @@ namespace EQClassic.Unity
                 model.transform.localScale = model.transform.localScale * ModelCodes.Scale(entity.Spawn.Race, entity.Spawn.Size);
                 model.transform.localPosition = new Vector3(0f, FeetOffset(model), 0f);
                 // The armour and helmet the server gives (NPC texture / helmtexture, a player's chest and head material).
-                var npcVariants = model.GetComponentInChildren<Lantern.EQ.Equipment.NonPlayableVariantHandler>();
-                if (npcVariants != null)
-                    npcVariants.SetCurrentActiveVariant(entity.Spawn.Texture, entity.Spawn.Helm);
-                var armour = model.GetComponentInChildren<Lantern.EQ.Equipment.Equipment2dHandler>();
-                if (armour != null)
-                    armour.SetArmorSetActive(entity.Spawn.Texture, entity.Spawn.Helm);
+                ApplyVariant(model, entity.Spawn.Texture, entity.Spawn.Helm);
                 var controller = model.GetComponentInChildren<CharacterAnimationController>();
                 if (entity.Spawn.IsCorpse)
                 {

@@ -41,6 +41,8 @@ namespace UnityEngine
         public T LoadAsset<T>(string name) where T : Object => default;
     }
 
+    public class SkinnedMeshRenderer : Renderer { }
+
     public class Renderer : Component
     {
         public bool enabled { get; set; }
