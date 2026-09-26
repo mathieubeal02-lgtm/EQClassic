@@ -75,6 +75,11 @@ public static class MessageCodec
                 MessageType.TimeOfDay => TimeOfDay.ReadFields(reader),
                 MessageType.CreationOptionsRequest => new CreationOptionsRequest(),
                 MessageType.CreationOptionsResponse => CreationOptionsResponse.ReadFields(reader),
+                MessageType.LootRequest => LootRequest.ReadFields(reader),
+                MessageType.LootTake => LootTake.ReadFields(reader),
+                MessageType.LootEnd => LootEnd.ReadFields(reader),
+                MessageType.LootContents => LootContents.ReadFields(reader),
+                MessageType.PlayerInventory => PlayerInventory.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

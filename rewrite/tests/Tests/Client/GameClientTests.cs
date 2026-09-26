@@ -8,6 +8,7 @@ using EQClassic.Server.Zone;
 using EQClassic.Shared.Characters;
 using EQClassic.Shared.Login;
 using EQClassic.Shared.World;
+using EQClassic.Shared.Zone;
 using EQClassic.Tests.Characters;
 
 namespace EQClassic.Tests.Client;
@@ -31,13 +32,21 @@ public sealed class GameClientTests : IDisposable
         var zoneData = new InMemoryZoneDataSource();
         zoneData.Zones["grobb"] = new ZoneData("grobb",
             [new SpawnPoint(1, new Vec3(0, 0, 4), 0, 3, [(new NpcTemplate(52001, "a_troll_guard", 9, 0, 20, 8f), 100)]),
-             new SpawnPoint(2, new Vec3(14, 12, 4), 0, 0, [(new NpcTemplate(1, "a_rat01", 36, 2, 1, 2f) { Combat = new NpcCombatStats(1, 16, 1, 4, AC: 5) }, 100)])],
+             new SpawnPoint(2, new Vec3(14, 12, 4), 0, 0, [(new NpcTemplate(1, "a_rat01", 36, 2, 1, 2f) { Combat = new NpcCombatStats(1, 16, 1, 4, AC: 5), LoottableId = 137 }, 100)])],
             new Dictionary<int, Grid> { [3] = new Grid(3, GridType.BackAndForth, [new Waypoint(new Vec3(0, 0, 4), 0), new Waypoint(new Vec3(0, 200, 4), 0)]) },
             [new ZoneLine(396, new Vec3(50.34f, -129.93f, 3.13f), 20, "innothule", new Vec3(-612.29f, -2789.26f, -31.44f))],
             [new Door(1, "DOOR1", new Vec3(15, 10, 4), 128, 0), new Door(2, "CELLDOOR", new Vec3(10, 34, 4), 0, 0, KeyItem: 1)]);
         zoneData.Zones["innothule"] = new ZoneData("innothule", [], new Dictionary<int, Grid>());
         var keys = new ZoneKeys();
-        _zones = new ZoneServer(keys, n => zoneData.Load(n) is { } d ? new ZoneInstance(d) : null) { Characters = _characters };
+        var loot = new InMemoryLootSource();
+        loot.Tables[137] = new LootTable(137, 25, 25, 0, [(1, 1, 100)]); // 2 silver 5 copper and rat whiskers
+        loot.Drops[1] = [(13071, 1, 1)];
+        var items = new EQClassic.Server.Combat.InMemoryItemSource();
+        items.Items[13071] = new EQClassic.Server.Combat.ItemStats(13071, "Rat Whiskers", 0, 0, 11, 0);
+        _zones = new ZoneServer(keys, n => zoneData.Load(n) is { } d ? new ZoneInstance(d) { Loot = loot, Items = items } : null)
+        {
+            Characters = _characters, Items = items,
+        };
         _zones.Start(0);
         var creation = new InMemoryCreationData();
         creation.StartPositions[("grobb", 9, 10)] = (40, -60, 3.13f); // 70 units from the zone line
@@ -235,6 +244,29 @@ public sealed class GameClientTests : IDisposable
         Assert.True(Run(() => client.CreationOptions is not null));
         Assert.Equal(2, client.CreationOptions!.Count);
         Assert.Contains(new CreationOption(1, 1, 140, 1, "qeynos"), client.CreationOptions);
+    }
+
+    [Fact]
+    public void Loots_a_corpse_into_the_inventory()
+    {
+        var client = InZone("Qbot");
+        var lines = new List<string>();
+        client.MessageReceived += lines.Add;
+        Assert.True(Run(() => client.Inventory is not null));
+        var zone = _zones.Instance("grobb")!;
+        var rat = zone.Entities.Single(e => e.Name == "a_rat01");
+        zone.Kill(rat.Id, client.Player!.EntityId);            // as if Qbot had killed it; the server broadcasts on its next tick
+        Run(() => client.Zone!.Entities.Any(e => e.Spawn.IsCorpse));
+
+        client.Loot();
+        Assert.True(Run(() => client.LootingCorpse is not null), string.Join(" | ", lines));
+        Assert.Equal("Rat Whiskers", Assert.Single(client.LootItems).Name);
+        Assert.True(Run(() => client.Inventory!.Silver == 2 && client.Inventory.Copper == 5));
+        client.TakeLoot(0);
+        Assert.True(Run(() => client.Inventory!.Slots[22].Name == "Rat Whiskers"), string.Join(" | ", lines));
+        Assert.Contains("You have looted a Rat Whiskers.", lines);
+        client.EndLoot();
+        Assert.True(Run(() => !client.Zone!.Entities.Any(e => e.Spawn.IsCorpse)), "the empty corpse stayed");
     }
 
     [Fact]

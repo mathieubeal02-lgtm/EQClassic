@@ -8,8 +8,9 @@ namespace EQClassic.ClientCore
     /// </summary>
     public static class CombatText
     {
-        /// <summary>"a_rat01" → "a rat".</summary>
-        public static string DisplayName(string name) => name.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9').Replace('_', ' ').Trim();
+        /// <summary>"a_rat01" → "a rat", "a_rat01's_corpse" → "a rat's corpse": digits dropped, underscores as spaces.</summary>
+        public static string DisplayName(string name) =>
+            new string(System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Where(name, c => c < '0' || c > '9'))).Replace('_', ' ').Trim();
 
         /// <param name="nameOf">Display name of an entity id (null when unknown).</param>
         public static string Describe(CombatEvent swing, int yourId, System.Func<int, string?> nameOf)

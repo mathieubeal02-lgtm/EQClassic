@@ -20,7 +20,8 @@ namespace EQClassic.Shared.Zone
     }
 
     /// <summary>An entity as a client first sees it (legacy NewSpawn / zone spawn list).</summary>
-    public sealed record EntitySpawn(int Id, string Name, bool IsPlayer, int Race, int Gender, int Level, float Size, float X, float Y, float Z, float Heading);
+    public sealed record EntitySpawn(int Id, string Name, bool IsPlayer, int Race, int Gender, int Level, float Size, float X, float Y, float Z, float Heading,
+        bool IsCorpse = false);
 
     public sealed record ZoneEnterResponse(bool Accepted, string Message, string Zone, int YourEntityId, IReadOnlyList<EntitySpawn> Entities) : IMessage
     {
@@ -48,6 +49,7 @@ namespace EQClassic.Shared.Zone
                 writer.Put(e.Y);
                 writer.Put(e.Z);
                 writer.Put(e.Heading);
+                writer.Put(e.IsCorpse);
             }
         }
 
@@ -60,7 +62,7 @@ namespace EQClassic.Shared.Zone
             var list = new List<EntitySpawn>(count);
             for (int i = 0; i < count; i++)
                 list.Add(new EntitySpawn(reader.GetInt(), reader.GetString(), reader.GetBool(), reader.GetUShort(), reader.GetByte(), reader.GetByte(),
-                    reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat()));
+                    reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetBool()));
             return new ZoneEnterResponse(accepted, message, zone, you, list);
         }
 
@@ -494,5 +496,93 @@ namespace EQClassic.Shared.Zone
 
         public static TimeOfDay ReadFields(NetDataReader reader) =>
             new TimeOfDay(reader.GetByte(), reader.GetByte(), reader.GetByte(), reader.GetByte(), reader.GetUShort());
+    }
+
+    /// <summary>An item as the client shows it: id, name, charges (0 when not stackable).</summary>
+    public sealed record ItemView(int ItemId, string Name, int Charges);
+
+    internal static class ItemViews
+    {
+        public static void Write(NetDataWriter writer, IReadOnlyList<ItemView> items)
+        {
+            writer.Put((ushort)items.Count);
+            foreach (var i in items)
+            {
+                writer.Put(i.ItemId);
+                writer.Put(i.Name);
+                writer.Put((short)i.Charges);
+            }
+        }
+
+        public static List<ItemView> Read(NetDataReader reader)
+        {
+            int count = reader.GetUShort();
+            var list = new List<ItemView>(count);
+            for (int n = 0; n < count; n++)
+                list.Add(new ItemView(reader.GetInt(), reader.GetString(), reader.GetShort()));
+            return list;
+        }
+    }
+
+    /// <summary>Client to zone server: open a corpse (legacy OP_LootRequest).</summary>
+    public sealed record LootRequest(int CorpseId) : IMessage
+    {
+        public MessageType Type => MessageType.LootRequest;
+        public void WriteFields(NetDataWriter writer) => writer.Put(CorpseId);
+        public static LootRequest ReadFields(NetDataReader reader) => new LootRequest(reader.GetInt());
+    }
+
+    /// <summary>Client to zone server: take the item at this position of the loot window (legacy OP_LootItem).</summary>
+    public sealed record LootTake(int CorpseId, int Index) : IMessage
+    {
+        public MessageType Type => MessageType.LootTake;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(CorpseId);
+            writer.Put((byte)Index);
+        }
+
+        public static LootTake ReadFields(NetDataReader reader) => new LootTake(reader.GetInt(), reader.GetByte());
+    }
+
+    /// <summary>Client to zone server: close the loot window (legacy OP_EndLootRequest).</summary>
+    public sealed record LootEnd(int CorpseId) : IMessage
+    {
+        public MessageType Type => MessageType.LootEnd;
+        public void WriteFields(NetDataWriter writer) => writer.Put(CorpseId);
+        public static LootEnd ReadFields(NetDataReader reader) => new LootEnd(reader.GetInt());
+    }
+
+    /// <summary>Zone server to the looter: what is left on the corpse.</summary>
+    public sealed record LootContents(int CorpseId, IReadOnlyList<ItemView> Items) : IMessage
+    {
+        public MessageType Type => MessageType.LootContents;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(CorpseId);
+            ItemViews.Write(writer, Items);
+        }
+
+        public static LootContents ReadFields(NetDataReader reader) => new LootContents(reader.GetInt(), ItemViews.Read(reader));
+    }
+
+    /// <summary>Zone server to the player: the 30 inventory slots (worn 0-21, general 22-29) and money.</summary>
+    public sealed record PlayerInventory(IReadOnlyList<ItemView> Slots, int Platinum, int Gold, int Silver, int Copper) : IMessage
+    {
+        public MessageType Type => MessageType.PlayerInventory;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            ItemViews.Write(writer, Slots);
+            writer.Put(Platinum);
+            writer.Put(Gold);
+            writer.Put(Silver);
+            writer.Put(Copper);
+        }
+
+        public static PlayerInventory ReadFields(NetDataReader reader) =>
+            new PlayerInventory(ItemViews.Read(reader), reader.GetInt(), reader.GetInt(), reader.GetInt(), reader.GetInt());
     }
 }

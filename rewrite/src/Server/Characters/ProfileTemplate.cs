@@ -52,6 +52,14 @@ public static class ProfileTemplate
         }
     }
 
+    public static void SetCoins(byte[] p, EQClassic.Server.Zone.Coins c)
+    {
+        BinaryPrimitives.WriteInt32LittleEndian(p.AsSpan(PlayerProfile.CoinsOffset), c.Platinum);
+        BinaryPrimitives.WriteInt32LittleEndian(p.AsSpan(PlayerProfile.CoinsOffset + 4), c.Gold);
+        BinaryPrimitives.WriteInt32LittleEndian(p.AsSpan(PlayerProfile.CoinsOffset + 8), c.Silver);
+        BinaryPrimitives.WriteInt32LittleEndian(p.AsSpan(PlayerProfile.CoinsOffset + 12), c.Copper);
+    }
+
     public static void SetExp(byte[] p, uint exp) => BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(PlayerProfile.ExpOffset), exp);
     public static void SetCurHp(byte[] p, int hp) => BinaryPrimitives.WriteInt16LittleEndian(p.AsSpan(PlayerProfile.CurHpOffset), (short)Math.Clamp(hp, 0, short.MaxValue));
 

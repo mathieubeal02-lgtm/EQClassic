@@ -99,7 +99,7 @@ namespace UnityEngine
     public enum LightType { Spot, Directional, Point }
     public enum KeyCode
     {
-        Tab = 9, Escape = 27, Space = 32, Q = 113, C = 99, E = 101, F = 102, R = 114, T = 116, U = 117, X = 120, Numlock = 300, RightShift = 303, LeftShift = 304,
+        Tab = 9, Escape = 27, Space = 32, Q = 113, C = 99, E = 101, F = 102, I = 105, L = 108, R = 114, T = 116, U = 117, X = 120, Numlock = 300, RightShift = 303, LeftShift = 304,
         Home = 278, PageUp = 280, PageDown = 281, F9 = 290, Return = 13, KeypadEnter = 271, Slash = 47,
     }
     public enum RuntimeInitializeLoadType { AfterSceneLoad, BeforeSceneLoad }
@@ -193,6 +193,20 @@ namespace UnityEngine
         public Texture2D(int width, int height) { }
         public void SetPixel(int x, int y, Color color) { }
         public void Apply() { }
+    }
+
+    public enum WrapMode { Default = 0, Once = 1, Loop = 2, PingPong = 4, ClampForever = 8 }
+
+    public sealed class AnimationState
+    {
+        public string name => "";
+        public WrapMode wrapMode { get; set; }
+    }
+
+    public sealed class Animation : Behaviour, System.Collections.IEnumerable
+    {
+        public bool Play(string animation) => false;
+        public System.Collections.IEnumerator GetEnumerator() => System.Linq.Enumerable.Empty<AnimationState>().GetEnumerator();
     }
 
     public enum EventType { KeyDown = 4 }

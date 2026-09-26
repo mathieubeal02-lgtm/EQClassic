@@ -19,6 +19,9 @@ public interface ICharacterStore
     /// </summary>
     /// <param name="hp">Current hit points to save too (cur_hp), or null to keep them; the same for experience and level.</param>
     void SavePosition(string name, string zone, float x, float y, float z, int? hp = null, uint? exp = null, int? level = null);
+
+    /// <summary>The 30 inventory slots (item ids and charges) and the money, into the profile.</summary>
+    void SaveInventory(string name, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins);
 }
 
 public static class CharacterStoreExtensions
@@ -68,6 +71,24 @@ public sealed class InMemoryCharacterStore : ICharacterStore
             if (level is int l)
                 ProfileTemplate.SetLevel(raw, l);
         }
+    }
+
+    public void SaveInventory(string name, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins)
+    {
+        int i = _characters.FindIndex(c => string.Equals(c.Profile.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (i < 0)
+            return;
+        var c = _characters[i];
+        _characters[i] = c with { Profile = c.Profile with { Inventory = items.ToArray(), Charges = charges.ToArray(), Coins = coins } };
+        if (Profiles.TryGetValue(name, out var raw))
+            WriteInventory(raw, items, charges, coins);
+    }
+
+    internal static void WriteInventory(byte[] profile, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins)
+    {
+        for (int slot = 0; slot < Math.Min(30, items.Count); slot++)
+            ProfileTemplate.SetItem(profile, slot, items[slot] == 0 ? (ushort)0xFFFF : (ushort)items[slot], (sbyte)Math.Clamp(charges[slot], sbyte.MinValue, sbyte.MaxValue));
+        ProfileTemplate.SetCoins(profile, coins);
     }
 
     /// <summary>Raw profiles of created characters (tests).</summary>
@@ -134,6 +155,37 @@ public sealed class MySqlCharacterStore : ICharacterStore
             ProfileTemplate.SetExp(profile, e);
         if (level is int l)
             ProfileTemplate.SetLevel(profile, l);
+        using (var update = connection.CreateCommand())
+        {
+            update.Transaction = tx;
+            update.CommandText = $"UPDATE `{_table}` SET profile = @profile WHERE name = @name";
+            update.Parameters.AddWithValue("@profile", profile);
+            update.Parameters.AddWithValue("@name", name);
+            update.ExecuteNonQuery();
+        }
+        tx.Commit();
+    }
+
+    public void SaveInventory(string name, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins) =>
+        Update(name, profile => InMemoryCharacterStore.WriteInventory(profile, items, charges, coins));
+
+    /// <summary>Read-modify-write of one profile in a transaction.</summary>
+    private void Update(string name, Action<byte[]> change)
+    {
+        using var connection = new MySqlConnection(_connectionString);
+        connection.Open();
+        using var tx = connection.BeginTransaction();
+        byte[]? profile;
+        using (var select = connection.CreateCommand())
+        {
+            select.Transaction = tx;
+            select.CommandText = $"SELECT profile FROM `{_table}` WHERE name = @name FOR UPDATE";
+            select.Parameters.AddWithValue("@name", name);
+            profile = select.ExecuteScalar() as byte[];
+        }
+        if (profile is null || profile.Length < PlayerProfile.MinimumLength)
+            return;
+        change(profile);
         using (var update = connection.CreateCommand())
         {
             update.Transaction = tx;

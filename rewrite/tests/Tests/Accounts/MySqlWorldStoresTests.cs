@@ -101,6 +101,14 @@ public sealed class MySqlWorldStoresTests : IDisposable
         store.SavePosition("Qwalker", "innothule", 0, 0, 0, hp: 57, exp: 123_456, level: 12);
         p = store.ListForAccount(24).Single().Profile;
         Assert.Equal((57, 123_456u, 12), (p.CurHp, p.Exp, p.Level));
+
+        var items = new int[30];
+        var charges = new int[30];
+        (items[13], items[22], charges[22]) = (5019, 13071, 3);
+        store.SaveInventory("Qwalker", items, charges, new EQClassic.Server.Zone.Coins(1, 2, 3, 4));
+        p = store.ListForAccount(24).Single().Profile;
+        Assert.Equal((5019, 13071, 3, 0), (p.Inventory[13], p.Inventory[22], p.Charges[22], p.Inventory[29]));
+        Assert.Equal(new EQClassic.Server.Zone.Coins(1, 2, 3, 4), p.Coins);
     }
 
     private void Insert(string cs, int account, string name, byte[]? profile)

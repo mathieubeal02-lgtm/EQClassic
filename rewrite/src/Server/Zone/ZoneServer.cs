@@ -111,6 +111,9 @@ public sealed class ZoneServer : IDisposable
 
     public void Dispose() => _net.Stop();
 
+    /// <summary>A running zone, if booted (tests, administration).</summary>
+    public ZoneInstance? Instance(string zone) => _instances.GetValueOrDefault(zone);
+
     private static float Distance2(Vec3 a, Vec3 b) => (a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y) + (a.Z - b.Z) * (a.Z - b.Z);
 
     private void OnReceive(NetPeer peer, NetPacketReader reader, byte channel, DeliveryMethod method)
@@ -142,6 +145,7 @@ public sealed class ZoneServer : IDisposable
                     {
                         Send(peer, new PlayerHealth(me.Hp, me.Fighter.MaxHp), DeliveryMethod.ReliableOrdered);
                         Send(peer, ExperienceOf(me), DeliveryMethod.ReliableOrdered);
+                        Send(peer, InventoryOf(me), DeliveryMethod.ReliableOrdered);
                     }
                 }
                 break;
@@ -157,6 +161,21 @@ public sealed class ZoneServer : IDisposable
 
             case WhoRequest when _players.TryGetValue(peer, out var asker):
                 Who(peer, asker);
+                break;
+
+            case LootRequest loot when _players.TryGetValue(peer, out var looter):
+                looter.Instance.OpenLoot(looter.EntityId, loot.CorpseId);
+                Broadcast(looter.Instance, looter.Instance.DrainEvents());
+                break;
+
+            case LootTake take when _players.TryGetValue(peer, out var taker):
+                taker.Instance.TakeLoot(taker.EntityId, take.CorpseId, take.Index);
+                Broadcast(taker.Instance, taker.Instance.DrainEvents());
+                break;
+
+            case LootEnd end when _players.TryGetValue(peer, out var closer):
+                closer.Instance.CloseLoot(closer.EntityId, end.CorpseId);
+                Broadcast(closer.Instance, closer.Instance.DrainEvents());
                 break;
 
             case ConsiderRequest consider when _players.TryGetValue(peer, out var considerer):
@@ -216,7 +235,8 @@ public sealed class ZoneServer : IDisposable
         var profile = ticket.Profile;
         var progress = profile is null ? null : new ZoneInstance.PlayerProgress(profile.Exp, profile.BindZone,
             new Vec3(profile.BindX, profile.BindY, profile.BindZ),
-            level => EQClassic.Server.Combat.Combatant.ForPlayer(profile with { Level = level }, Items));
+            level => EQClassic.Server.Combat.Combatant.ForPlayer(profile with { Level = level }, Items),
+            ZoneInstance.PlayerInventory.From(profile.Inventory, profile.Charges, profile.Coins));
         var entity = instance.AddPlayer(ticket.CharacterName, ticket.Race, ticket.Gender, profile?.Level ?? ticket.Level, ticket.Position,
             profile?.Heading ?? 0, null, profile?.CurHp, progress);
         _players[peer] = new Player { Instance = instance, EntityId = entity.Id, Ticket = ticket };
@@ -266,6 +286,12 @@ public sealed class ZoneServer : IDisposable
                     break;
                 case ZoneInstance.ExperienceChanged xp when PeerOf(instance, xp.PlayerId) is { } learner && instance.Get(xp.PlayerId) is { } who:
                     Send(learner, ExperienceOf(who), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.LootShown shown when PeerOf(instance, shown.PlayerId) is { } looterPeer:
+                    Send(looterPeer, new LootContents(shown.CorpseId, shown.Items.Select(i => View(i.ItemId, i.Charges)).ToList()), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.InventoryChanged changed when PeerOf(instance, changed.PlayerId) is { } ownerPeer && instance.Get(changed.PlayerId) is { } owner:
+                    Send(ownerPeer, InventoryOf(owner), DeliveryMethod.ReliableOrdered);
                     break;
                 case ZoneInstance.AppearanceChanged appearance:
                     SendToZone(instance, new EntityAppearance(appearance.EntityId, appearance.Sitting));
@@ -358,8 +384,8 @@ public sealed class ZoneServer : IDisposable
         }
     }
 
-    /// <summary>NPC names as the client shows them: "a_rat01" → "a rat".</summary>
-    public static string DisplayName(string name) => name.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9').Replace('_', ' ').Trim();
+    /// <summary>NPC names as the client shows them: "a_rat01" → "a rat", digits dropped anywhere.</summary>
+    public static string DisplayName(string name) => new string(name.Where(c => !char.IsAsciiDigit(c)).ToArray()).Replace('_', ' ').Trim();
 
     private void SendNear(ZoneInstance instance, Vec3 at, IMessage message)
     {
@@ -367,6 +393,17 @@ public sealed class ZoneServer : IDisposable
         foreach (var (peer, player) in _players)
             if (player.Instance == instance && instance.Get(player.EntityId) is { } p && Distance2(p.Position, at) <= range2)
                 Send(peer, message, DeliveryMethod.ReliableOrdered);
+    }
+
+    private ItemView View(int itemId, int charges) =>
+        new(itemId, itemId == 0 ? "" : Items?.Get(itemId)?.Name ?? $"item #{itemId}", charges);
+
+    private PlayerInventory InventoryOf(ZoneInstance.Entity p)
+    {
+        var inventory = p.Inventory ?? new ZoneInstance.PlayerInventory();
+        var slots = Enumerable.Range(0, ZoneInstance.PlayerInventory.Slots).Select(i => View(inventory.Items[i], inventory.Charges[i])).ToList();
+        var c = inventory.Coins;
+        return new PlayerInventory(slots, c.Platinum, c.Gold, c.Silver, c.Copper);
     }
 
     private static PlayerExperience ExperienceOf(ZoneInstance.Entity p) =>
@@ -391,7 +428,12 @@ public sealed class ZoneServer : IDisposable
         // The next zone starts from the character as it is now (level, experience, hit points), not as World read it.
         var now = instance.Get(player.EntityId);
         var profile = player.Ticket.Profile is { } p && now is not null
-            ? p with { Level = now.Level, Exp = now.Exp, CurHp = now.Hp, Zone = crossed.Line.TargetZone, X = d.X, Y = d.Y, Z = d.Z }
+            ? p with
+            {
+                Level = now.Level, Exp = now.Exp, CurHp = now.Hp, Zone = crossed.Line.TargetZone, X = d.X, Y = d.Y, Z = d.Z,
+                Inventory = now.Inventory?.Items.ToArray() ?? p.Inventory, Charges = now.Inventory?.Charges.ToArray() ?? p.Charges,
+                Coins = now.Inventory?.Coins ?? p.Coins,
+            }
             : player.Ticket.Profile;
         var ticket = player.Ticket with { Zone = crossed.Line.TargetZone, Position = d, Level = now?.Level ?? player.Ticket.Level, Profile = profile };
         var key = _keys.Issue(ticket);
@@ -416,6 +458,8 @@ public sealed class ZoneServer : IDisposable
         var state = player.Instance.Get(player.EntityId);
         Characters?.SavePosition(player.Ticket.CharacterName, zone, at.X, at.Y, at.Z, state?.Hp,
             player.Ticket.Profile is null ? null : state?.Exp, player.Ticket.Profile is null ? null : state?.Level);
+        if (player.Ticket.Profile is not null && state?.Inventory is { } inventory)
+            Characters?.SaveInventory(player.Ticket.CharacterName, inventory.Items, inventory.Charges, inventory.Coins);
         player.Instance.RemovePlayer(player.EntityId);
         foreach (var (other, p) in _players)
             if (p.Instance == player.Instance)

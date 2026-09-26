@@ -148,6 +148,41 @@ namespace EQClassic.ClientCore
             Fail("You have camped. Log in again to play.");
         }
 
+        /// <summary>Inventory slots and money, from the server.</summary>
+        public PlayerInventory? Inventory { get; private set; }
+        /// <summary>The corpse being looted and what is left on it (the loot window), or null.</summary>
+        public int? LootingCorpse { get; private set; }
+        public IReadOnlyList<ItemView> LootItems { get; private set; } = Array.Empty<ItemView>();
+        public const float LootReach = 20f;
+
+        /// <summary>Loots the targeted corpse, or the nearest one (L). The server answers with the loot window or a refusal.</summary>
+        public void Loot()
+        {
+            if (_state != GameState.InZone || Zone == null || Player == null)
+                return;
+            var corpse = TargetId is int id && Zone.Get(id) is { Spawn: { IsCorpse: true } } targeted ? targeted : Zone.NearestCorpse(Player.Position, LootReach);
+            if (corpse == null)
+            {
+                MessageReceived?.Invoke("There is no corpse near enough to loot.");
+                return;
+            }
+            _connection?.Send(new LootRequest(corpse.Id));
+        }
+
+        public void TakeLoot(int index)
+        {
+            if (LootingCorpse is int corpse)
+                _connection?.Send(new LootTake(corpse, index));
+        }
+
+        public void EndLoot()
+        {
+            if (LootingCorpse is int corpse)
+                _connection?.Send(new LootEnd(corpse));
+            LootingCorpse = null;
+            LootItems = Array.Empty<ItemView>();
+        }
+
         /// <summary>Considers the target (C): the answer arrives as a line in <see cref="MessageReceived"/>.</summary>
         public void Consider()
         {
@@ -376,6 +411,13 @@ namespace EQClassic.ClientCore
                     ZoneInfo = info;
                     ZoneInfoReceived?.Invoke(info);
                     break;
+                case LootContents contents:
+                    LootingCorpse = contents.CorpseId;
+                    LootItems = contents.Items;
+                    break;
+                case PlayerInventory inventory:
+                    Inventory = inventory;
+                    break;
                 case PlayerExperience experience:
                     Experience = experience;
                     break;
@@ -384,6 +426,7 @@ namespace EQClassic.ClientCore
                     MaxHp = health.MaxHp;
                     break;
                 case ZoneChange change:
+                    LootingCorpse = null;
                     ZoneInfo = null;
                     Zone = null;
                     Player = null;

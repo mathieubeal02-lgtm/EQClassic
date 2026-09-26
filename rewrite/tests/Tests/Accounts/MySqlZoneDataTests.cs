@@ -22,10 +22,10 @@ public sealed class MySqlZoneDataTests : IDisposable
         Execute(cs, $"CREATE TABLE `{_prefix}spawnentry` (spawngroupID int, npcID int, chance int)");
         Execute(cs, $"INSERT INTO `{_prefix}spawnentry` VALUES (100, 2007, 100), (101, 1, 50), (101, 2, 50), (102, 1, 100)");
         Execute(cs, $"CREATE TABLE `{_prefix}npc_types_without` (id int, name varchar(64), race int, gender int, level int, size float, runspeed float, bodytype int, npc_faction_id int, " +
-                    "class int, hp int, mindmg int, maxdmg int, AC smallint, ATK int, Accuracy int, avoidance int, attack_speed float, STR int)");
+                    "class int, hp int, mindmg int, maxdmg int, AC smallint, ATK int, Accuracy int, avoidance int, attack_speed float, STR int, loottable_id int)");
         Execute(cs, $"INSERT INTO `{_prefix}npc_types_without` VALUES " +
-                    "(2007, 'Guard_Hewet', 71, 0, 10, 6, 1.25, 1, 219, 1, 350, 1, 12, 15, 0, 0, 0, -25, 90), " +
-                    "(1, 'a_rat', 36, 2, 1, -1, 1.3, 21, 0, 1, 16, 1, 4, 5, 0, 0, 0, 0, 75), (2, 'a_snake', 37, 2, 2, 3, 0, 3, 0, 1, 32, 1, 6, 8, 0, 0, 0, 0, 75)");
+                    "(2007, 'Guard_Hewet', 71, 0, 10, 6, 1.25, 1, 219, 1, 350, 1, 12, 15, 0, 0, 0, -25, 90, 0), " +
+                    "(1, 'a_rat', 36, 2, 1, -1, 1.3, 21, 0, 1, 16, 1, 4, 5, 0, 0, 0, 0, 75, 137), (2, 'a_snake', 37, 2, 2, 3, 0, 3, 0, 1, 32, 1, 6, 8, 0, 0, 0, 0, 75, 0)");
         Execute(cs, $"CREATE TABLE `{_prefix}zone_points` (id int, zone varchar(16), x float, y float, z float, target_zone varchar(16), target_x float, target_y float, target_z float, Zrange int, keepX int, keepY int)");
         Execute(cs, $"INSERT INTO `{_prefix}zone_points` VALUES (977, 'qeynos2', 2.66, -148.38, 2.13, 'qeynos', -410.68, 456.42, 2.13, 8, 0, 0), (7, 'qeynos2', 73, 1350, 2.5, 'qeytoqrg', 95, -380, 0, 5, 1, 0), (1, 'qeynos', 0, 0, 0, 'qeynos2', 0, 0, 0, 5, 0, 0)");
         // Same types as the live doors table (dest_zone may be NULL).
@@ -78,6 +78,28 @@ public sealed class MySqlZoneDataTests : IDisposable
         Assert.False(keyDoor.Teleports); // NULL dest_zone
         var toQrg = data.Lines.Single(l => l.TargetZone == "qeytoqrg");
         Assert.Equal((5f, true, false), (toQrg.Range, toQrg.KeepX, toQrg.KeepY));
+    }
+
+    [DbFact]
+    public void Live_loot_tables_roll()
+    {
+        if (!TableExists("loottable") || !TableExists("npc_types_without"))
+            return;
+        using var c = new MySqlConnection(DbFactAttribute.ConnectionString!);
+        c.Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT loottable_id FROM npc_types_without WHERE loottable_id > 0 LIMIT 20";
+        var ids = new List<int>();
+        using (var r = cmd.ExecuteReader())
+            while (r.Read())
+                ids.Add(Convert.ToInt32(r.GetValue(0)));
+        var source = new MySqlLootSource(DbFactAttribute.ConnectionString!);
+        var random = new Random(5);
+        int items = 0;
+        foreach (int id in ids)
+            for (int i = 0; i < 20; i++)
+                items += source.Roll(id, random).Items.Count;
+        Assert.True(items > 0, "twenty NPC loot tables never dropped anything in 400 rolls");
     }
 
     [DbFact]

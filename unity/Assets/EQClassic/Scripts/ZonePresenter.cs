@@ -196,6 +196,11 @@ namespace EQClassic.Unity
                 model.transform.localScale = model.transform.localScale * ModelCodes.Scale(entity.Spawn.Race, entity.Spawn.Size);
                 model.transform.localPosition = new Vector3(0f, FeetOffset(model), 0f);
                 var controller = model.GetComponentInChildren<CharacterAnimationController>();
+                if (entity.Spawn.IsCorpse)
+                {
+                    LieDead(model);
+                    controller = null; // a corpse does not walk or fight
+                }
                 if (controller != null)
                 {
                     controller.Initialize(AnimationType.PassiveStand);
@@ -301,6 +306,24 @@ namespace EQClassic.Unity
         {
             foreach (var r in go.GetComponentsInChildren<Renderer>())
                 r.enabled = visible;
+        }
+
+        /// <summary>Plays the death clip (d05) once and holds its last frame.</summary>
+        private static void LieDead(GameObject model)
+        {
+            var animation = model.GetComponentInChildren<UnityEngine.Animation>();
+            if (animation == null)
+                return;
+            foreach (AnimationState state in animation)
+            {
+                var parts = state.name.Split('_');
+                if (parts.Length > 1 && parts[1] == "d05")
+                {
+                    state.wrapMode = WrapMode.ClampForever;
+                    animation.Play(state.name);
+                    return;
+                }
+            }
         }
 
         /// <summary>Height from the lowest point of the model's renderers up to its origin.</summary>

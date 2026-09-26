@@ -26,6 +26,9 @@ public sealed record PlayerProfile(
     public const int BindZoneOffset = 2844, BindZoneLength = 20, BindYOffset = 3832, BindXOffset = 3852, BindZOffset = 3872;
     private const int StrOffset = 123, StaOffset = 124, DexOffset = 126, AgiOffset = 128;
     private const int InventoryOffset = 168, InventorySlots = 30;
+    // invItemProprieties[30] at 348, 10 bytes each: charges at +2. Money at 2460 (platinum, gold, silver, copper).
+    private const int ItemPropertiesOffset = 348, ItemPropertiesSize = 10;
+    public const int CoinsOffset = 2460;
     private const int SkillsOffset = 2508, SkillCount = 74;
 
     // Combat fields (zone server). Empty arrays when the profile is too short to hold them.
@@ -36,6 +39,9 @@ public sealed record PlayerProfile(
     public int Agi { get; init; }
     /// <summary>Item ids by slot (Trilogy slots: 0-21 worn, 13 primary, 14 secondary, 22-29 general).</summary>
     public IReadOnlyList<int> Inventory { get; init; } = Array.Empty<int>();
+    /// <summary>Charges of the item in each slot (stack size, food and drink portions).</summary>
+    public IReadOnlyList<int> Charges { get; init; } = Array.Empty<int>();
+    public EQClassic.Server.Zone.Coins Coins { get; init; }
     /// <summary>Skill values by skill id; 254 (not trained yet) and 255 (cannot learn) read as 0.</summary>
     public IReadOnlyList<int> Skills { get; init; } = Array.Empty<int>();
 
@@ -79,6 +85,10 @@ public sealed record PlayerProfile(
             Dex = profile[DexOffset],
             Agi = profile[AgiOffset],
             Inventory = ReadInventory(profile),
+            Charges = ReadCharges(profile),
+            Coins = new EQClassic.Server.Zone.Coins(
+                BinaryPrimitives.ReadInt32LittleEndian(profile[CoinsOffset..]), BinaryPrimitives.ReadInt32LittleEndian(profile[(CoinsOffset + 4)..]),
+                BinaryPrimitives.ReadInt32LittleEndian(profile[(CoinsOffset + 8)..]), BinaryPrimitives.ReadInt32LittleEndian(profile[(CoinsOffset + 12)..])),
             Skills = profile.Length >= SkillsOffset + SkillCount
                 ? profile.Slice(SkillsOffset, SkillCount).ToArray().Select(b => b >= 254 ? 0 : (int)b).ToArray()
                 : Array.Empty<int>(),
@@ -91,6 +101,14 @@ public sealed record PlayerProfile(
         for (int i = 0; i < InventorySlots; i++)
             slots[i] = BinaryPrimitives.ReadUInt16LittleEndian(profile[(InventoryOffset + 2 * i)..]) is var id && id != 0xFFFF ? id : 0; // 0xFFFF: empty
         return slots;
+    }
+
+    private static int[] ReadCharges(ReadOnlySpan<byte> profile)
+    {
+        var charges = new int[InventorySlots];
+        for (int i = 0; i < InventorySlots; i++)
+            charges[i] = (sbyte)profile[ItemPropertiesOffset + ItemPropertiesSize * i + 2];
+        return charges;
     }
 
     /// <summary>For the client's creation packet, which is the profile without its checksum.</summary>

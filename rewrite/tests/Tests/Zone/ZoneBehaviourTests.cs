@@ -84,12 +84,12 @@ public class ZoneBehaviourTests
         var orc = zone.Entities.Single();
         Assert.True(zone.Kill(orc.Id));
         Assert.Contains(zone.DrainEvents(), e => e is ZoneInstance.Removed r && r.EntityId == orc.Id);
-        Assert.Empty(zone.Entities);
+        Assert.Equal("an_orc_pawn's_corpse", Assert.Single(zone.Entities).Name); // its corpse stays
 
         Run(zone, 9.5f);
-        Assert.Empty(zone.Entities);
+        Assert.DoesNotContain(zone.Entities, e => !e.IsCorpse);
         Run(zone, 0.6f);
-        var back = Assert.Single(zone.Entities);
+        var back = Assert.Single(zone.Entities, e => !e.IsCorpse);
         Assert.NotEqual(orc.Id, back.Id);
         Assert.Contains(zone.DrainEvents(), e => e is ZoneInstance.Spawned s && s.Entity.Id == back.Id);
     }

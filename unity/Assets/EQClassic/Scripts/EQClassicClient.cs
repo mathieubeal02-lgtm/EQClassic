@@ -24,6 +24,13 @@ namespace EQClassic.Unity
         private bool _creating;
         private readonly System.Collections.Generic.List<string> _messages = new System.Collections.Generic.List<string>();
         private bool _chatOpen;
+        private bool _inventoryOpen;
+
+        private static readonly string[] SlotNames =
+        {
+            "Charm", "Ear", "Head", "Face", "Ear", "Neck", "Shoulders", "Arms", "Back", "Wrist", "Wrist", "Range", "Hands",
+            "Primary", "Secondary", "Finger", "Finger", "Chest", "Legs", "Feet", "Waist", "Ammo",
+        };
         private string _chatLine = "";
         private int _chatClosedFrame = -1;
         private const int ChatLines = 12;
@@ -88,6 +95,10 @@ namespace EQClassic.Unity
                     _client.Consider();
                 if (Input.GetKeyDown(KeyCode.X))
                     _client.ToggleSit();
+                if (Input.GetKeyDown(KeyCode.L))
+                    _client.Loot();
+                if (Input.GetKeyDown(KeyCode.I))
+                    _inventoryOpen = !_inventoryOpen;
                 if (Input.GetKeyDown(KeyCode.Escape))
                     _client.SetTarget(null);
                 _presenter.Present(_client, Time.deltaTime);
@@ -159,6 +170,51 @@ namespace EQClassic.Unity
             GUILayout.EndHorizontal();
         }
 
+        /// <summary>The loot window: what is left on the corpse, one Take button each, and Done.</summary>
+        private void DrawLoot(int corpse)
+        {
+            GUILayout.BeginArea(new Rect(Screen.width - 320, 90, 300, 320), GUI.skin.box);
+            GUILayout.Label(_client.Zone?.Get(corpse)?.DisplayName ?? "Corpse");
+            var items = _client.LootItems;
+            if (items.Count == 0)
+                GUILayout.Label("(nothing left)");
+            for (int i = 0; i < items.Count; i++)
+            {
+                GUILayout.BeginHorizontal();
+                GUILayout.Label(items[i].Charges > 1 ? $"{items[i].Name} ({items[i].Charges})" : items[i].Name);
+                if (GUILayout.Button("Take"))
+                    _client.TakeLoot(i);
+                GUILayout.EndHorizontal();
+            }
+            if (GUILayout.Button("Done"))
+                _client.EndLoot();
+            GUILayout.EndArea();
+        }
+
+        /// <summary>The inventory window (I): worn slots, the eight general slots, money.</summary>
+        private void DrawInventory()
+        {
+            var inventory = _client.Inventory;
+            GUILayout.BeginArea(new Rect(Screen.width - 640, 90, 300, Screen.height - 180), GUI.skin.box);
+            GUILayout.Label("Inventory");
+            if (inventory == null)
+            {
+                GUILayout.Label("(not received yet)");
+                GUILayout.EndArea();
+                return;
+            }
+            for (int slot = 0; slot < inventory.Slots.Count; slot++)
+            {
+                var item = inventory.Slots[slot];
+                if (slot < SlotNames.Length && item.ItemId == 0)
+                    continue; // empty worn slots are not listed
+                string where = slot < SlotNames.Length ? SlotNames[slot] : $"General {slot - SlotNames.Length + 1}";
+                GUILayout.Label($"{where}: {(item.ItemId == 0 ? "-" : item.Charges > 1 ? $"{item.Name} ({item.Charges})" : item.Name)}");
+            }
+            GUILayout.Label($"{inventory.Platinum} pp  {inventory.Gold} gp  {inventory.Silver} sp  {inventory.Copper} cp");
+            GUILayout.EndArea();
+        }
+
         private static Texture2D _white;
 
         /// <summary>A filled bar (hit points) with a label over it.</summary>
@@ -228,7 +284,7 @@ namespace EQClassic.Unity
             var state = _client?.State ?? GameState.Disconnected;
             if (state == GameState.InZone)
             {
-                GUI.Label(new Rect(10, 10, 1200, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows move, Q/E turn, R autorun, Shift walk, Space jump, X sit, right mouse look, wheel zoom, F9 view, U door, Tab target, T face, C consider, F attack");
+                GUI.Label(new Rect(10, 10, 1200, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows move, Q/E turn, R autorun, Shift walk, Space jump, X sit, right mouse look, wheel zoom, F9 view, U door, Tab target, T face, C consider, F attack, L loot, I inventory");
                 if (_presenter.MissingZone != null)
                     GUI.Box(new Rect(Screen.width / 2 - 300, 80, 600, 44),
                         $"The zone '{_presenter.MissingZone}' is not installed in this client (not imported from Lantern).\nYou are there for the server, but nothing can be drawn.");
@@ -247,6 +303,10 @@ namespace EQClassic.Unity
                     DrawBar(new Rect(250, 50, 220, 12), t.HpPercent / 100f, new Color(0.8f, 0.1f, 0.1f), t.HpPercent + "%");
                 }
                 DrawChat();
+                if (_client.LootingCorpse is int corpse)
+                    DrawLoot(corpse);
+                if (_inventoryOpen)
+                    DrawInventory();
                 return;
             }
 

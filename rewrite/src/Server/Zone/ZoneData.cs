@@ -18,6 +18,9 @@ public sealed record NpcTemplate(int Id, string Name, int Race, int Gender, int 
 
     /// <summary>Melee statistics (npc_types_without columns); tests without them get level-based defaults.</summary>
     public NpcCombatStats Combat { get; init; } = NpcCombatStats.Default(Level);
+
+    /// <summary>What it drops when it dies (npc_types_without.loottable_id; 0: nothing).</summary>
+    public int LoottableId { get; init; }
 }
 
 /// <summary>
@@ -118,7 +121,7 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
             cmd.CommandText = $"""
                 SELECT s.id, s.x, s.y, s.z, s.heading, s.pathgrid, n.id, n.name, n.race, n.gender, n.level, n.size, e.chance,
                        s.respawntime, s.variance, n.runspeed, n.bodytype, n.npc_faction_id,
-                       n.class, n.hp, n.mindmg, n.maxdmg, n.AC, n.ATK, n.Accuracy, n.avoidance, n.attack_speed, n.STR
+                       n.class, n.hp, n.mindmg, n.maxdmg, n.AC, n.ATK, n.Accuracy, n.avoidance, n.attack_speed, n.STR, n.loottable_id
                 FROM `{_p}spawn2` s
                 JOIN `{_p}spawnentry` e ON e.spawngroupID = s.spawngroupID
                 JOIN `{_p}npc_types_without` n ON n.id = e.npcID
@@ -143,6 +146,7 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
                 {
                     Combat = new NpcCombatStats(Int(r, 18), Math.Max(1, Int(r, 19)), Int(r, 20), Int(r, 21), Int(r, 22), Int(r, 23),
                         Int(r, 24), Int(r, 25), Int(r, 26), Int(r, 27)),
+                    LoottableId = Int(r, 28),
                 };
                 spawn.Candidates.Add((npc, Convert.ToInt32(r.GetValue(12))));
             }

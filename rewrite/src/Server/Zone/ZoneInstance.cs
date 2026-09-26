@@ -80,7 +80,13 @@ public sealed class ZoneInstance
 
         public int HpPercent => Fighter.MaxHp <= 0 ? 0 : Math.Clamp((int)Math.Ceiling(100.0 * Hp / Fighter.MaxHp), 0, 100);
 
-        public EntitySpawn ToSpawn() => new(Id, Name, IsPlayer, Race, Gender, Level, Size, Position.X, Position.Y, Position.Z, Heading);
+        public EntitySpawn ToSpawn() => new(Id, Name, IsPlayer, Race, Gender, Level, Size, Position.X, Position.Y, Position.Z, Heading, IsCorpse);
+
+        /// <summary>A dead NPC's body, with what it carried until looted or rotten.</summary>
+        public bool IsCorpse => Corpse is not null;
+        internal CorpseData? Corpse;
+        /// <summary>Players: what they carry (from the profile; saved when they leave).</summary>
+        public PlayerInventory? Inventory { get; internal set; }
     }
 
     public abstract record ZoneEvent;
@@ -100,9 +106,56 @@ public sealed class ZoneInstance
     public sealed record Slain(int VictimId, string VictimName, int KillerId, string KillerName) : ZoneEvent;
     public sealed record Considered(int PlayerId, int EntityId, Standing Standing, ConColor Con) : ZoneEvent;
     public sealed record AppearanceChanged(int EntityId, bool Sitting) : ZoneEvent;
+    /// <summary>A player's loot window: the corpse and what is left on it (in order).</summary>
+    public sealed record LootShown(int PlayerId, int CorpseId, IReadOnlyList<LootDrop> Items) : ZoneEvent;
+    public sealed record InventoryChanged(int PlayerId) : ZoneEvent;
     public sealed record ExperienceChanged(int PlayerId, uint Exp, int Level) : ZoneEvent;
 
     private const int BankerClass = 40, MerchantClass = 41;
+
+    internal sealed class CorpseData
+    {
+        public List<LootDrop> Items = new();
+        public Coins Coins;
+        public double DecayAt;
+        public double FreeForAllAt;
+        public HashSet<int> Rights = new();
+        public int? Looter;
+    }
+
+    /// <summary>A player's inventory: item id and charges for each of the 30 profile slots, and money.</summary>
+    public sealed class PlayerInventory
+    {
+        public const int Slots = 30, FirstGeneral = 22;
+        public int[] Items { get; } = new int[Slots];
+        public int[] Charges { get; } = new int[Slots];
+        public Coins Coins { get; set; }
+
+        public static PlayerInventory From(IReadOnlyList<int> items, IReadOnlyList<int> charges, Coins coins)
+        {
+            var inventory = new PlayerInventory { Coins = coins };
+            for (int i = 0; i < Slots; i++)
+            {
+                inventory.Items[i] = i < items.Count ? items[i] : 0;
+                inventory.Charges[i] = i < charges.Count ? charges[i] : 0;
+            }
+            return inventory;
+        }
+
+        /// <summary>The first empty general slot (22-29), or -1.</summary>
+        public int FreeGeneralSlot()
+        {
+            for (int i = FirstGeneral; i < Slots; i++)
+                if (Items[i] == 0)
+                    return i;
+            return -1;
+        }
+    }
+
+    // Legacy corpse timers (Common/Include/config.h): 8 minutes, 45 seconds when empty, 30 minutes
+    // from level 55; loot rights to the killer, then free for all after 165 seconds.
+    public const double CorpseRotSeconds = 480, EmptyCorpseRotSeconds = 45, ExtendedCorpseRotSeconds = 1800, FreeForAllSeconds = 165;
+    public const float LootReach = 20f;
 
     private sealed class DoorSlot
     {
@@ -127,6 +180,10 @@ public sealed class ZoneInstance
     public IFactionStandings Factions { get; set; } = new IndifferentFactions();
     /// <summary>The legacy zone header (cfg/&lt;zone&gt;.cfg), when known: sent to clients, and its underworld depth applies.</summary>
     public ZoneInfo? Info { get; init; }
+    /// <summary>Loot tables for NPC corpses; none: corpses are empty.</summary>
+    public ILootSource? Loot { get; init; }
+    /// <summary>Item names for the loot messages.</summary>
+    public IItemSource? Items { get; init; }
     public const string UnderworldReason = "underworld";
     public uint TickCount { get; private set; }
     public IEnumerable<Entity> Entities => _entities.Values;
@@ -155,6 +212,7 @@ public sealed class ZoneInstance
         player.LastMoveTime = _time;
         player.Progress = progress;
         player.Exp = progress?.Exp ?? 0;
+        player.Inventory = progress?.Inventory ?? new PlayerInventory();
         player.Fighter = fighter ?? progress?.FighterAt?.Invoke(level) ?? DefaultPlayer(level);
         player.Hp = hp is int h && h > 0 && h <= player.Fighter.MaxHp ? h : player.Fighter.MaxHp;
         player.EntryPosition = position;
@@ -162,7 +220,7 @@ public sealed class ZoneInstance
     }
 
     /// <summary>What a player brings besides position: experience, bind point, and their fighter at any level.</summary>
-    public sealed record PlayerProgress(uint Exp, string BindZone, Vec3 Bind, Func<int, Combatant>? FighterAt);
+    public sealed record PlayerProgress(uint Exp, string BindZone, Vec3 Bind, Func<int, Combatant>? FighterAt, PlayerInventory? Inventory = null);
 
     private static Combatant DefaultPlayer(int level) =>
         new(true, level, CombatFormulas.Warrior, CombatFormulas.ClientBaseHp(level, CombatFormulas.Warrior, 75),
@@ -176,7 +234,7 @@ public sealed class ZoneInstance
     public void Consider(int playerId, int entityId)
     {
         if (!_entities.TryGetValue(playerId, out var player) || !player.IsPlayer || entityId == playerId
-            || !_entities.TryGetValue(entityId, out var other))
+            || !_entities.TryGetValue(entityId, out var other) || other.IsCorpse)
             return;
         var standing = Standing.Indifferent;
         if (other.Npc is { } npc)
@@ -212,6 +270,11 @@ public sealed class ZoneInstance
     {
         if (!_entities.TryGetValue(playerId, out var player) || !player.IsPlayer || player.AutoAttack == on)
             return;
+        if (on && player.PlayerTargetId is int c && _entities.TryGetValue(c, out var dead) && dead.IsCorpse)
+        {
+            _events.Add(new Told(playerId, "You cannot attack a corpse."));
+            return;
+        }
         if (on && (player.PlayerTargetId is not int t || !_entities.TryGetValue(t, out var target) || target.IsPlayer))
         {
             _events.Add(new Told(playerId, "You must first select a target for this command!"));
@@ -231,6 +294,8 @@ public sealed class ZoneInstance
             Disengage(npc);
         foreach (var other in _entities.Values.Where(p => p.PlayerTargetId == id))
             other.PlayerTargetId = null;
+        foreach (var body in _entities.Values.Where(b => b.Corpse?.Looter == id))
+            body.Corpse!.Looter = null;
         return true;
     }
 
@@ -346,15 +411,120 @@ public sealed class ZoneInstance
     /// spawn2.respawntime shortened by up to `variance` percent (Spawn2::resetTimer; the legacy
     /// direction roll, rand()%50 &lt; 50, always shortens, and the rewrite keeps it).
     /// </summary>
-    public bool Kill(int npcId)
+    /// <summary>
+    /// An NPC dies: it is replaced by its corpse (what its loot table gives, loot rights to
+    /// <paramref name="looterId"/>), and its spawn point counts down to the next one.
+    /// </summary>
+    public bool Kill(int npcId, int? looterId = null)
     {
-        if (!_entities.TryGetValue(npcId, out var npc) || npc.IsPlayer)
+        if (!_entities.TryGetValue(npcId, out var npc) || npc.IsPlayer || npc.IsCorpse)
             return false;
         _entities.Remove(npcId);
         _events.Add(new Removed(npcId));
         if (npc.Spawn is { } spawn)
             _respawns.Add((spawn, _time + RespawnDelay(spawn)));
+        if (npc.Npc is { } template)
+            AddCorpse(npc, template, looterId);
         return true;
+    }
+
+    private void AddCorpse(Entity npc, NpcTemplate template, int? looterId)
+    {
+        var (items, coins) = Loot?.Roll(template.LoottableId, _random) ?? (new List<LootDrop>(), Coins.None);
+        var corpse = Add(npc.Name + "'s_corpse", false, npc.Race, npc.Gender, npc.Level, npc.Size, npc.Position, npc.Heading);
+        bool empty = items.Count == 0 && coins.IsZero;
+        corpse.Corpse = new CorpseData
+        {
+            Items = items,
+            Coins = coins,
+            DecayAt = _time + (empty ? EmptyCorpseRotSeconds : npc.Level >= 55 ? ExtendedCorpseRotSeconds : CorpseRotSeconds),
+            FreeForAllAt = _time + FreeForAllSeconds,
+        };
+        if (looterId is int id)
+            corpse.Corpse.Rights.Add(id);
+        corpse.Fighter = npc.Fighter;
+        corpse.Hp = 0;
+        _events.Add(new Spawned(corpse));
+    }
+
+    public IReadOnlyList<LootDrop>? CorpseItems(int corpseId) => _entities.GetValueOrDefault(corpseId)?.Corpse?.Items;
+
+    /// <summary>
+    /// Opens a corpse (legacy OP_LootRequest): in reach, with the loot rights (or free for all), one
+    /// looter at a time. The coins go to the player at once, as in the legacy client.
+    /// </summary>
+    public void OpenLoot(int playerId, int corpseId)
+    {
+        if (!_entities.TryGetValue(playerId, out var player) || !player.IsPlayer || !_entities.TryGetValue(corpseId, out var body) || body.Corpse is not { } corpse)
+            return;
+        if (Distance2(player.Position, body.Position) > LootReach * LootReach)
+        {
+            _events.Add(new Told(playerId, "You are too far away to loot that corpse."));
+            return;
+        }
+        if (_time < corpse.FreeForAllAt && corpse.Rights.Count > 0 && !corpse.Rights.Contains(playerId))
+        {
+            _events.Add(new Told(playerId, "You may not loot this corpse at this time."));
+            return;
+        }
+        if (corpse.Looter is int other && other != playerId && _entities.ContainsKey(other))
+        {
+            _events.Add(new Told(playerId, "Someone is already looting this corpse."));
+            return;
+        }
+        corpse.Looter = playerId;
+        if (!corpse.Coins.IsZero && player.Inventory is { } inventory)
+        {
+            inventory.Coins = inventory.Coins.Add(corpse.Coins);
+            _events.Add(new Told(playerId, $"You receive {corpse.Coins} from the corpse."));
+            corpse.Coins = Coins.None;
+            _events.Add(new InventoryChanged(playerId));
+        }
+        _events.Add(new LootShown(playerId, corpseId, corpse.Items.ToList()));
+    }
+
+    /// <summary>Takes one item off the corpse being looted, into the first free general slot.</summary>
+    public void TakeLoot(int playerId, int corpseId, int index)
+    {
+        if (!_entities.TryGetValue(playerId, out var player) || player.Inventory is not { } inventory
+            || !_entities.TryGetValue(corpseId, out var body) || body.Corpse is not { } corpse
+            || corpse.Looter != playerId || index < 0 || index >= corpse.Items.Count)
+            return;
+        int slot = inventory.FreeGeneralSlot();
+        if (slot < 0)
+        {
+            _events.Add(new Told(playerId, "There is no room in your inventory for that item."));
+            return;
+        }
+        var item = corpse.Items[index];
+        corpse.Items.RemoveAt(index);
+        inventory.Items[slot] = item.ItemId;
+        inventory.Charges[slot] = item.Charges;
+        _events.Add(new Told(playerId, $"You have looted a {Items?.Get(item.ItemId)?.Name ?? "item #" + item.ItemId}."));
+        _events.Add(new InventoryChanged(playerId));
+        _events.Add(new LootShown(playerId, corpseId, corpse.Items.ToList()));
+    }
+
+    /// <summary>Closes the loot window; a corpse left empty goes away.</summary>
+    public void CloseLoot(int playerId, int corpseId)
+    {
+        if (!_entities.TryGetValue(corpseId, out var body) || body.Corpse is not { } corpse || corpse.Looter != playerId)
+            return;
+        corpse.Looter = null;
+        if (corpse.Items.Count == 0 && corpse.Coins.IsZero)
+        {
+            _entities.Remove(corpseId);
+            _events.Add(new Removed(corpseId));
+        }
+    }
+
+    private void RotCorpses()
+    {
+        foreach (var body in _entities.Values.Where(e => e.Corpse is { } c && _time >= c.DecayAt).ToList())
+        {
+            _entities.Remove(body.Id);
+            _events.Add(new Removed(body.Id));
+        }
     }
 
     public double RespawnDelay(SpawnPoint spawn)
@@ -393,7 +563,7 @@ public sealed class ZoneInstance
 
         foreach (var e in _entities.Values.ToList())
         {
-            if (e.IsPlayer)
+            if (e.IsPlayer || e.IsCorpse)
                 continue;
             if (e.TargetId is int targetId)
             {
@@ -430,6 +600,7 @@ public sealed class ZoneInstance
 
         Fight(seconds);
         Regenerate();
+        RotCorpses();
 
         var moved = _entities.Values.Where(e => e.Moved).ToList();
         foreach (var e in moved)
@@ -455,10 +626,12 @@ public sealed class ZoneInstance
                 e.SwingIn = Math.Max(0, e.SwingIn - seconds);
                 continue;
             }
-            if (!_entities.TryGetValue(tid, out var target))
+            if (!_entities.TryGetValue(tid, out var target) || target.IsCorpse)
             {
                 if (e.IsPlayer)
-                    SetTarget(e.Id, null);
+                    e.AutoAttack = false;
+                else
+                    Disengage(e);
                 continue;
             }
             e.SwingIn -= seconds;
@@ -510,8 +683,8 @@ public sealed class ZoneInstance
         }
         else
         {
-            RewardKill(defender);
-            Kill(defender.Id);
+            int? looter = RewardKill(defender);
+            Kill(defender.Id, looter);
         }
     }
 
@@ -520,18 +693,21 @@ public sealed class ZoneInstance
     /// tenth of their level), unless the NPC cons green to them or is a merchant or banker.
     /// Groups and pets are not modelled yet.
     /// </summary>
-    private void RewardKill(Entity npc)
+    /// <returns>The player who earned the kill (and the loot rights), if any.</returns>
+    private int? RewardKill(Entity npc)
     {
         if (npc.DamageBy is null || npc.Npc is null || npc.Npc.Combat.Class is BankerClass or MerchantClass)
-            return;
+            return null;
         var (killerId, _) = npc.DamageBy.OrderByDescending(kv => kv.Value).First();
         if (!_entities.TryGetValue(killerId, out var player) || !player.IsPlayer)
-            return;
-        if (ConsiderRules.LevelCon(player.Level, npc.Level) == ConColor.Green)
-            return;
-        uint gain = Experience.Capped(Experience.ForKill(npc.Level), player.Level, player.Fighter.Class, player.Race);
-        if (gain > 0)
-            SetExperience(player, player.Exp + gain);
+            return null;
+        if (ConsiderRules.LevelCon(player.Level, npc.Level) != ConColor.Green)
+        {
+            uint gain = Experience.Capped(Experience.ForKill(npc.Level), player.Level, player.Fighter.Class, player.Race);
+            if (gain > 0)
+                SetExperience(player, player.Exp + gain);
+        }
+        return killerId;
     }
 
     /// <summary>Client::SetEXP: new total, level from it, the legacy messages, fighter rebuilt on a level change.</summary>

@@ -49,4 +49,9 @@ public enum MessageType : byte
     TimeOfDay = 41,
     CreationOptionsRequest = 42,
     CreationOptionsResponse = 43,
+    LootRequest = 44,
+    LootTake = 45,
+    LootEnd = 46,
+    LootContents = 47,
+    PlayerInventory = 48,
 }

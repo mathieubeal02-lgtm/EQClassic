@@ -90,7 +90,7 @@ namespace EQClassic.ClientCore
             var near = new List<(float Distance, EntityView Entity)>();
             foreach (var e in _entities.Values)
             {
-                if (e.Spawn.IsPlayer || e.Id == YourEntityId)
+                if (e.Spawn.IsPlayer || e.Spawn.IsCorpse || e.Id == YourEntityId)
                     continue;
                 var p = e.Latest;
                 float dx = p.X - position.X, dy = p.Y - position.Y, dz = p.Z - position.Z;
@@ -103,6 +103,27 @@ namespace EQClassic.ClientCore
             near.Sort((a, b) => a.Distance.CompareTo(b.Distance));
             int index = near.FindIndex(n => n.Entity.Id == current);
             return near[(index + 1) % near.Count].Entity;
+        }
+
+        /// <summary>The closest corpse within <paramref name="reach"/>, or null.</summary>
+        public EntityView? NearestCorpse(Vec3 position, float reach)
+        {
+            EntityView? best = null;
+            float bestDistance = reach * reach;
+            foreach (var e in _entities.Values)
+            {
+                if (!e.Spawn.IsCorpse)
+                    continue;
+                var p = e.Latest;
+                float dx = p.X - position.X, dy = p.Y - position.Y, dz = p.Z - position.Z;
+                float distance = dx * dx + dy * dy + dz * dz;
+                if (distance <= bestDistance)
+                {
+                    best = e;
+                    bestDistance = distance;
+                }
+            }
+            return best;
         }
 
         public void Apply(ZoneDoors doors)

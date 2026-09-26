@@ -190,6 +190,7 @@ public class ClientCoreUnitTests
         Assert.Equal("A rat tries to hit YOU, but misses!", CombatText.Describe(new CombatEvent(2, 1, 0, 90), 1, Name));
         Assert.Equal("Guard Liben hits a rat for 12 points of damage.", CombatText.Describe(new CombatEvent(3, 2, 12, 0), 1, Name));
         Assert.Equal("a rat", CombatText.DisplayName("a_rat01"));
+        Assert.Equal("a rat's corpse", CombatText.DisplayName("a_rat01's_corpse"));
     }
 
     [Fact]
