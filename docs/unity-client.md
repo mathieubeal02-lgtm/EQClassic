@@ -40,7 +40,7 @@ cd rewrite && dotnet run --project src/Server -- \
    WASD or the arrows and turn with Q/E. The NPCs follow their paths as the server moves them.
 
 8. For a standalone client, run **EQClassic > Build Linux Player** (or **Build Windows Player**,
-   which needs Unity's Windows build support module). It writes asset bundles of the imported
+   which needs Unity's Windows build support module, see below). It writes asset bundles of the imported
    zones and characters plus the zones' collision meshes to `Assets/StreamingAssets/EQClassic`,
    then the player (Mono backend) to `build/unity-player/linux/EQClassic.x86_64`. Copy that
    folder to play elsewhere; nothing else is needed on the player's machine.
@@ -72,6 +72,8 @@ without touching the system:
 | Script compilation fails, csc exit code 134, "No usable version of libssl was found" (in `Library/Bee/tundra.log.json`) | Unity's bundled .NET 5 only loads OpenSSL 1.x | Add `libssl.so.1.1` and `libcrypto.so.1.1` from the Ubuntu 20.04 (focal) `libssl1.1` package to the same folder |
 | The editor hangs forever on "compiling scripts", `bee_backend` idle | `bee_backend --stdin-canary` finishes the build but never exits on this glibc/kernel | Rename `Editor/Data/bee_backend` to `bee_backend.real` and put a wrapper script in its place that runs it without `--stdin-canary` |
 
+| No Windows build support for an editor installed outside the Hub ("Module installation is only supported for editors installed with Unity Hub") | The Linux editor's `windows-mono` module is published as the macOS `.pkg` (Unity release API) | Download `MacEditorTargetInstaller/UnitySetup-Windows-Mono-Support-for-Editor-<version>.pkg`, extract it (`bsdtar -xf`, then `gzip -dc TargetSupport.pkg.tmp/Payload \| cpio -id`) into `Editor/Data/PlaybackEngines/WindowsStandaloneSupport` |
+
 A very high open-file limit (`ulimit -n` 524288) is also better lowered to 4096 before starting
 the editor.
 
@@ -79,7 +81,8 @@ the editor.
 
 | Works (tested) | Not yet |
 |---|---|
-| Login, world and zone connection chain, zone changes (`GameClientTests`) | A Windows player build (needs the Windows build support module; not tried) |
+| Login, world and zone connection chain, zone changes (`GameClientTests`) | The Windows build is built but not yet played on Windows (only 32-bit Wine here) |
+| Qeynos, Grobb and Permafrost imported and entered from the Linux build | Dungeons are very dark: no light source around the player yet |
 | Standalone Linux build (173 MB with Qeynos and 64 character models) played against the rewrite server: login, world, zone, models from the asset bundles | |
 | Two standalone clients in Qeynos at once: each sees the other player walk (183 entities: 181 NPCs, 2 players) | |
 | Command line: `EQClassic.x86_64 -host <address> -port <port> -fingerprint <key> -user <name>` prefills the screens (never the password) | |
