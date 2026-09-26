@@ -369,7 +369,7 @@ namespace EQClassic.Shared.Zone
         public static EntityAppearance ReadFields(NetDataReader reader) => new EntityAppearance(reader.GetInt(), reader.GetBool());
     }
 
-    public enum ChatChannel : byte { Say = 0, Shout = 1, Ooc = 2, Auction = 3, Tell = 4, Emote = 5 }
+    public enum ChatChannel : byte { Say = 0, Shout = 1, Ooc = 2, Auction = 3, Tell = 4, Emote = 5, Group = 6 }
 
     /// <summary>Client to zone server: a chat line (To is the tell recipient).</summary>
     public sealed record ChatSend(ChatChannel Channel, string To, string Text) : IMessage
@@ -873,6 +873,46 @@ namespace EQClassic.Shared.Zone
             for (int i = 0; i < abilities; i++)
                 list.Add(reader.GetByte());
             return new PlayerSkills(values, list);
+        }
+    }
+
+    public enum GroupAction : byte { Invite = 0, Accept = 1, Decline = 2, Leave = 3 }
+
+    /// <summary>Client to zone server: /invite name, /follow, /decline, /disband (legacy OP_GroupInvite, OP_GroupFollow, OP_GroupDelete).</summary>
+    public sealed record GroupCommand(GroupAction Action, string Name) : IMessage
+    {
+        public MessageType Type => MessageType.GroupCommand;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put((byte)Action);
+            writer.Put(Name);
+        }
+
+        public static GroupCommand ReadFields(NetDataReader reader) => new GroupCommand((GroupAction)reader.GetByte(), reader.GetString(64));
+    }
+
+    /// <summary>Zone server to a player: their group (leader and members), empty when they are in none.</summary>
+    public sealed record GroupUpdate(string Leader, IReadOnlyList<string> Members) : IMessage
+    {
+        public MessageType Type => MessageType.GroupUpdate;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(Leader);
+            writer.Put((byte)Members.Count);
+            foreach (var m in Members)
+                writer.Put(m);
+        }
+
+        public static GroupUpdate ReadFields(NetDataReader reader)
+        {
+            string leader = reader.GetString();
+            int count = reader.GetByte();
+            var members = new List<string>(count);
+            for (int i = 0; i < count; i++)
+                members.Add(reader.GetString());
+            return new GroupUpdate(leader, members);
         }
     }
 }

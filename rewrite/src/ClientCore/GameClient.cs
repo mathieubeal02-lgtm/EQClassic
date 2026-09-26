@@ -124,6 +124,23 @@ namespace EQClassic.ClientCore
                     _campFrom = Player.Position;
                     MessageReceived?.Invoke("It will take you about 30 seconds to prepare your camp.");
                     break;
+                case ChatAction.Invite:
+                    string invitee = parsed.Target.Length > 0 ? parsed.Target
+                        : TargetId is int t && Zone.Get(t) is { Spawn: { IsPlayer: true } } targeted ? targeted.Spawn.Name : "";
+                    if (invitee.Length == 0)
+                        MessageReceived?.Invoke("Invite whom? Target a player or type /invite name.");
+                    else
+                        _connection?.Send(new GroupCommand(GroupAction.Invite, invitee));
+                    break;
+                case ChatAction.Follow:
+                    _connection?.Send(new GroupCommand(GroupAction.Accept, ""));
+                    break;
+                case ChatAction.Decline:
+                    _connection?.Send(new GroupCommand(GroupAction.Decline, ""));
+                    break;
+                case ChatAction.Disband:
+                    _connection?.Send(new GroupCommand(GroupAction.Leave, ""));
+                    break;
                 case ChatAction.Ability:
                     UseAbility(parsed.Target switch
                     {
@@ -328,6 +345,9 @@ namespace EQClassic.ClientCore
             }
             return null;
         }
+
+        /// <summary>The player's group (leader and members), or null when not grouped.</summary>
+        public GroupUpdate? Group { get; private set; }
 
         /// <summary>Skill values (the skills window) and the abilities the class can use, from the server.</summary>
         public PlayerSkills? Skills { get; private set; }
@@ -544,6 +564,9 @@ namespace EQClassic.ClientCore
                     break;
                 case PlayerExperience experience:
                     Experience = experience;
+                    break;
+                case GroupUpdate group:
+                    Group = group.Members.Count == 0 ? null : group;
                     break;
                 case PlayerSkills skills:
                     Skills = skills;

@@ -4,7 +4,7 @@ using EQClassic.Shared.Zone;
 namespace EQClassic.ClientCore
 {
     /// <summary>What a line typed in the chat box asks for.</summary>
-    public enum ChatAction { None, Send, Who, Location, Sit, Stand, Camp, Consider, Target, Cast, Ability, Unknown }
+    public enum ChatAction { None, Send, Who, Location, Sit, Stand, Camp, Consider, Target, Cast, Ability, Invite, Follow, Decline, Disband, Unknown }
 
     public readonly struct ParsedChat
     {
@@ -61,6 +61,11 @@ namespace EQClassic.ClientCore
                 case "con": case "consider": return new ParsedChat(ChatAction.Consider);
                 case "target": case "tar": return new ParsedChat(ChatAction.Target, target: rest);
                 case "cast": return new ParsedChat(ChatAction.Cast, target: rest);
+                case "gsay": case "g": return Said(ChatChannel.Group, rest);
+                case "invite": case "inv": return new ParsedChat(ChatAction.Invite, target: rest);
+                case "follow": return new ParsedChat(ChatAction.Follow);
+                case "decline": return new ParsedChat(ChatAction.Decline);
+                case "disband": return new ParsedChat(ChatAction.Disband);
                 case "kick": case "bash": case "taunt": case "mend": case "hide": case "sneak": case "forage":
                     return new ParsedChat(ChatAction.Ability, target: command);
                 default: return new ParsedChat(ChatAction.Unknown, text: "That is not a valid command. Please use /help.");
@@ -81,6 +86,7 @@ namespace EQClassic.ClientCore
                 case ChatChannel.Auction: return mine ? $"You auction, '{m.Text}'" : $"{m.From} auctions, '{m.Text}'";
                 case ChatChannel.Emote: return $"{m.From} {m.Text}";
                 case ChatChannel.Tell: return mine ? $"You told {m.To}, '{m.Text}'" : $"{m.From} tells you, '{m.Text}'";
+                case ChatChannel.Group: return mine ? $"You tell your party, '{m.Text}'" : $"{m.From} tells the group, '{m.Text}'";
                 default: return mine ? $"You say, '{m.Text}'" : $"{m.From} says, '{m.Text}'";
             }
         }

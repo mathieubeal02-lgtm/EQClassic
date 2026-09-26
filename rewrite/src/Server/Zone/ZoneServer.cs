@@ -28,6 +28,10 @@ public sealed class ZoneServer : IDisposable
     private readonly Func<string, ZoneInstance?> _boot;
     private readonly Dictionary<string, ZoneInstance> _instances = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<NetPeer, Player> _players = new();
+    private readonly GroupRegistry _groups = new();
+
+    /// <summary>The groups of every zone of this server.</summary>
+    public GroupRegistry Groups => _groups;
     private readonly EventBasedNetListener _listener = new();
     private readonly NetManager _net;
     private readonly NetDataWriter _writer = new();
@@ -153,6 +157,7 @@ public sealed class ZoneServer : IDisposable
                         Send(peer, new PlayerMana(me.Mana, me.MaxMana), DeliveryMethod.ReliableOrdered);
                         Send(peer, BuffsOf(me), DeliveryMethod.ReliableOrdered);
                         Send(peer, SkillsOf(me), DeliveryMethod.ReliableOrdered);
+                        Send(peer, GroupOf(entered.Ticket.CharacterName), DeliveryMethod.ReliableOrdered);
                     }
                 }
                 break;
@@ -220,6 +225,10 @@ public sealed class ZoneServer : IDisposable
                 Broadcast(caster.Instance, caster.Instance.DrainEvents());
                 break;
 
+            case GroupCommand group when _players.TryGetValue(peer, out var grouper) && group.Name.Length <= 64:
+                Group(peer, grouper, group);
+                break;
+
             case UseAbility ability when _players.TryGetValue(peer, out var user):
                 user.Instance.UseAbility(user.EntityId, ability.Skill);
                 Broadcast(user.Instance, user.Instance.DrainEvents());
@@ -281,6 +290,7 @@ public sealed class ZoneServer : IDisposable
             instance = _boot(ticket.Zone);
             if (instance is null)
                 return ZoneEnterResponse.Refused(UnknownZone);
+            instance.Groups = _groups;
             _instances[ticket.Zone] = instance;
             Log?.Invoke($"zone {ticket.Zone} booted: {instance.Entities.Count()} NPC(s)");
         }
@@ -438,6 +448,20 @@ public sealed class ZoneServer : IDisposable
                 Send(peer, tell, DeliveryMethod.ReliableOrdered);
             return;
         }
+        if (chat.Channel == ChatChannel.Group)
+        {
+            var members = _groups.MembersOf(from);
+            if (members.Count == 0)
+            {
+                Send(peer, new ZoneMessage("You are not in a group."), DeliveryMethod.ReliableOrdered);
+                return;
+            }
+            var line = new ChatMessage(ChatChannel.Group, from, "", chat.Text);
+            foreach (var (other, p) in _players)
+                if (members.Contains(p.Ticket.CharacterName, StringComparer.OrdinalIgnoreCase))
+                    Send(other, line, DeliveryMethod.ReliableOrdered);
+            return;
+        }
         var message = new ChatMessage(chat.Channel, from, "", chat.Text);
         if (chat.Channel is ChatChannel.Say or ChatChannel.Emote)
         {
@@ -451,6 +475,78 @@ public sealed class ZoneServer : IDisposable
             SendToZone(speaker.Instance, message);
         }
     }
+
+    /// <summary>/invite, /follow, /decline, /disband and their messages; every member hears of a change.</summary>
+    private void Group(NetPeer peer, Player player, GroupCommand command)
+    {
+        string me = player.Ticket.CharacterName;
+        switch (command.Action)
+        {
+            case GroupAction.Invite:
+                var (inviteePeer, invitee) = _players.FirstOrDefault(kv => string.Equals(kv.Value.Ticket.CharacterName, command.Name, StringComparison.OrdinalIgnoreCase));
+                if (inviteePeer is null)
+                {
+                    Tell(peer, $"{command.Name} is not online at this time.");
+                    return;
+                }
+                if (_groups.Invite(me, invitee.Ticket.CharacterName) is { } refusal)
+                {
+                    Tell(peer, refusal);
+                    return;
+                }
+                Tell(peer, $"You invite {invitee.Ticket.CharacterName} to join your group.");
+                Tell(inviteePeer, $"{me} invites you to join a group. (/follow to accept, /decline to refuse)");
+                break;
+            case GroupAction.Accept:
+                if (_groups.Accept(me) is not { } members)
+                {
+                    Tell(peer, "You have not been invited to a group, or it is full.");
+                    return;
+                }
+                foreach (var name in members)
+                    if (PeerOfName(name) is { } memberPeer)
+                        Tell(memberPeer, string.Equals(name, me, StringComparison.OrdinalIgnoreCase) ? "You have joined the group." : $"{me} has joined the group.");
+                UpdateGroup(members);
+                break;
+            case GroupAction.Decline:
+                if (_groups.Decline(me) is { } inviter && PeerOfName(inviter) is { } inviterPeer)
+                    Tell(inviterPeer, $"{me} declines your invitation.");
+                break;
+            case GroupAction.Leave:
+                LeaveGroup(me, peer);
+                break;
+        }
+    }
+
+    private void LeaveGroup(string name, NetPeer? peer)
+    {
+        if (_groups.MembersOf(name).Count == 0)
+            return;
+        var left = _groups.Leave(name);
+        if (peer is not null)
+        {
+            Tell(peer, "You have left the group.");
+            Send(peer, new GroupUpdate("", Array.Empty<string>()), DeliveryMethod.ReliableOrdered);
+        }
+        foreach (var m in left)
+            if (PeerOfName(m) is { } memberPeer)
+                Tell(memberPeer, left.Count == 1 ? $"{name} has left the group. Your group has been disbanded." : $"{name} has left the group.");
+        UpdateGroup(left);
+    }
+
+    private void UpdateGroup(IReadOnlyList<string> names)
+    {
+        foreach (var name in names)
+            if (PeerOfName(name) is { } memberPeer)
+                Send(memberPeer, GroupOf(name), DeliveryMethod.ReliableOrdered);
+    }
+
+    private GroupUpdate GroupOf(string name) => new(_groups.LeaderOf(name) ?? "", _groups.MembersOf(name));
+
+    private NetPeer? PeerOfName(string name) =>
+        _players.FirstOrDefault(kv => string.Equals(kv.Value.Ticket.CharacterName, name, StringComparison.OrdinalIgnoreCase)).Key;
+
+    private void Tell(NetPeer peer, string text) => Send(peer, new ZoneMessage(text), DeliveryMethod.ReliableOrdered);
 
     private static readonly string[] ClassNames = ["", "Warrior", "Cleric", "Paladin", "Ranger", "Shadow Knight", "Druid", "Monk", "Bard",
         "Rogue", "Shaman", "Necromancer", "Wizard", "Magician", "Enchanter", "Beastlord"];
@@ -606,6 +702,8 @@ public sealed class ZoneServer : IDisposable
     {
         if (!_players.Remove(peer, out var player))
             return;
+        if (saveAs is null)
+            LeaveGroup(player.Ticket.CharacterName, null); // camped or disconnected; zoning keeps the group
         var last = player.Instance.Get(player.EntityId)?.Position ?? player.Ticket.Position;
         var (zone, at) = saveAs ?? (player.Instance.ShortName, last);
         var state = player.Instance.Get(player.EntityId);

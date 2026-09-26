@@ -322,6 +322,28 @@ public sealed class GameClientTests : IDisposable
         Assert.True(lines.Contains("You begin casting Minor Healing.") || lines.Contains("Your spell fizzles!"), string.Join(" | ", lines));
     }
 
+    [Fact]
+    public void Two_players_group_and_talk_in_group_chat()
+    {
+        var bot = InZone("Qbot");
+        var caster = InZone("Qcaster");
+        var casterLines = new List<string>();
+        var botLines = new List<string>();
+        caster.MessageReceived += casterLines.Add;
+        bot.MessageReceived += botLines.Add;
+
+        bot.ExecuteChat("/invite Qcaster");
+        Assert.True(Run(() => casterLines.Any(l => l.StartsWith("Qbot invites you to join a group."))), string.Join(" | ", casterLines));
+        caster.ExecuteChat("/follow");
+        Assert.True(Run(() => bot.Group?.Members.Count == 2 && caster.Group?.Leader == "Qbot"));
+
+        caster.ExecuteChat("/g hello group");
+        Assert.True(Run(() => botLines.Contains("Qcaster tells the group, 'hello group'")), string.Join(" | ", botLines));
+
+        caster.ExecuteChat("/disband");
+        Assert.True(Run(() => bot.Group is null && caster.Group is null));
+    }
+
     private static void SetHeading(LocalPlayer p, float heading)
     {
         float turn = ((heading - p.Heading) % 360f + 540f) % 360f - 180f;

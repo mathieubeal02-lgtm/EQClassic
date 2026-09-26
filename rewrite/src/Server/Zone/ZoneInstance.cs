@@ -210,6 +210,18 @@ public sealed partial class ZoneInstance
     private double _time;
 
     public string ShortName { get; }
+    /// <summary>Who is grouped with whom (set by the zone server); null: nobody.</summary>
+    public IGroups? Groups { get; set; }
+
+    /// <summary>The players of this zone in <paramref name="player"/>'s group (the player included).</summary>
+    internal List<Entity> GroupHere(Entity player)
+    {
+        var names = Groups?.MembersOf(player.Name) ?? Array.Empty<string>();
+        if (names.Count == 0)
+            return [player];
+        return _entities.Values.Where(e => e.IsPlayer && names.Contains(e.Name, StringComparer.OrdinalIgnoreCase)).ToList();
+    }
+
     /// <summary>Water, lava and zone line regions (the zone's BSP tree), when the Lantern export has it.</summary>
     public ZoneRegions? Regions { get; init; }
     /// <summary>zone_rules: binding, levitation, outdoor spells.</summary>
@@ -857,9 +869,16 @@ public sealed partial class ZoneInstance
         }
         if (ConsiderRules.LevelCon(player.Level, npc.Level) != ConColor.Green && npc.Npc.Combat.Class is not (BankerClass or MerchantClass))
         {
-            uint gain = Experience.Capped(Experience.ForKill(npc.Level), player.Level, player.Fighter.Class, player.Race);
-            if (gain > 0)
-                SetExperience(player, player.Exp + gain);
+            // Group::SplitExp: the group members in the zone share it by level, (level + 5) / (sum of levels + 5 × members).
+            var group = GroupHere(player);
+            long total = group.Sum(m => (long)m.Level) + 5L * group.Count;
+            foreach (var member in group)
+            {
+                uint share = group.Count == 1 ? Experience.ForKill(npc.Level) : (uint)(Experience.ForKill(npc.Level) * (long)(member.Level + 5) / total);
+                uint gain = Experience.Capped(share, member.Level, member.Fighter.Class, member.Race);
+                if (gain > 0)
+                    SetExperience(member, member.Exp + gain);
+            }
         }
         return killerId;
     }

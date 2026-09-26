@@ -1,3 +1,4 @@
+using System.Linq;
 using EQClassic.ClientCore;
 using EQClassic.Shared.Characters;
 using EQClassic.Shared.Zone;
@@ -281,6 +282,25 @@ namespace EQClassic.Unity
             }
         }
 
+        /// <summary>The group window: the members (leader first, in yellow), their health when they are in this zone.</summary>
+        private void DrawGroup()
+        {
+            if (_client.Group is not { } group)
+                return;
+            float y = 100 + 26 * GameClient.GemCount + 10;
+            GUI.Label(new Rect(10, y, 200, 20), "Group");
+            foreach (var name in group.Members)
+            {
+                y += 18;
+                var here = _client.Zone?.Entities.FirstOrDefault(e => e.Spawn.IsPlayer && e.Spawn.Name == name);
+                var colour = GUI.color;
+                if (name == group.Leader)
+                    GUI.color = Color.yellow;
+                GUI.Label(new Rect(10, y, 200, 20), here != null ? $"{name}  {here.HpPercent}%" : name);
+                GUI.color = colour;
+            }
+        }
+
         /// <summary>The ability buttons (kick, bash, taunt...), above the chat.</summary>
         private void DrawAbilities()
         {
@@ -469,6 +489,7 @@ namespace EQClassic.Unity
                 DrawGems();
                 DrawBuffs();
                 DrawAbilities();
+                DrawGroup();
                 if (_skillsOpen)
                     DrawSkills();
                 if (_client.TargetId is int target && _client.Zone?.Get(target) is { } t)

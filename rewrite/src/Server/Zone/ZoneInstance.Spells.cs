@@ -84,7 +84,7 @@ public sealed partial class ZoneInstance
     /// Whether the rewrite applies every effect of the spell: hit points now or over time, stat and
     /// resist buffs and debuffs, haste and slow, movement speed, mana over time, invisibility, root,
     /// mez, stun, levitation, bind affinity, gate, teleports, summoned items, and the effects the
-    /// client shows by itself (vision, blindness). Group spells land on the caster (no groups yet).
+    /// client shows by itself (vision, blindness). Group spells land on the group members in range.
     /// </summary>
     public static bool IsSupported(Spell spell) => spell.Effect.All(e => SupportedEffects.Contains(e));
 
@@ -337,6 +337,9 @@ public sealed partial class ZoneInstance
         }
         var targets = spell.TargetType switch
         {
+            // Group::CastGroupSpell: every member of the caster's group in range.
+            SpellTarget.GroupV1 or SpellTarget.GroupV2 => GroupHere(caster)
+                .Where(m => m == caster || Distance2D(m.Position, caster.Position) <= Math.Max(spell.Range, spell.AoeRange)).ToList(),
             SpellTarget.AECaster => InArea(caster.Position, spell, except: caster),
             SpellTarget.AETarget => InArea(target.Position, spell, except: spell.Beneficial ? null : caster),
             _ => [target],

@@ -46,7 +46,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 
 | Feature | Trilogy client | Status | Priority |
 |---|---|---|---|
-| Chat window | Say, shout, OOC, tells, group, guild, emotes, channels, scrolling | Partial: Enter to type; say, shout, OOC, auction, tells (across zones), emotes; last 12 lines on screen. No group/guild channels, no scrolling back | 1 |
+| Chat window | Say, shout, OOC, tells, group, guild, emotes, channels, scrolling | Partial: Enter to type; say, shout, OOC, auction, tells (across zones), group, emotes; last 12 lines on screen. No guild channel, no scrolling back | 1 |
 | Slash commands | /who, /loc, /sit, /camp, /con, /target... | Partial: /say /shout /ooc /auction /tell /em /who /loc /sit /stand /camp /con /target /cast and the abilities | 1 |
 | Player window | HP, mana, stamina, experience bars | Partial: HP, mana and experience bars, level; no stamina yet | 1 |
 | Target window | Name, health, consider colour | Written (name in con colour, health bar), to check in Unity | 1 |
@@ -56,7 +56,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Merchants, bank, trade | | Partial: merchants (U on a targeted merchant): goods from `merchantlist` at 2.5 times their value, selling at 0.4 times from the inventory, the legacy refusals (busy, dubious); no bank or trade yet | 3 |
 | Spell book, spell gems, casting bar | Book pages, 8 gems, memorising, scribing scrolls, casting bar | Partial: book window (B, memorise by gem number), 8 gems (keys 1-8 or click, /cast N), casting bar, Scribe button on scrolls in the inventory, casting animation (t05). Direct damage, heals, buffs (stats, AC, HP, haste, slow, speed, damage and heals over time), root, mez, stun, invisibility, levitation, bind, gate, teleports, summoning, area spells; no charm, fear, pets or cures yet; no icons, no memorising time, no spell particles | 2 |
 | Hot buttons, abilities, skills window | | Partial: skills window (K), ability buttons and /kick /bash /taunt /mend /hide /sneak /forage for the classes that have them (reuse times on the server); no hot bar editing, bind wound, backstab, fishing or tracking yet | 2 |
-| Group and guild windows | | Todo | 3 |
+| Group and guild windows | | Partial: groups (/invite by name or target, /follow, /decline, /disband, /g), group window with the members' health in the zone; shared experience and group spells on the server; no guilds yet | 3 |
 | Buff window | | Partial: list of buffs with time left, detrimental ones in red; no icons, no clicking off | 3 |
 | Options, key bindings | | Todo | 3 |
 | Login and server select | | Done (IMGUI, to restyle) | — |
