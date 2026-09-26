@@ -32,9 +32,24 @@ public sealed record Waypoint(Vec3 Position, int PauseSeconds);
 /// <summary>A grid (grid + grid_entries by number).</summary>
 public sealed record Grid(int Id, GridType Type, IReadOnlyList<Waypoint> Waypoints);
 
-public sealed record ZoneData(string ShortName, IReadOnlyList<SpawnPoint> Spawns, IReadOnlyDictionary<int, Grid> Grids, IReadOnlyList<ZoneLine>? ZoneLines = null)
+/// <summary>
+/// A doors row (legacy Door_Struct, Client::ProcessOP_ClickDoor). Heading in the table's 0-512
+/// units, Size in percent. A door with a KeyItem or Lockpick is locked; one with a DestZone
+/// teleports whoever uses it; TriggerDoor moves another door with it.
+/// </summary>
+public sealed record Door(int Id, string Name, Vec3 Position, float Heading, int OpenType, int Size = 100,
+    int TriggerDoor = 0, int KeyItem = 0, int Lockpick = 0, string? DestZone = null, Vec3 Destination = default)
+{
+    public const int InvisibleOpenType = 54;
+    public bool Locked => KeyItem > 0 || Lockpick > 0;
+    public bool Teleports => !string.IsNullOrEmpty(DestZone) && DestZone != "NONE";
+}
+
+public sealed record ZoneData(string ShortName, IReadOnlyList<SpawnPoint> Spawns, IReadOnlyDictionary<int, Grid> Grids,
+    IReadOnlyList<ZoneLine>? ZoneLines = null, IReadOnlyList<Door>? ZoneDoors = null)
 {
     public IReadOnlyList<ZoneLine> Lines => ZoneLines ?? Array.Empty<ZoneLine>();
+    public IReadOnlyList<Door> Doors => ZoneDoors ?? Array.Empty<Door>();
 }
 
 public interface IZoneDataSource
@@ -144,11 +159,27 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
                     r.GetString(4), new Vec3(r.GetFloat(5), r.GetFloat(6), r.GetFloat(7)), Convert.ToInt32(r.GetValue(9)) == 1, Convert.ToInt32(r.GetValue(10)) == 1));
         }
 
+        var doors = new List<Door>();
+        using (var cmd = connection.CreateCommand())
+        {
+            // Database::LoadDoors reads name, position, heading, opentype and doorid; the click
+            // handler also uses triggerdoor, keyitem, lockpick and the destination.
+            cmd.CommandText = $"SELECT doorid, name, pos_x, pos_y, pos_z, heading, opentype, size, triggerdoor, keyitem, lockpick, " +
+                              $"dest_zone, dest_x, dest_y, dest_z FROM `{_p}doors` WHERE zone = @zone ORDER BY doorid";
+            cmd.Parameters.AddWithValue("@zone", shortName);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                doors.Add(new Door(Convert.ToInt32(r.GetValue(0)), r.GetString(1), new Vec3(r.GetFloat(2), r.GetFloat(3), r.GetFloat(4)),
+                    r.GetFloat(5), Convert.ToInt32(r.GetValue(6)), Convert.ToInt32(r.GetValue(7)), Convert.ToInt32(r.GetValue(8)),
+                    Convert.ToInt32(r.GetValue(9)), Convert.ToInt32(r.GetValue(10)), r.IsDBNull(11) ? null : r.GetString(11),
+                    new Vec3(r.IsDBNull(12) ? 0 : r.GetFloat(12), r.IsDBNull(13) ? 0 : r.GetFloat(13), r.IsDBNull(14) ? 0 : r.GetFloat(14))));
+        }
+
         var grids = points.ToDictionary(kv => kv.Key,
             kv => new Grid(kv.Key, gridTypes.GetValueOrDefault(kv.Key, 3) == 0 ? GridType.Circular : GridType.BackAndForth, kv.Value));
 
         return new ZoneData(shortName,
             spawns.Select(kv => new SpawnPoint(kv.Key, kv.Value.Pos, kv.Value.Heading, kv.Value.Grid, kv.Value.Candidates, kv.Value.Respawn, kv.Value.Variance)).ToList(),
-            grids, lines);
+            grids, lines, doors);
     }
 }

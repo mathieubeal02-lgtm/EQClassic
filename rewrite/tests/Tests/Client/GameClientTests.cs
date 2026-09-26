@@ -29,7 +29,8 @@ public sealed class GameClientTests : IDisposable
         zoneData.Zones["grobb"] = new ZoneData("grobb",
             [new SpawnPoint(1, new Vec3(0, 0, 4), 0, 3, [(new NpcTemplate(52001, "a_troll_guard", 9, 0, 20, 8f), 100)])],
             new Dictionary<int, Grid> { [3] = new Grid(3, GridType.BackAndForth, [new Waypoint(new Vec3(0, 0, 4), 0), new Waypoint(new Vec3(0, 200, 4), 0)]) },
-            [new ZoneLine(396, new Vec3(50.34f, -129.93f, 3.13f), 20, "innothule", new Vec3(-612.29f, -2789.26f, -31.44f))]);
+            [new ZoneLine(396, new Vec3(50.34f, -129.93f, 3.13f), 20, "innothule", new Vec3(-612.29f, -2789.26f, -31.44f))],
+            [new Door(1, "DOOR1", new Vec3(15, 10, 4), 128, 0), new Door(2, "CELLDOOR", new Vec3(10, 34, 4), 0, 0, KeyItem: 1)]);
         zoneData.Zones["innothule"] = new ZoneData("innothule", [], new Dictionary<int, Grid>());
         var keys = new ZoneKeys();
         _zones = new ZoneServer(keys, n => zoneData.Load(n) is { } d ? new ZoneInstance(d) : null) { Characters = _characters };
@@ -110,6 +111,46 @@ public sealed class GameClientTests : IDisposable
         Assert.True(Run(() => watcher.Zone!.Get(walkerId)?.Latest.Y > -50));
         var drawn = watcher.Zone!.Interpolated(walkerId, watcher.Now);
         Assert.InRange(drawn.Position.Y, -61f, walker.Player.Position.Y);
+    }
+
+    [Fact]
+    public void A_door_one_player_opens_is_seen_open_by_the_others()
+    {
+        var watcher = InZone("Qbot");
+        var user = AtCharacterSelect();
+        user.CreateCharacter(new CreateCharacterRequest("Qdoor", 9, 10, 0, 203, 1, "grobb", new CharacterStats(75, 75, 75, 75, 75, 75, 75)));
+        Run(() => user.Characters.Any(c => c.Name == "Qdoor"));
+        user.EnterWorld("Qdoor");
+        Run(() => user.State == GameState.InZone);
+        Assert.True(Run(() => watcher.Zone!.Doors.Count == 2 && user.Zone!.Doors.Count == 2), "door list not received");
+
+        // Qdoor starts at (40, -60): too far from any door. Qbot, at (10, 10), uses DOOR1.
+        Assert.Null(user.UseNearestDoor());
+        var opened = new List<int>();
+        user.Zone!.DoorChanged += d => { if (d.Open) opened.Add(d.Id); };
+        Assert.Equal(1, watcher.UseNearestDoor()?.Id);
+        Assert.True(Run(() => opened.Contains(1)), "the other player never saw the door open");
+        Assert.True(watcher.Zone!.Doors.Single(d => d.Id == 1).Open);
+    }
+
+    [Fact]
+    public void A_locked_door_answers_with_a_message()
+    {
+        var client = InZone("Qbot");
+        var messages = new List<string>();
+        client.MessageReceived += messages.Add;
+        Run(() => client.Zone!.Doors.Count == 2);
+        var player = client.Player!;
+        player.Move(0, 0, turn: -1, seconds: player.Heading / LocalPlayer.TurnDegreesPerSecond); // face north (heading 0)
+        for (int i = 0; i < 10; i++)                                                           // 22.5 units in 0.5 s, next to the cell door
+        {
+            player.Move(forward: 1, strafe: 0, turn: 0, seconds: 0.05f);
+            Run(() => false, 50);
+        }
+        Run(() => false, 200);                                                                 // the last move reaches the server
+        Assert.Equal(2, client.UseNearestDoor()?.Id);
+        Assert.True(Run(() => messages.Count > 0));
+        Assert.Equal(ZoneInstance.NoKeyMessage, messages[0]);
     }
 
     [Fact]

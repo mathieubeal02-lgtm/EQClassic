@@ -46,6 +46,7 @@ namespace UnityEngine
     public struct Bounds
     {
         public Vector3 min => default;
+        public Vector3 max => default;
     }
 
     public class Transform : Component
@@ -73,6 +74,7 @@ namespace UnityEngine
     public struct Quaternion
     {
         public static Quaternion Euler(float x, float y, float z) => default;
+        public static Quaternion operator *(Quaternion a, Quaternion b) => default;
         public static Vector3 operator *(Quaternion rotation, Vector3 point) => point;
     }
 
@@ -83,7 +85,7 @@ namespace UnityEngine
 
     public enum PrimitiveType { Sphere, Capsule, Cylinder, Cube, Plane, Quad }
     public enum LightType { Spot, Directional, Point }
-    public enum KeyCode { Q = 113, E = 101 }
+    public enum KeyCode { Q = 113, E = 101, U = 117 }
     public enum RuntimeInitializeLoadType { AfterSceneLoad, BeforeSceneLoad }
 
     [System.AttributeUsage(System.AttributeTargets.Method)]
@@ -114,6 +116,7 @@ namespace UnityEngine
     {
         public static float GetAxis(string axisName) => 0;
         public static bool GetKey(KeyCode key) => false;
+        public static bool GetKeyDown(KeyCode key) => false;
     }
 
     public static class Time
@@ -125,6 +128,16 @@ namespace UnityEngine
     {
         public static void Log(object message) { }
         public static void LogWarning(object message) { }
+    }
+
+    public static class Screen
+    {
+        public static int height => 0;
+    }
+
+    public static class Mathf
+    {
+        public static float MoveTowards(float current, float target, float maxDelta) => target;
     }
 
     public static class Application

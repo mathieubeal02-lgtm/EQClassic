@@ -25,6 +25,11 @@ public sealed class MySqlZoneDataTests : IDisposable
         Execute(cs, $"INSERT INTO `{_prefix}npc_types_without` VALUES (2007, 'Guard_Hewet', 71, 0, 10, 6, 1.25, 1, 219), (1, 'a_rat', 36, 2, 1, -1, 1.3, 21, 0), (2, 'a_snake', 37, 2, 2, 3, 0, 3, 0)");
         Execute(cs, $"CREATE TABLE `{_prefix}zone_points` (id int, zone varchar(16), x float, y float, z float, target_zone varchar(16), target_x float, target_y float, target_z float, Zrange int, keepX int, keepY int)");
         Execute(cs, $"INSERT INTO `{_prefix}zone_points` VALUES (977, 'qeynos2', 2.66, -148.38, 2.13, 'qeynos', -410.68, 456.42, 2.13, 8, 0, 0), (7, 'qeynos2', 73, 1350, 2.5, 'qeytoqrg', 95, -380, 0, 5, 1, 0), (1, 'qeynos', 0, 0, 0, 'qeynos2', 0, 0, 0, 5, 0, 0)");
+        // Same types as the live doors table (dest_zone may be NULL).
+        Execute(cs, $"CREATE TABLE `{_prefix}doors` (id int, doorid smallint, zone varchar(16), name varchar(16), pos_y float, pos_x float, pos_z float, heading float, " +
+                    "opentype smallint, size smallint unsigned, triggerdoor smallint, keyitem int, lockpick smallint, dest_zone varchar(16), dest_x float, dest_y float, dest_z float)");
+        Execute(cs, $"INSERT INTO `{_prefix}doors` VALUES (1, 8, 'qeynos2', 'DOOR1', 324.921, 279.858, 0.001, 128, 0, 100, 0, 0, 0, 'NONE', 0, 0, 0), " +
+                    "(2, 30, 'qeynos2', 'KEYDOOR', 10, 20, 0, 0, 0, 100, 8, 12345, 0, NULL, NULL, NULL, NULL), (3, 1, 'qeynos', 'DOOR2', 0, 0, 0, 0, 0, 100, 0, 0, 0, 'NONE', 0, 0, 0)");
         Execute(cs, $"CREATE TABLE `{_prefix}grid` (id int, zoneid int, type int)");
         Execute(cs, $"INSERT INTO `{_prefix}grid` VALUES (7, 2, 3), (8, 2, 0)");
         Execute(cs, $"CREATE TABLE `{_prefix}grid_entries` (gridid int, zoneid int, number int, x float, y float, z float, pause int)");
@@ -35,7 +40,7 @@ public sealed class MySqlZoneDataTests : IDisposable
     public void Dispose()
     {
         if (_created)
-            Execute(DbFactAttribute.ConnectionString!, $"DROP TABLE IF EXISTS `{_prefix}zone_ids`, `{_prefix}spawn2`, `{_prefix}spawnentry`, `{_prefix}npc_types_without`, `{_prefix}grid`, `{_prefix}grid_entries`, `{_prefix}zone_points`");
+            Execute(DbFactAttribute.ConnectionString!, $"DROP TABLE IF EXISTS `{_prefix}zone_ids`, `{_prefix}spawn2`, `{_prefix}spawnentry`, `{_prefix}npc_types_without`, `{_prefix}grid`, `{_prefix}grid_entries`, `{_prefix}zone_points`, `{_prefix}doors`");
     }
 
     [DbFact]
@@ -59,6 +64,13 @@ public sealed class MySqlZoneDataTests : IDisposable
         var snake = data.Spawns.Single(s => s.Id == 11).Candidates.Single(c => c.Npc.Name == "a_snake").Npc;
         Assert.Equal((1.25f, true), (snake.RunSpeed, snake.Undead)); // runspeed 0 → default; bodytype 3 = undead
         Assert.Equal(2, data.Lines.Count);
+        Assert.Equal([8, 30], data.Doors.Select(d => d.Id));
+        var door = data.Doors[0];
+        Assert.Equal(("DOOR1", new Vec3(279.858f, 324.921f, 0.001f), 128f, false, false), (door.Name, door.Position, door.Heading, door.Locked, door.Teleports));
+        var keyDoor = data.Doors[1];
+        Assert.True(keyDoor.Locked);
+        Assert.Equal(8, keyDoor.TriggerDoor);
+        Assert.False(keyDoor.Teleports); // NULL dest_zone
         var toQrg = data.Lines.Single(l => l.TargetZone == "qeytoqrg");
         Assert.Equal((5f, true, false), (toQrg.Range, toQrg.KeepX, toQrg.KeepY));
     }

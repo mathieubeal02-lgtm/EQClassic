@@ -118,7 +118,15 @@ public sealed class ZoneServer : IDisposable
         switch (message)
         {
             case ZoneEnterRequest enter when !_players.ContainsKey(peer):
-                Send(peer, Enter(peer, enter), DeliveryMethod.ReliableOrdered);
+                var response = Enter(peer, enter);
+                Send(peer, response, DeliveryMethod.ReliableOrdered);
+                if (response.Accepted && _players.TryGetValue(peer, out var entered))
+                    Send(peer, DoorsOf(entered.Instance), DeliveryMethod.ReliableOrdered); // after the entry: same channel, in order
+                break;
+
+            case ClickDoor click when _players.TryGetValue(peer, out var clicker):
+                clicker.Instance.ClickDoor(clicker.EntityId, click.DoorId);
+                Broadcast(clicker.Instance, clicker.Instance.DrainEvents());
                 break;
 
             case PlayerMove move when _players.TryGetValue(peer, out var player):
@@ -182,9 +190,27 @@ public sealed class ZoneServer : IDisposable
                 case ZoneInstance.CrossedZoneLine crossed:
                     ChangeZone(instance, crossed);
                     break;
+                case ZoneInstance.DoorChanged door:
+                    SendToZone(instance, new DoorState(door.DoorId, door.Open));
+                    break;
+                case ZoneInstance.Teleported teleported when PeerOf(instance, teleported.PlayerId) is { } moved:
+                    var to = teleported.Destination;
+                    Send(moved, new MoveCorrection(to.X, to.Y, to.Z, "teleport"), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.Told told when PeerOf(instance, told.PlayerId) is { } listener:
+                    Send(listener, new ZoneMessage(told.Text), DeliveryMethod.ReliableOrdered);
+                    break;
             }
         }
     }
+
+    private NetPeer? PeerOf(ZoneInstance instance, int entityId) =>
+        _players.FirstOrDefault(kv => kv.Value.Instance == instance && kv.Value.EntityId == entityId).Key;
+
+    private static ZoneDoors DoorsOf(ZoneInstance instance) => new(instance.Doors
+        .Select(d => new DoorInfo(d.Door.Id, d.Door.Name, d.Door.Position.X, d.Door.Position.Y, d.Door.Position.Z,
+            d.Door.Heading, d.Door.OpenType, d.Door.Size, d.Open))
+        .ToList());
 
     private void ChangeZone(ZoneInstance instance, ZoneInstance.CrossedZoneLine crossed)
     {

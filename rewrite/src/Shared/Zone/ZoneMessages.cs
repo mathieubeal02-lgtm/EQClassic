@@ -200,4 +200,74 @@ namespace EQClassic.Shared.Zone
         public static ZoneChange ReadFields(NetDataReader reader) =>
             new ZoneChange(reader.GetString(), reader.GetString(), reader.GetInt(), reader.GetString(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat());
     }
+
+    /// <summary>
+    /// A door as the client draws it (legacy doors table): position in EverQuest coordinates,
+    /// heading in the table's 0-512 units, size in percent. OpenType 54 doors are invisible
+    /// (click spots, usually teleports).
+    /// </summary>
+    public sealed record DoorInfo(int Id, string Name, float X, float Y, float Z, float Heading, int OpenType, int Size, bool Open);
+
+    /// <summary>Zone server to client after entering: the zone's doors and their state. Reliable (fragmented when large).</summary>
+    public sealed record ZoneDoors(IReadOnlyList<DoorInfo> Doors) : IMessage
+    {
+        public MessageType Type => MessageType.ZoneDoors;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put((ushort)Doors.Count);
+            foreach (var d in Doors)
+            {
+                writer.Put(d.Id);
+                writer.Put(d.Name);
+                writer.Put(d.X);
+                writer.Put(d.Y);
+                writer.Put(d.Z);
+                writer.Put(d.Heading);
+                writer.Put((byte)d.OpenType);
+                writer.Put((ushort)d.Size);
+                writer.Put(d.Open);
+            }
+        }
+
+        public static ZoneDoors ReadFields(NetDataReader reader)
+        {
+            int count = reader.GetUShort();
+            var doors = new List<DoorInfo>(count);
+            for (int i = 0; i < count; i++)
+                doors.Add(new DoorInfo(reader.GetInt(), reader.GetString(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat(),
+                    reader.GetFloat(), reader.GetByte(), reader.GetUShort(), reader.GetBool()));
+            return new ZoneDoors(doors);
+        }
+    }
+
+    /// <summary>Client to zone server: use a door (legacy OP_ClickDoor).</summary>
+    public sealed record ClickDoor(int DoorId) : IMessage
+    {
+        public MessageType Type => MessageType.ClickDoor;
+        public void WriteFields(NetDataWriter writer) => writer.Put(DoorId);
+        public static ClickDoor ReadFields(NetDataReader reader) => new ClickDoor(reader.GetInt());
+    }
+
+    /// <summary>Zone server to every client in the zone: a door opened or closed (legacy OP_OpenDoor).</summary>
+    public sealed record DoorState(int DoorId, bool Open) : IMessage
+    {
+        public MessageType Type => MessageType.DoorState;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(DoorId);
+            writer.Put(Open);
+        }
+
+        public static DoorState ReadFields(NetDataReader reader) => new DoorState(reader.GetInt(), reader.GetBool());
+    }
+
+    /// <summary>Zone server to one client: a line of text for the chat window ("The door swings open!").</summary>
+    public sealed record ZoneMessage(string Text) : IMessage
+    {
+        public MessageType Type => MessageType.ZoneMessage;
+        public void WriteFields(NetDataWriter writer) => writer.Put(Text);
+        public static ZoneMessage ReadFields(NetDataReader reader) => new ZoneMessage(reader.GetString());
+    }
 }

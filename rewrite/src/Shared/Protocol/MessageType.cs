@@ -29,4 +29,8 @@ public enum MessageType : byte
     EntitySpawned = 21,
     EntityRemoved = 22,
     ZoneChange = 23,
+    ZoneDoors = 24,
+    ClickDoor = 25,
+    DoorState = 26,
+    ZoneMessage = 27,
 }

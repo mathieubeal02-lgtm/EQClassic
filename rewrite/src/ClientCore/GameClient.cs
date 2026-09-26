@@ -40,6 +40,25 @@ namespace EQClassic.ClientCore
         public event Action<GameState>? StateChanged;
         /// <summary>A new zone view (first entry or after a zone change): rebuild the scene.</summary>
         public event Action<ZoneView>? ZoneEntered;
+        /// <summary>A line from the server for the chat window.</summary>
+        public event Action<string>? MessageReceived;
+
+        /// <summary>Reach of the Use key: the server accepts clicks within 40 units (ZoneInstance.DoorReach).</summary>
+        public const float DoorUseReach = 30f;
+
+        /// <summary>
+        /// Uses the nearest door (the Use key, U in EverQuest). Returns it, or null when none is in
+        /// reach. The server answers with the door's new state, a teleport or a message.
+        /// </summary>
+        public DoorInfo? UseNearestDoor()
+        {
+            if (_state != GameState.InZone || Zone == null || Player == null)
+                return null;
+            var door = Zone.NearestDoor(Player.Position, DoorUseReach);
+            if (door != null)
+                _connection?.Send(new ClickDoor(door.Id));
+            return door;
+        }
 
         public void Connect(string host, int port = ProtocolInfo.DefaultLoginPort)
         {
@@ -151,6 +170,15 @@ namespace EQClassic.ClientCore
                     break;
                 case MoveCorrection correction:
                     Player?.Apply(correction);
+                    break;
+                case ZoneDoors doors:
+                    Zone?.Apply(doors);
+                    break;
+                case DoorState door:
+                    Zone?.Apply(door);
+                    break;
+                case ZoneMessage text:
+                    MessageReceived?.Invoke(text.Text);
                     break;
                 case ZoneChange change:
                     Zone = null;

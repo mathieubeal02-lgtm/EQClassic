@@ -19,6 +19,7 @@ namespace EQClassic.Unity
         private string _user = "";
         private string _password = "";
         private string _newName = "";
+        private readonly System.Collections.Generic.List<string> _messages = new System.Collections.Generic.List<string>();
 
         private void Awake()
         {
@@ -55,7 +56,11 @@ namespace EQClassic.Unity
                 return;
             _client.Update(Time.deltaTime);
             if (_client.State == GameState.InZone)
+            {
+                if (Input.GetKeyDown(KeyCode.U) && _client.UseNearestDoor() == null)
+                    _messages.Add("There is nothing here to use.");
                 _presenter.Present(_client, Time.deltaTime);
+            }
         }
 
         private void OnDestroy()
@@ -68,7 +73,9 @@ namespace EQClassic.Unity
             var state = _client?.State ?? GameState.Disconnected;
             if (state == GameState.InZone)
             {
-                GUI.Label(new Rect(10, 10, 600, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows to move, Q/E to turn");
+                GUI.Label(new Rect(10, 10, 700, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows to move, Q/E to turn, U to use a door");
+                for (int i = 0; i < _messages.Count; i++)
+                    GUI.Label(new Rect(10, Screen.height - 20 * (_messages.Count - i) - 10, 700, 20), _messages[i]);
                 return;
             }
 
@@ -134,6 +141,12 @@ namespace EQClassic.Unity
             _client?.Dispose();
             _client = new GameClient(string.IsNullOrWhiteSpace(_fingerprint) ? null : _fingerprint.Trim());
             _client.ZoneEntered += zone => _presenter.Enter(zone);
+            _client.MessageReceived += text =>
+            {
+                _messages.Add(text);
+                if (_messages.Count > 6)
+                    _messages.RemoveAt(0);
+            };
             _client.Connect(_host, int.TryParse(_port, out var p) ? p : 5999);
         }
     }

@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using EQClassic.ClientCore;
 using EQClassic.Shared.World;
+using EQClassic.Shared.Zone;
 using Lantern.EQ.Animation;
 using UnityEngine;
 
@@ -38,6 +39,21 @@ namespace EQClassic.Unity
         private ZoneCollisionMesh _mesh;
         private Camera _camera;
         private Light _playerLight;
+        private readonly Dictionary<int, DoorVisual> _doors = new Dictionary<int, DoorVisual>();
+
+        /// <summary>A drawn door: its closed pose, how it opens, and how far it is open (0 to 1).</summary>
+        private sealed class DoorVisual
+        {
+            public Transform Transform;
+            public Vector3 ClosedPosition;
+            public Quaternion ClosedRotation;
+            public bool Slides;
+            public float Height;
+            public bool Open;
+            public float Amount;
+        }
+
+        private const float DoorSeconds = 1f;
 
         public void Enter(ZoneView zone)
         {
@@ -56,6 +72,12 @@ namespace EQClassic.Unity
                 AddEntity(e);
             zone.Added += AddEntity;
             zone.Removed += RemoveEntity;
+            zone.DoorsLoaded += doors => PlaceDoors(zone.Zone, doors);
+            zone.DoorChanged += door =>
+            {
+                if (_doors.TryGetValue(door.Id, out var visual))
+                    visual.Open = door.Open;
+            };
             EnsureCamera();
         }
 
@@ -95,6 +117,9 @@ namespace EQClassic.Unity
                 if (_animated.TryGetValue(pair.Key, out var animated))
                     Animate(animated, position, deltaTime);
             }
+
+            foreach (var door in _doors.Values)
+                AnimateDoor(door, deltaTime);
 
             if (_objects.TryGetValue(player.EntityId, out var me) && _playerLight == null)
                 _playerLight = AddPlayerLight(me);
@@ -211,6 +236,7 @@ namespace EQClassic.Unity
                 Destroy(go);
             _objects.Clear();
             _animated.Clear();
+            _doors.Clear(); // their objects are children of the zone root
             _playerLight = null; // destroyed with the player's object
             if (_zoneRoot != null)
                 Destroy(_zoneRoot);
@@ -273,6 +299,73 @@ namespace EQClassic.Unity
                 placed++;
             }
             Debug.Log($"EQClassic: {placed} object(s) placed in {zone}");
+        }
+
+        /// <summary>
+        /// The zone's doors (legacy doors table, sent by the server), with the object models of the
+        /// zone. Placed like LanternUnityTools' DoorImporter: Lantern axes under the zone root,
+        /// heading from 0-512 units. Invisible click spots (open type 54) are not drawn.
+        /// </summary>
+        private void PlaceDoors(string zone, IReadOnlyCollection<DoorInfo> doors)
+        {
+            if (_zoneRoot == null)
+                return;
+            foreach (var d in doors)
+            {
+                if (d.OpenType == 54)
+                    continue;
+                var prefab = LoadPrefab(ContentRoot + "Zones/" + zone + "/Objects/" + d.Name.ToLowerInvariant() + ".prefab");
+                if (prefab == null)
+                    continue; // e.g. post-Trilogy models in the table (poktele500)
+                var go = Instantiate(prefab);
+                go.name = "door " + d.Id + " " + d.Name;
+                var t = go.transform;
+                t.SetParent(_zoneRoot.transform, false);
+                var (x, y, z) = Coordinates.ToUnity(new Vec3(d.X, d.Y, d.Z));
+                t.localPosition = new Vector3(x, y, z);
+                t.localRotation = Quaternion.Euler(0f, -d.Heading / 512f * 360f, 0f);
+                t.localScale = Vector3.one * (d.Size / 100f);
+                var visual = new DoorVisual
+                {
+                    Transform = t,
+                    ClosedPosition = t.localPosition,
+                    ClosedRotation = t.localRotation,
+                    Slides = SlidesOpen(d.OpenType),
+                    Height = ModelHeight(go),
+                    Open = d.Open,
+                };
+                visual.Amount = d.Open ? 1f : 0f;
+                AnimateDoor(visual, 0f);
+                _doors[d.Id] = visual;
+            }
+        }
+
+        /// <summary>
+        /// Approximation of the Trilogy client's door open types: lifts, portcullises and gates
+        /// (55 to 59, 100 and up) slide up by their height; everything else swings 90 degrees.
+        /// </summary>
+        private static bool SlidesOpen(int openType) => (openType >= 55 && openType <= 59) || openType >= 100;
+
+        private static void AnimateDoor(DoorVisual door, float deltaTime)
+        {
+            float target = door.Open ? 1f : 0f;
+            door.Amount = Mathf.MoveTowards(door.Amount, target, deltaTime / DoorSeconds);
+            if (door.Slides)
+                door.Transform.localPosition = door.ClosedPosition + new Vector3(0f, door.Height * door.Amount, 0f);
+            else
+                door.Transform.localRotation = door.ClosedRotation * Quaternion.Euler(0f, 90f * door.Amount, 0f);
+        }
+
+        private static float ModelHeight(GameObject model)
+        {
+            float low = float.MaxValue, high = float.MinValue;
+            foreach (var r in model.GetComponentsInChildren<Renderer>())
+            {
+                low = System.Math.Min(low, r.bounds.min.y);
+                high = System.Math.Max(high, r.bounds.max.y);
+            }
+            // Bounds are in world units (under the root's 0.5 scale): back to Lantern units.
+            return high > low ? (high - low) / Scale : 0f;
         }
 
         private static float Number(string s) => float.Parse(s, CultureInfo.InvariantCulture);

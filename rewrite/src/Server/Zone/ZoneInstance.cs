@@ -16,6 +16,11 @@ public sealed class ZoneInstance
     /// <summary>An engaged NPC stops this close to its target (melee reach in the rewrite until combat, M5).</summary>
     public const float MeleeRange = 10f;
     private const float MoveTolerance = 5f;
+    /// <summary>A door untouched this long is closed again (legacy: "not touched in twelve seconds").</summary>
+    public const double DoorCloseSeconds = 12;
+    /// <summary>Farthest a player may be from a door to use it. Not in the legacy handler: a rewrite sanity check.</summary>
+    public const float DoorReach = 40f;
+    public const string NoKeyMessage = "You do not have the required key in hand to open this door";
 
     public sealed class Entity
     {
@@ -54,12 +59,26 @@ public sealed class ZoneInstance
     public sealed record Removed(int EntityId) : ZoneEvent;
     public sealed record Engaged(int NpcId, int PlayerId) : ZoneEvent;
     public sealed record CrossedZoneLine(int PlayerId, ZoneLine Line, Vec3 Destination) : ZoneEvent;
+    public sealed record DoorChanged(int DoorId, bool Open) : ZoneEvent;
+    /// <summary>A player moved by the server within the zone (teleport door): their client must follow.</summary>
+    public sealed record Teleported(int PlayerId, Vec3 Destination) : ZoneEvent;
+    /// <summary>A line of text for one player.</summary>
+    public sealed record Told(int PlayerId, string Text) : ZoneEvent;
+
+    private sealed class DoorSlot
+    {
+        public DoorSlot(Door data) => Data = data;
+        public Door Data { get; }
+        public bool Open;
+        public double LastClick = double.NegativeInfinity;
+    }
 
     private readonly Dictionary<int, Entity> _entities = new();
     private readonly List<ZoneEvent> _events = new();
     private readonly List<(SpawnPoint Spawn, double At)> _respawns = new();
     private readonly IReadOnlyDictionary<int, Grid> _grids;
     private readonly IReadOnlyList<ZoneLine> _lines;
+    private readonly Dictionary<int, DoorSlot> _doors = new();
     private readonly Random _random;
     private int _nextId = 1;
     private double _time;
@@ -69,6 +88,7 @@ public sealed class ZoneInstance
     public IFactionStandings Factions { get; set; } = new IndifferentFactions();
     public uint TickCount { get; private set; }
     public IEnumerable<Entity> Entities => _entities.Values;
+    public IEnumerable<(Door Door, bool Open)> Doors => _doors.Values.Select(d => (d.Data, d.Open));
 
     public ZoneInstance(ZoneData data, ZoneCollisionMesh? mesh = null, int seed = 0)
     {
@@ -76,6 +96,8 @@ public sealed class ZoneInstance
         Mesh = mesh;
         _grids = data.Grids;
         _lines = data.Lines;
+        foreach (var door in data.Doors)
+            _doors[door.Id] = new DoorSlot(door); // the table has duplicate ids in a few zones: the last wins
         _random = new Random(seed);
         foreach (var spawn in data.Spawns)
             SpawnAt(spawn);
@@ -100,6 +122,64 @@ public sealed class ZoneInstance
     }
 
     public Entity? Get(int id) => _entities.GetValueOrDefault(id);
+
+    public bool IsDoorOpen(int doorId) => _doors.TryGetValue(doorId, out var d) && d.Open;
+
+    /// <summary>
+    /// A player uses a door, after Client::ProcessOP_ClickDoor: a door untouched for
+    /// <see cref="DoorCloseSeconds"/> counts as closed; a locked door needs its key in hand (no
+    /// inventory yet: always refused); a door with a destination teleports the player, within the
+    /// zone or to another one; any other door toggles, with its trigger door.
+    /// </summary>
+    public void ClickDoor(int playerId, int doorId)
+    {
+        if (!_entities.TryGetValue(playerId, out var player) || !player.IsPlayer || !_doors.TryGetValue(doorId, out var door))
+            return;
+        if (Distance2(player.Position, door.Data.Position) > DoorReach * DoorReach)
+        {
+            _events.Add(new Told(playerId, "You are too far away to use that."));
+            return;
+        }
+        if (_time - door.LastClick >= DoorCloseSeconds)
+            door.Open = false;
+        door.LastClick = _time;
+
+        if (door.Data.Locked)
+        {
+            _events.Add(new Told(playerId, NoKeyMessage));
+            return;
+        }
+        if (door.Data.Teleports)
+        {
+            var to = door.Data.Destination;
+            if (string.Equals(door.Data.DestZone, ShortName, StringComparison.OrdinalIgnoreCase))
+            {
+                player.Position = to;
+                player.LastMoveTime = _time;
+                player.Moved = true;
+                _events.Add(new Teleported(playerId, to));
+            }
+            else
+            {
+                _events.Add(new CrossedZoneLine(playerId, new ZoneLine(-door.Data.Id, door.Data.Position, 0, door.Data.DestZone!, to), to));
+            }
+            return;
+        }
+        SetDoor(door, !door.Open);
+        if (door.Data.TriggerDoor > 0 && door.Data.TriggerDoor != doorId && _doors.TryGetValue(door.Data.TriggerDoor, out var linked))
+        {
+            linked.LastClick = _time;
+            SetDoor(linked, door.Open);
+        }
+    }
+
+    private void SetDoor(DoorSlot door, bool open)
+    {
+        if (door.Open == open)
+            return;
+        door.Open = open;
+        _events.Add(new DoorChanged(door.Data.Id, open));
+    }
 
     /// <summary>
     /// Validates a player's reported position: refused when faster than <see cref="MaxPlayerSpeed"/>
@@ -169,6 +249,10 @@ public sealed class ZoneInstance
     {
         _time += seconds;
         TickCount++;
+
+        foreach (var door in _doors.Values)
+            if (door.Open && _time - door.LastClick >= DoorCloseSeconds)
+                SetDoor(door, false);
 
         for (int i = _respawns.Count - 1; i >= 0; i--)
             if (_respawns[i].At <= _time)

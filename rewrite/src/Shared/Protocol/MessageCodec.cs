@@ -55,6 +55,10 @@ public static class MessageCodec
                 MessageType.EntitySpawned => EntitySpawned.ReadFields(reader),
                 MessageType.EntityRemoved => EntityRemoved.ReadFields(reader),
                 MessageType.ZoneChange => ZoneChange.ReadFields(reader),
+                MessageType.ZoneDoors => ZoneDoors.ReadFields(reader),
+                MessageType.ClickDoor => ClickDoor.ReadFields(reader),
+                MessageType.DoorState => DoorState.ReadFields(reader),
+                MessageType.ZoneMessage => ZoneMessage.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

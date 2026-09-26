@@ -49,6 +49,47 @@ namespace EQClassic.ClientCore
 
         public event Action<EntityView>? Added;
         public event Action<int>? Removed;
+        /// <summary>The door list arrived (just after entering the zone).</summary>
+        public event Action<IReadOnlyCollection<DoorInfo>>? DoorsLoaded;
+        /// <summary>A door opened or closed; the argument is its new state.</summary>
+        public event Action<DoorInfo>? DoorChanged;
+
+        private readonly Dictionary<int, DoorInfo> _doors = new Dictionary<int, DoorInfo>();
+        public IReadOnlyCollection<DoorInfo> Doors => _doors.Values;
+
+        public void Apply(ZoneDoors doors)
+        {
+            _doors.Clear();
+            foreach (var d in doors.Doors)
+                _doors[d.Id] = d;
+            DoorsLoaded?.Invoke(_doors.Values);
+        }
+
+        public void Apply(DoorState state)
+        {
+            if (!_doors.TryGetValue(state.DoorId, out var door) || door.Open == state.Open)
+                return;
+            _doors[state.DoorId] = door = door with { Open = state.Open };
+            DoorChanged?.Invoke(door);
+        }
+
+        /// <summary>The closest door within <paramref name="reach"/> units of a position (invisible click spots included), or null.</summary>
+        public DoorInfo? NearestDoor(Vec3 position, float reach)
+        {
+            DoorInfo? best = null;
+            float bestDistance = reach * reach;
+            foreach (var d in _doors.Values)
+            {
+                float dx = d.X - position.X, dy = d.Y - position.Y, dz = d.Z - position.Z;
+                float distance = dx * dx + dy * dy + dz * dz;
+                if (distance <= bestDistance)
+                {
+                    best = d;
+                    bestDistance = distance;
+                }
+            }
+            return best;
+        }
 
         public EntityView? Get(int id) => _entities.TryGetValue(id, out var e) ? e : null;
 
