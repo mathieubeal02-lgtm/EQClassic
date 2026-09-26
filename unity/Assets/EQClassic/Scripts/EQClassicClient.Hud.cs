@@ -100,6 +100,22 @@ namespace EQClassic.Unity
                 GUI.Box(new Rect(Screen.width / 2 - 300, 80, 600, 44),
                     $"The zone '{_presenter.MissingZone}' is not installed in this client (not imported from Lantern).\nYou are there for the server, but nothing can be drawn.");
             HotButtonEditor();
+            TranslocateDialog();
+        }
+
+        /// <summary>The Trilogy's translocate confirmation: someone offers to send you to a zone; Yes or No.</summary>
+        private void TranslocateDialog()
+        {
+            if (_client.Translocation is not { } offer)
+                return;
+            var r = new Rect(Screen.width / 2f - 200, Screen.height / 2f - 60, 400, 120);
+            _uiRects.Add(r);
+            GUI.Box(r, "Translocate");
+            GUI.Label(new Rect(r.x + 16, r.y + 26, r.width - 32, 44), $"{offer.Caster} would like to translocate you to {offer.Zone}. Do you accept?");
+            if (GUI.Button(new Rect(r.x + 60, r.yMax - 40, 110, 28), "Yes"))
+                _client.AnswerTranslocate(true);
+            if (GUI.Button(new Rect(r.xMax - 170, r.yMax - 40, 110, 28), "No"))
+                _client.AnswerTranslocate(false);
         }
 
         // ---- Classic ----

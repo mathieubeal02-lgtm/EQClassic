@@ -244,6 +244,21 @@ namespace EQClassic.ClientCore
         }
 
         /// <summary>Eats or drinks the item of an inventory slot.</summary>
+        /// <summary>A translocation someone offers (the caster and the zone), until answered; null when none.</summary>
+        public TranslocateOffer? Translocation { get; private set; }
+
+        public void AnswerTranslocate(bool accept)
+        {
+            if (Translocation == null)
+                return;
+            Translocation = null;
+            if (_state == GameState.InZone)
+                _connection?.Send(new TranslocateAnswer(accept));
+        }
+
+        /// <summary>#flymode, as the server says.</summary>
+        public bool Flying { get; private set; }
+
         public void Consume(int slot)
         {
             if (_state == GameState.InZone)
@@ -599,6 +614,8 @@ namespace EQClassic.ClientCore
                     Zone = new ZoneView(entered, Now);
                     var me = Zone.Get(entered.YourEntityId)!.Spawn;
                     Player = new LocalPlayer(entered.YourEntityId, new Vec3(me.X, me.Y, me.Z), me.Heading);
+                    Flying = false; // a new zone: #flymode and offers are per zone
+                    Translocation = null;
                     SetState(GameState.InZone);
                     ZoneEntered?.Invoke(Zone);
                     break;
@@ -655,6 +672,15 @@ namespace EQClassic.ClientCore
                     break;
                 case EntityLooks looks:
                     Zone?.Apply(looks, Now);
+                    break;
+                case TranslocateOffer offer:
+                    Translocation = offer;
+                    MessageReceived?.Invoke($"{offer.Caster} would like to translocate you to {offer.Zone}.");
+                    break;
+                case PlayerFlying flying:
+                    Flying = flying.Flying;
+                    if (Player != null)
+                        Player.Flying = flying.Flying;
                     break;
                 case TimeOfDay time:
                     Clock = new EqClock(time.Hour, time.Minute, Now);

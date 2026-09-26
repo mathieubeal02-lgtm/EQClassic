@@ -122,6 +122,13 @@ public sealed partial class ZoneServer
         }),
         new("invul", GmStatus, "[on|off] - your target (or you) cannot be hurt (also #invulnerable)", InvulCommand),
         new("invulnerable", GmStatus, "[on|off]", InvulCommand),
+        new("flymode", GmStatus, "[on|off] - fly (Space up, Ctrl down), your target player or you", (peer, p, a) =>
+        {
+            var t = Target(p) is { IsPlayer: true } player ? player : Me(p)!;
+            bool on = a.Length < 2 ? !t.GmFlying : a[1] is "on" or "1";
+            p.Instance.GmFlying(t.Id, on);
+            Tell(peer, $"{t.Name} is {(on ? "now flying" : "no longer flying")}.");
+        }),
         new("summonitem", GmStatus, "<item id> [charges] - an item into your inventory (also #si)", SummonItemCommand),
         new("si", GmStatus, "<item id> [charges]", SummonItemCommand),
         new("clearinventory", GmStatus, "- empties the general slots and bags of your target player (or yours)", (peer, p, _) =>

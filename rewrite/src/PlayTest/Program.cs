@@ -374,7 +374,32 @@ Step("trade an item", () =>
     bool got = Run(() => (partner.Inventory?.Slots.Count(s => s.ItemId == 13014) ?? 0) > before, 8);
     return (got, got ? "Qpartner received the muffin" : Last(2));
 });
+Step("translocate: asked, accepted", () =>
+{
+    // Qbot translocates Qpartner (grouped) to Greater Faydark: Qpartner is asked and says yes.
+    Chat("/invite Qpartner");
+    Run(() => partnerHeard.Any(l => l.Contains("invites you")), 8);
+    partner.ExecuteChat("/follow");
+    if (!Run(() => client.Group?.Members.Count == 2, 8)) return (false, "not grouped");
+    var them = client.Zone!.Entities.FirstOrDefault(e => e.Spawn.IsPlayer && e.Spawn.Name == "Qpartner");
+    if (them is null) return (false, "Qpartner not seen");
+    client.SetTarget(them.Id);
+    Chat("#cast 1336");
+    bool asked = Run(() => partner.Translocation != null, 8);
+    partner.AnswerTranslocate(true);
+    bool moved = Run(() => partner.State == GameState.InZone && partner.Zone?.Zone == "gfaydark", 30);
+    Chat("/disband");
+    return (asked && moved, $"asked {asked}, in {partner.Zone?.Zone}");
+});
 partner.Dispose();
+Step("GM: #flymode", () =>
+{
+    Chat("#flymode on");
+    bool on = Run(() => client.Flying && client.Player?.Flying == true, 8);
+    Chat("#flymode off");
+    bool off = Run(() => !client.Flying, 8);
+    return (on && off, $"on {on}, off {off}");
+});
 Step("quest: proximity greeting", () =>
 {
     // Lanken Rjarn (Erudin) sets a proximity box at spawn and greets whoever walks in carrying his note.

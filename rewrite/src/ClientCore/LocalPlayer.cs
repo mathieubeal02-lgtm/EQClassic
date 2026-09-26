@@ -64,6 +64,9 @@ namespace EQClassic.ClientCore
         public bool Airborne { get; private set; }
         /// <summary>Levitating (a buff): drops are floated down at <see cref="LevitateFallSpeed"/>.</summary>
         public bool Levitating { get; set; }
+        /// <summary>#flymode: no gravity; <see cref="SwimInput"/> climbs and dives at <see cref="FlyVerticalSpeed"/>.</summary>
+        public bool Flying { get; set; }
+        public const float FlyVerticalSpeed = 30f;
         public const float LevitateFallSpeed = 8f;
 
         /// <summary>The zone's water, lava and zone line regions (bsp_tree), when known.</summary>
@@ -81,7 +84,7 @@ namespace EQClassic.ClientCore
         /// <summary>Jump (Space), from the ground only (in water, Space swims up instead).</summary>
         public void Jump()
         {
-            if (Airborne || Swimming)
+            if (Airborne || Swimming || Flying)
                 return;
             Airborne = true;
             VerticalSpeed = JumpSpeed;
@@ -122,6 +125,20 @@ namespace EQClassic.ClientCore
         {
             var p = Position;
             float? ground = mesh.GroundZ(p.X, p.Y, p.Z, StepUp);
+            if (Flying)
+            {
+                Airborne = false;
+                Swimming = false;
+                VerticalSpeed = SwimInput * FlyVerticalSpeed;
+                if (VerticalSpeed == 0f)
+                    return;
+                float flyZ = p.Z + VerticalSpeed * seconds;
+                if (VerticalSpeed < 0f && ground is float under && flyZ < under)
+                    flyZ = under; // down to the ground, not through it
+                Position = new Vec3(p.X, p.Y, flyZ);
+                _dirty = true;
+                return;
+            }
             Swimming = InWater(p.X, p.Y, p.Z);
             if (Swimming)
             {

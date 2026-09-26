@@ -218,6 +218,10 @@ public sealed partial class ZoneServer : IDisposable
                 Broadcast(memorizer.Instance, memorizer.Instance.DrainEvents());
                 break;
 
+            case TranslocateAnswer answer when _players.TryGetValue(peer, out var answering):
+                answering.Instance.AnswerTranslocate(answering.EntityId, answer.Accept);
+                Broadcast(answering.Instance, answering.Instance.DrainEvents());
+                break;
             case ConsumeItem consume when _players.TryGetValue(peer, out var eater):
                 eater.Instance.ConsumeItem(eater.EntityId, consume.Slot);
                 break;
@@ -477,6 +481,12 @@ public sealed partial class ZoneServer : IDisposable
                     break;
                 case ZoneInstance.BankChanged bankChanged when PeerOf(instance, bankChanged.PlayerId) is { } bankPeer && instance.Get(bankChanged.PlayerId) is { } banking:
                     Send(bankPeer, BankOf(banking), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.TranslocateOffered offered when PeerOf(instance, offered.PlayerId) is { } offeredPeer:
+                    Send(offeredPeer, new TranslocateOffer(offered.Caster, offered.Zone), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.FlyingChanged flying when PeerOf(instance, flying.PlayerId) is { } flyingPeer:
+                    Send(flyingPeer, new PlayerFlying(flying.Flying), DeliveryMethod.ReliableOrdered);
                     break;
                 case ZoneInstance.StaminaChanged stamina when PeerOf(instance, stamina.PlayerId) is { } staminaPeer && instance.Get(stamina.PlayerId) is { } eater:
                     Send(staminaPeer, new PlayerStamina(eater.Hunger, eater.Thirst, eater.Fatigue), DeliveryMethod.ReliableOrdered);

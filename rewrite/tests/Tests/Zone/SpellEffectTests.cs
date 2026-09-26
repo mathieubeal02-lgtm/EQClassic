@@ -233,6 +233,46 @@ public class SpellEffectTests
     }
 
     [Fact]
+    public void Translocating_a_group_member_asks_them_first()
+    {
+        var (zone, player) = Setup();
+        var groups = new GroupRegistry();
+        zone.Groups = groups;
+        var friend = zone.AddPlayer("Qfriend", 1, 0, 30, new Vec3(5, 0, 0));
+        groups.Invite("Qcaster", "Qfriend");
+        groups.Accept("Qfriend");
+        zone.SetTarget(player.Id, friend.Id);
+
+        var offered = Cast(zone, player, 1336); // Translocate: Fay
+        Assert.Contains(new ZoneInstance.TranslocateOffered(friend.Id, "Qcaster", "gfaydark"), offered);
+        Assert.DoesNotContain(offered, e => e is ZoneInstance.CrossedZoneLine);
+        zone.AnswerTranslocate(friend.Id, false);
+        Assert.Contains(zone.DrainEvents(), e => e is ZoneInstance.Told { Text: "Qfriend declines the translocation." } t && t.PlayerId == player.Id);
+
+        Cast(zone, player, 1336);
+        zone.AnswerTranslocate(friend.Id, true);
+        Assert.Contains(zone.DrainEvents(), e => e is ZoneInstance.CrossedZoneLine c && c.PlayerId == friend.Id && c.Line.TargetZone == "gfaydark");
+
+        Cast(zone, player, 1336);
+        zone.Tick((float)ZoneInstance.TranslocateWait + 1);
+        zone.DrainEvents();
+        zone.AnswerTranslocate(friend.Id, true);
+        Assert.Contains(zone.DrainEvents(), e => e is ZoneInstance.Told { Text: "The translocation has faded." });
+    }
+
+    [Fact]
+    public void Flymode_lifts_the_climbing_limit()
+    {
+        var (zone, player) = Setup();
+        zone.Tick(1);
+        Assert.NotNull(zone.MovePlayer(player.Id, new Vec3(0, 0, 80), 0)); // 80 up in a second: refused
+        zone.GmFlying(player.Id, true);
+        Assert.Contains(new ZoneInstance.FlyingChanged(player.Id, true), zone.DrainEvents());
+        zone.Tick(1);
+        Assert.Null(zone.MovePlayer(player.Id, new Vec3(0, 0, 80), 0));
+    }
+
+    [Fact]
     public void A_rooted_npc_does_not_chase()
     {
         var (zone, player) = Setup(npcs: (new Vec3(40, 0, 0), Orc()));

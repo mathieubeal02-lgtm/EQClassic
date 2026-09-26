@@ -86,6 +86,16 @@ public sealed partial class ZoneInstance
             e.GmInvulnerable = on;
     }
 
+    /// <summary>#flymode: the player may leave the ground (their client stops falling).</summary>
+    public void GmFlying(int playerId, bool on)
+    {
+        if (_entities.TryGetValue(playerId, out var e) && e.IsPlayer)
+        {
+            e.GmFlying = on;
+            _events.Add(new FlyingChanged(e.Id, on));
+        }
+    }
+
     /// <summary>#summonitem.</summary>
     public void GmSummonItem(int playerId, int itemId, int charges)
     {

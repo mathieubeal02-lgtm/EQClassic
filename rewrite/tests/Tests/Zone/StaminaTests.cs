@@ -102,6 +102,9 @@ public class StaminaTests
         Assert.Contains(new ZoneInstance.LooksChanged(ann.Id), zone.DrainEvents());
         Assert.Equal(3, ann.ToSpawn().Texture);
         Assert.Equal(new EntityLooks(7, 3, 1), MessageCodec.Decode(MessageCodec.Encode(new EntityLooks(7, 3, 1))));
+        Assert.Equal(new TranslocateOffer("Qcaster", "gfaydark"), MessageCodec.Decode(MessageCodec.Encode(new TranslocateOffer("Qcaster", "gfaydark"))));
+        Assert.Equal(new TranslocateAnswer(true), MessageCodec.Decode(MessageCodec.Encode(new TranslocateAnswer(true))));
+        Assert.Equal(new PlayerFlying(true), MessageCodec.Decode(MessageCodec.Encode(new PlayerFlying(true))));
     }
 
     [Fact]

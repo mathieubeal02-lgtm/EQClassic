@@ -81,4 +81,7 @@ public enum MessageType : byte
     ConsumeItem = 73,
     EntityIllusion = 74,
     EntityLooks = 75,
+    TranslocateOffer = 76,
+    TranslocateAnswer = 77,
+    PlayerFlying = 78,
 }

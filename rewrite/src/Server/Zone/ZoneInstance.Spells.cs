@@ -607,7 +607,15 @@ public sealed partial class ZoneInstance
                         _events.Add(new Told(caster.Id, "You can only cast that spell on players in your group."));
                         return;
                     }
-                    Teleport(target, spell.TeleportZone, new Vec3(spell.Base[1], spell.Base[0], spell.Base[2]), "teleport");
+                    var destination = new Vec3(spell.Base[1], spell.Base[0], spell.Base[2]);
+                    if (target == caster)
+                        Teleport(target, spell.TeleportZone, destination, "teleport");
+                    else
+                    {
+                        // The target is asked first (Client::SendOPTranslocateConfirm); the offer lasts a minute.
+                        target.PendingTranslocate = (spell.TeleportZone, destination, caster.Id, _time + TranslocateWait);
+                        _events.Add(new TranslocateOffered(target.Id, DisplayName(caster.Name), spell.TeleportZone));
+                    }
                     return;
                 case SpellEffect.SummonCorpse when target.IsPlayer:
                     // SE_SummonCorpse: the target's corpses in this zone come to the caster.
@@ -648,6 +656,29 @@ public sealed partial class ZoneInstance
     }
 
     /// <summary>To a place in this zone, or across zones through the zone server (like a zone line).</summary>
+    /// <summary>How long a translocation offer waits for its answer (seconds).</summary>
+    public const double TranslocateWait = 60;
+
+    /// <summary>The player's answer to a translocation offer: accepted in time, they go.</summary>
+    public void AnswerTranslocate(int playerId, bool accept)
+    {
+        if (!_entities.TryGetValue(playerId, out var player) || player.PendingTranslocate is not { } offer)
+            return;
+        player.PendingTranslocate = null;
+        if (!accept)
+        {
+            if (_entities.TryGetValue(offer.CasterId, out var caster))
+                _events.Add(new Told(caster.Id, $"{DisplayName(player.Name)} declines the translocation."));
+            return;
+        }
+        if (_time > offer.Until)
+        {
+            _events.Add(new Told(player.Id, "The translocation has faded."));
+            return;
+        }
+        Teleport(player, offer.Zone, offer.To, "teleport");
+    }
+
     private void Teleport(Entity player, string zone, Vec3 to, string reason)
     {
         if (!string.Equals(zone, ShortName, StringComparison.OrdinalIgnoreCase))

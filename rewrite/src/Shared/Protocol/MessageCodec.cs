@@ -107,6 +107,9 @@ public static class MessageCodec
                 MessageType.ConsumeItem => ConsumeItem.ReadFields(reader),
                 MessageType.EntityIllusion => EntityIllusion.ReadFields(reader),
                 MessageType.EntityLooks => EntityLooks.ReadFields(reader),
+                MessageType.TranslocateOffer => TranslocateOffer.ReadFields(reader),
+                MessageType.TranslocateAnswer => TranslocateAnswer.ReadFields(reader),
+                MessageType.PlayerFlying => PlayerFlying.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

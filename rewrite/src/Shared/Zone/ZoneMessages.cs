@@ -389,6 +389,36 @@ namespace EQClassic.Shared.Zone
         public static EntityLooks ReadFields(NetDataReader reader) => new EntityLooks(reader.GetInt(), reader.GetByte(), reader.GetByte());
     }
 
+    /// <summary>Zone server to a player: someone would translocate them to a zone (legacy OP_Translocate); they answer.</summary>
+    public sealed record TranslocateOffer(string Caster, string Zone) : IMessage
+    {
+        public MessageType Type => MessageType.TranslocateOffer;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(Caster);
+            writer.Put(Zone);
+        }
+
+        public static TranslocateOffer ReadFields(NetDataReader reader) => new TranslocateOffer(reader.GetString(), reader.GetString());
+    }
+
+    /// <summary>Client to zone server: yes or no to the translocation offered.</summary>
+    public sealed record TranslocateAnswer(bool Accept) : IMessage
+    {
+        public MessageType Type => MessageType.TranslocateAnswer;
+        public void WriteFields(NetDataWriter writer) => writer.Put(Accept);
+        public static TranslocateAnswer ReadFields(NetDataReader reader) => new TranslocateAnswer(reader.GetBool());
+    }
+
+    /// <summary>Zone server to the player: #flymode on or off (no gravity, Space and Ctrl move up and down).</summary>
+    public sealed record PlayerFlying(bool Flying) : IMessage
+    {
+        public MessageType Type => MessageType.PlayerFlying;
+        public void WriteFields(NetDataWriter writer) => writer.Put(Flying);
+        public static PlayerFlying ReadFields(NetDataReader reader) => new PlayerFlying(reader.GetBool());
+    }
+
     public sealed record EntityAppearance(int EntityId, bool Sitting) : IMessage
     {
         public MessageType Type => MessageType.EntityAppearance;

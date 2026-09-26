@@ -123,6 +123,10 @@ public sealed partial class ZoneInstance
         public int Fatigue { get; internal set; }
         /// <summary>#invul: nothing hurts it.</summary>
         public bool GmInvulnerable { get; internal set; }
+        /// <summary>#flymode: no climbing limit (the client drops gravity).</summary>
+        public bool GmFlying { get; internal set; }
+        /// <summary>Players: a translocation offered to them, waiting for their answer until then.</summary>
+        internal (string Zone, Vec3 To, int CasterId, double Until)? PendingTranslocate;
         public int FactionValue(int factionId) => FactionValues.GetValueOrDefault(factionId);
         internal void SetFactionValue(int factionId, int value) => FactionValues[factionId] = value;
         /// <summary>NPC casters: their spells (npc_spells), spell credits spent, and when they next consider casting.</summary>
@@ -176,6 +180,9 @@ public sealed partial class ZoneInstance
     public sealed record ExperienceChanged(int PlayerId, uint Exp, int Level) : ZoneEvent;
     /// <summary>A kill moved the player's faction values: the server saves them.</summary>
     public sealed record FactionsChanged(int PlayerId) : ZoneEvent;
+    /// <summary>A translocation offered to a player (they answer with <see cref="AnswerTranslocate"/>).</summary>
+    public sealed record TranslocateOffered(int PlayerId, string Caster, string Zone) : ZoneEvent;
+    public sealed record FlyingChanged(int PlayerId, bool Flying) : ZoneEvent;
 
     internal const int BankerClass = 40, MerchantClass = 41;
 
@@ -586,7 +593,7 @@ public sealed partial class ZoneInstance
         // Falling is free (the legacy server checked nothing); climbing is limited to jumps and steps, except in water.
         float climb = to.Z - player.Position.Z;
         bool swimming = Regions is { } regions && (regions.InWater(to) || regions.InWater(player.Position));
-        if (!swimming && climb > MaxClimbSpeed * elapsed + ClimbTolerance)
+        if (!swimming && !player.GmFlying && climb > MaxClimbSpeed * elapsed + ClimbTolerance)
             return $"climbed {climb:0} units in {elapsed:0.00} s";
         if (Info is { } info && to.Z < info.Underworld)
         {
