@@ -32,6 +32,7 @@ and plays these scenarios, each reported OK / FAIL with what it saw, in a Markdo
 | second player enters | bot2 / bot2, Qpartner (made if missing) | both players in one zone |
 | group: invite, follow, chat | /invite, /follow, /g | both see the group, the line reaches the other |
 | trade an item | /trade, offer, accept both | the other player gets the item |
+| quest: proximity greeting | #zone erudnint, carry the note 18729, go to Lanken Rjarn | EVENT_SPAWN sets his box, EVENT_ENTER greets |
 
 Setup: a server with the database (`--db`), a GM account for the first player (`UPDATE account SET
 status = 255 WHERE id = <world account>`), and a second login account `bot2` (SHA-1 password). The

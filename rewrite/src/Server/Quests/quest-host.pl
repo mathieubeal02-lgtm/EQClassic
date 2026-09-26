@@ -41,6 +41,31 @@ sub AUTOLOAD {
     return 0;
 }
 
+# $npc and $client: what the scripts ask them (position, name, id, the client's items and factions)
+# comes from the variables; what they tell them comes back as "npc_Method" / "client_Method" lines.
+package QuestMob;
+our $AUTOLOAD;
+sub new { my ($class, $kind) = @_; return bless { kind => $kind }, $class; }
+sub AUTOLOAD {
+    my $self = shift;
+    my $name = $AUTOLOAD;
+    $name =~ s/.*:://;
+    return if $name eq 'DESTROY';
+    main::emit("$self->{kind}_$name", @_);
+    return 0;
+}
+package QuestNpc;
+our @ISA = ('QuestMob');
+sub GetX { $main::x } sub GetY { $main::y } sub GetZ { $main::z } sub GetHeading { $main::h }
+sub GetID { $main::mobid } sub GetName { $main::mname } sub GetCleanName { $main::mname } sub GetLevel { $main::mlevel }
+sub GetHPRatio { $main::hpratio }
+package QuestClient;
+our @ISA = ('QuestMob');
+sub GetID { $main::userid } sub GetName { $main::name } sub GetCleanName { $main::name } sub GetLevel { $main::ulevel }
+sub GetItemIDAt { my ($self, $slot) = @_; return $main::slotitem{$slot} // -1; }
+sub GetCharacterFactionLevel { my ($self, $id) = @_; return $main::factionlevel{$id} // 0; }
+sub Message { my ($self, $type, $text) = @_; main::emit('client_Message', $type, $text); return 0; }
+
 package main;
 no strict 'vars';
 
@@ -50,11 +75,20 @@ while (my $line = <STDIN>) {
     next unless @f >= 2;
     if ($f[0] eq 'itemcount') {
         $main::itemcount{$f[1]} = $f[2];
+    } elsif ($f[0] =~ /^hasitem\.(\d+)$/) {
+        # $hasitem{item id}: the worn and general slots (0 to 29) holding that item.
+        push @{$main::hasitem{$f[1]}}, $1;
+        $main::slotitem{$1} = $f[1];
+    } elsif ($f[0] =~ /^factionlevel\.(\d+)$/) {
+        $main::factionlevel{$1} = $f[1];
     } else {
         no strict 'refs';
         ${"main::$f[0]"} = $f[1];
     }
 }
+
+$main::npc = QuestNpc->new('npc') if defined $main::mobid;
+$main::client = QuestClient->new('client') if defined $main::userid;
 
 if ($plugins && -d $plugins) {
     opendir(my $dir, $plugins);

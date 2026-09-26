@@ -8,7 +8,7 @@ namespace EQClassic.Server.Zone;
 /// <summary>
 /// The quest scripts' events: EVENT_SAY when a player says something to the NPC they target (a
 /// hail, a keyword in brackets), EVENT_ITEM when they hand it items, EVENT_SPAWN, EVENT_AGGRO,
-/// EVENT_SLAY, EVENT_DEATH, EVENT_TIMER and EVENT_SIGNAL. Only scripts that define the event run;
+/// EVENT_ATTACK, EVENT_SLAY, EVENT_DEATH, EVENT_TIMER, EVENT_SIGNAL, EVENT_ENTER and EVENT_EXIT. Only scripts that define the event run;
 /// they run outside the game loop and what they did is applied at the next tick.
 /// </summary>
 public sealed partial class ZoneServer
@@ -39,6 +39,13 @@ public sealed partial class ZoneServer
     {
         if (ScriptFor(instance, template, eventName) is not { } script)
             return;
+        if (playerId != 0 && Quests!.FactionsAsked(script) is { Count: > 0 } factions)
+        {
+            var withFactions = new Dictionary<string, string>(vars);
+            foreach (int faction in factions)
+                withFactions[$"factionlevel.{faction}"] = instance.FactionLevel(playerId, faction).ToString();
+            vars = withFactions;
+        }
         var at = new Vec3(Number(vars, "x"), Number(vars, "y"), Number(vars, "z"));
         var speaker = (vars.GetValueOrDefault("mname") ?? DisplayName(template.Name), at);
         _questRuns.Add((instance, npcId, playerId, speaker, Quests!.RunAsync(script, eventName, vars, itemCount)));

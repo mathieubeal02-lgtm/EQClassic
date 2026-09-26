@@ -78,6 +78,10 @@ public sealed partial class ZoneInstance
         internal PlayerProgress? Progress;
         /// <summary>NPCs: damage taken from each player (the most damage earns the experience).</summary>
         internal Dictionary<int, int>? DamageBy;
+        /// <summary>NPCs: quest::set_proximity's box (EVENT_ENTER, EVENT_EXIT), the players in it, and when EVENT_ATTACK may come again.</summary>
+        internal ProximityBox? Proximity;
+        internal HashSet<int>? InProximity;
+        internal double NextAttackEvent;
 
         public int HpPercent => Fighter.MaxHp <= 0 ? 0 : Math.Clamp((int)Math.Ceiling(100.0 * Hp / Fighter.MaxHp), 0, 100);
 
@@ -949,6 +953,7 @@ public sealed partial class ZoneInstance
         CheckTrades();
         CheckBanks();
         CheckQuestTimers();
+        CheckProximities();
         TickStamina();
         if (_time >= _nextRegen)
             TickBuffs(); // before the regeneration below moves _nextRegen: same 6 s tic
@@ -1041,6 +1046,13 @@ public sealed partial class ZoneInstance
         {
             defender.DamageBy ??= new Dictionary<int, int>();
             defender.DamageBy[credited.Id] = defender.DamageBy.GetValueOrDefault(credited.Id) + damage;
+        }
+        // NPC::Damage: EVENT_ATTACK, again only after 12 s without being attacked.
+        if (!defender.IsPlayer && credited is not null && defender.Npc is { } attackedType)
+        {
+            if (_time >= defender.NextAttackEvent)
+                _events.Add(new QuestTriggered(defender.Id, credited.Id, attackedType, "EVENT_ATTACK", QuestVariables(defender.Id, credited.Id)));
+            defender.NextAttackEvent = _time + AttackEventReset;
         }
         if (!defender.IsPlayer && defender.TargetId is null && (attacker.IsPlayer || attacker.OwnerId is not null || defender.OwnerId is not null))
         {

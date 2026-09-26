@@ -331,6 +331,9 @@ public sealed partial class ZoneServer : IDisposable
             instance.Groups = _groups;
             _instances[ticket.Zone] = instance;
             Log?.Invoke($"zone {ticket.Zone} booted: {instance.Entities.Count()} NPC(s)");
+            // The first population spawns too: its EVENT_SPAWN (proximity boxes, timers) as the legacy zone ran it at boot.
+            foreach (var npc in instance.Entities.Where(e => !e.IsPlayer).ToList())
+                QuestEvent(instance, npc.Id, 0, "EVENT_SPAWN");
         }
         var profile = ticket.Profile;
         var inventory = profile is null ? null : ZoneInstance.PlayerInventory.From(profile.Inventory, profile.Charges, profile.Coins, profile.BagItems, profile.BagCharges)

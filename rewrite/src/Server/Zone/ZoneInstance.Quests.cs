@@ -55,6 +55,37 @@ public sealed partial class ZoneInstance
         }
     }
 
+    /// <summary>quest::set_proximity's box: x, y and z ranges.</summary>
+    internal readonly record struct ProximityBox(float MinX, float MaxX, float MinY, float MaxY, float MinZ, float MaxZ)
+    {
+        public bool Contains(Vec3 p) => p.X >= MinX && p.X <= MaxX && p.Y >= MinY && p.Y <= MaxY && p.Z >= MinZ && p.Z <= MaxZ;
+    }
+
+    /// <summary>The legacy timer: EVENT_ATTACK once, then again after this long without being attacked.</summary>
+    public const double AttackEventReset = 12.0;
+
+    /// <summary>
+    /// EVENT_ENTER and EVENT_EXIT: a player coming into or leaving an NPC's quest::set_proximity box
+    /// (the legacy zone stored the box but never checked it; this is what the scripts expect).
+    /// </summary>
+    private void CheckProximities()
+    {
+        foreach (var npc in _entities.Values.Where(e => e.Proximity is not null && !e.IsCorpse).ToList())
+        {
+            var box = npc.Proximity!.Value;
+            var inside = npc.InProximity ??= new HashSet<int>();
+            foreach (var player in _entities.Values.Where(e => e.IsPlayer).ToList())
+            {
+                bool now = player.Hp > 0 && box.Contains(player.Position);
+                if (now && inside.Add(player.Id))
+                    _events.Add(new QuestTriggered(npc.Id, player.Id, npc.Npc!, "EVENT_ENTER", QuestVariables(npc.Id, player.Id)));
+                else if (!now && inside.Remove(player.Id) && _entities.ContainsKey(player.Id))
+                    _events.Add(new QuestTriggered(npc.Id, player.Id, npc.Npc!, "EVENT_EXIT", QuestVariables(npc.Id, player.Id)));
+            }
+            inside.RemoveWhere(id => !_entities.ContainsKey(id)); // gone from the zone: no EVENT_EXIT
+        }
+    }
+
     /// <summary>quest::signalwith / signal: EVENT_SIGNAL on every NPC of that type in the zone.</summary>
     private void Signal(int npcTypeId, int signal)
     {
@@ -181,6 +212,20 @@ public sealed partial class ZoneInstance
                     if (SpellById(a.Int(0)) is { } spell)
                         ApplyInstantEffects(player, player, spell);
                     break;
+                case "set_proximity" when npc?.Npc is not null:
+                {
+                    float F(int i, float fallback) => float.TryParse(a.Arg(i), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : fallback;
+                    npc.Proximity = new ProximityBox(F(0, 0), F(1, 0), F(2, 0), F(3, 0), F(4, -999999), F(5, 999999));
+                    npc.InProximity = null;
+                    break;
+                }
+                case "clear_proximity" when npc is not null:
+                    npc.Proximity = null;
+                    npc.InProximity = null;
+                    break;
+                case "client_Message" when player is not null:
+                    _events.Add(new Told(player.Id, a.Arg(1)));
+                    break;
                 case "ding":
                     break; // a sound
                 case "error":
@@ -214,12 +259,23 @@ public sealed partial class ZoneInstance
             vars["class"] = ClassName(p.Fighter.Class);
             vars["ulevel"] = p.Level.ToString();
             vars["userid"] = p.Id.ToString();
+            // $hasitem: the worn and general slots (0 to 29), as PerlembParser exports them.
+            if (p.Inventory is { } inventory)
+                for (int slot = 0; slot < PlayerInventory.Slots; slot++)
+                    if (inventory.ItemAt(slot) is int item and not 0 and not -1)
+                        vars[$"hasitem.{slot}"] = item.ToString();
         }
         if (_entities.TryGetValue(npcId, out var n))
         {
             vars["mname"] = DisplayName(n.Name);
             vars["mobid"] = n.Id.ToString();
             vars["mlevel"] = n.Level.ToString();
+            vars["hpratio"] = n.HpPercent.ToString();
+            if (n.TargetId is int targetId && _entities.TryGetValue(targetId, out var target))
+            {
+                vars["targetid"] = target.Id.ToString();
+                vars["targetname"] = target.Name;
+            }
             vars["x"] = n.Position.X.ToString(System.Globalization.CultureInfo.InvariantCulture);
             vars["y"] = n.Position.Y.ToString(System.Globalization.CultureInfo.InvariantCulture);
             vars["z"] = n.Position.Z.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -227,6 +283,10 @@ public sealed partial class ZoneInstance
         }
         return vars;
     }
+
+    /// <summary>Client::GetCharacterFactionLevel: the player's value with a faction plus its modifiers.</summary>
+    public int FactionLevel(int playerId, int factionId) =>
+        _entities.TryGetValue(playerId, out var player) && Factions is DatabaseFactions db ? db.Level(player, factionId, player.Deity) : 0;
 
     private static string ClassName(int c) => c switch
     {

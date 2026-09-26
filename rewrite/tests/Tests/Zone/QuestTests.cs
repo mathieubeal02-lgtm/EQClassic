@@ -186,6 +186,55 @@ public class QuestTests
     }
 
     [Fact]
+    public void A_proximity_box_raises_enter_and_exit()
+    {
+        var (zone, ann, npc) = Setup();
+        zone.ApplyQuest(npc.Id, 0, [new QuestAction("set_proximity", ["-15", "25", "-20", "20"])]);
+        zone.Tick(0.1f);
+        var enter = Assert.Single(zone.DrainEvents().OfType<ZoneInstance.QuestTriggered>());
+        Assert.Equal(("EVENT_ENTER", ann.Id, "Ann"), (enter.Event, enter.PlayerId, enter.Variables["name"]));
+        zone.Tick(0.1f);
+        Assert.DoesNotContain(zone.DrainEvents(), e => e is ZoneInstance.QuestTriggered); // still inside: nothing new
+
+        zone.Tick(5); // time to walk away
+        zone.DrainEvents();
+        Assert.Null(zone.MovePlayer(ann.Id, new Vec3(-40, 0, 0), 0));
+        zone.Tick(0.1f);
+        Assert.Equal("EVENT_EXIT", Assert.Single(zone.DrainEvents().OfType<ZoneInstance.QuestTriggered>()).Event);
+
+        zone.ApplyQuest(npc.Id, 0, [new QuestAction("clear_proximity", [])]);
+        zone.Tick(5);
+        Assert.Null(zone.MovePlayer(ann.Id, new Vec3(0, 0, 0), 0));
+        zone.Tick(0.1f);
+        Assert.DoesNotContain(zone.DrainEvents(), e => e is ZoneInstance.QuestTriggered);
+    }
+
+    [Fact]
+    public void Being_attacked_raises_the_attack_event_once_per_fight()
+    {
+        var (zone, ann, npc) = Setup();
+        zone.SetTarget(ann.Id, npc.Id);
+        zone.SetAutoAttack(ann.Id, true);
+        var attacks = new List<ZoneInstance.QuestTriggered>();
+        for (int i = 0; i < 100; i++)
+        {
+            zone.Tick(0.1f);
+            attacks.AddRange(zone.DrainEvents().OfType<ZoneInstance.QuestTriggered>().Where(t => t.Event == "EVENT_ATTACK"));
+        }
+        var attack = Assert.Single(attacks); // ten seconds of swings, one event
+        Assert.Equal((npc.Id, ann.Id), (attack.NpcId, attack.PlayerId));
+    }
+
+    [Fact]
+    public void Script_variables_carry_the_players_items_and_the_npcs_health()
+    {
+        var (zone, ann, npc) = Setup();
+        var vars = zone.QuestVariables(npc.Id, ann.Id);
+        Assert.Equal(Whiskers.ToString(), vars["hasitem.22"]);
+        Assert.Equal("100", vars["hpratio"]);
+    }
+
+    [Fact]
     public async Task A_legacy_script_runs_in_perl_and_its_calls_come_back()
     {
         if (!HasPerl())
@@ -221,6 +270,25 @@ public class QuestTests
                 new Dictionary<int, int> { [13071] = 1, [Sword] = 1 });
             Assert.Equal(["say", "summonitem", "faction", "exp", "return_item"], given.Select(a => a.Function));
             Assert.Equal(Sword, given[^1].Int(0)); // the extra item comes back
+
+            // $npc and $client, %hasitem and faction levels (a guild master greeting a newcomer with the note).
+            var master = Path.Combine(dir, "qeynos2", "Guild_Master.pl");
+            File.WriteAllText(master, """
+                sub EVENT_SPAWN { quest::set_proximity($npc->GetX() - 20, $npc->GetX() + 20, $npc->GetY() - 20, $npc->GetY() + 20); }
+                sub EVENT_ENTER {
+                  if ($hasitem{18729} && $client->GetCharacterFactionLevel(342) >= 28) { $client->Message(15, "Read the note, " . $client->GetName() . "."); }
+                  $npc->SetAppearance(1, 0);
+                }
+                """);
+            Assert.Equal([342], engine.FactionsAsked(master));
+            var spawned = await engine.RunAsync(master, "EVENT_SPAWN", new Dictionary<string, string> { ["mobid"] = "7", ["x"] = "100", ["y"] = "-50" });
+            Assert.Equal(new QuestAction("set_proximity", ["80", "120", "-70", "-30"]), Assert.Single(spawned), new ActionComparer());
+            var entered = await engine.RunAsync(master, "EVENT_ENTER", new Dictionary<string, string>
+            {
+                ["mobid"] = "7", ["userid"] = "3", ["name"] = "Ann", ["hasitem.23"] = "18729", ["factionlevel.342"] = "50",
+            });
+            Assert.Equal([new QuestAction("client_Message", ["15", "Read the note, Ann."]), new QuestAction("npc_SetAppearance", ["1", "0"])],
+                entered, new ActionComparer());
 
             var broken = Path.Combine(dir, "qeynos2", "Broken.pl");
             File.WriteAllText(broken, "sub EVENT_SAY { quest::say( }");

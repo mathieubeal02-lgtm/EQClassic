@@ -125,6 +125,10 @@ public sealed class DatabaseFactions : IFactionStandings
         return messages;
     }
 
+    /// <summary>Client::GetCharacterFactionLevel: the stored value plus the class, race and deity modifiers (0 for no faction).</summary>
+    public int Level(ZoneInstance.Entity player, int factionId, int deity) =>
+        factionId <= 0 || _data.Faction(factionId) is not { } faction ? 0 : player.FactionValue(factionId) + faction.Modifiers(player.Fighter.Class, player.Race, deity);
+
     /// <summary>One faction moved by a hit (a kill, or quest::faction), the total kept within ±1500; the message.</summary>
     public string? Adjust(ZoneInstance.Entity player, int factionId, int hit, int deity)
     {

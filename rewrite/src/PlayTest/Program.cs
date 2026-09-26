@@ -353,6 +353,18 @@ Step("trade an item", () =>
     return (got, got ? "Qpartner received the muffin" : Last(2));
 });
 partner.Dispose();
+Step("quest: proximity greeting", () =>
+{
+    // Lanken Rjarn (Erudin) sets a proximity box at spawn and greets whoever walks in carrying his note.
+    Chat("#zone erudnint");
+    if (!Run(() => InZone("erudnint") && client.Player != null, 30)) return (false, "could not reach erudnint");
+    Chat("#summonitem 18729");
+    if (!Run(() => client.Inventory?.Slots.Any(s => s.ItemId == 18729) == true, 8)) return (false, "no note");
+    if (!GoTo("Lanken")) return (false, "Lanken Rjarn not in the zone");
+    bool ok = Heard(l => l.Contains("I am Lanken Rjarn"), 10);
+    Chat("#clearinventory");
+    return (ok, ok ? "greeted on entering his box" : Last(2));
+});
 
 int failed = results.Count(r => !r.Ok);
 Console.WriteLine($"{results.Count - failed} passed, {failed} failed.");
