@@ -162,14 +162,29 @@ namespace EQClassic.Unity
                 var r = new Rect(86 * sx, (GemCentres[gem] - 11.5f) * sy, 30 * sx, 23 * sy);
                 var spell = _client.GemSpell(gem);
                 if (spell == null)
+                {
+                    if (_bookSelected is int chosen && GUI.Button(r, "", _hit))
+                    {
+                        _client.Memorize(gem, chosen);
+                        _bookSelected = null;
+                    }
                     continue;
+                }
                 var colour = GUI.color;
                 if (spell.Mana > _client.Mana || _client.Casting != null)
                     GUI.color = new Color(1f, 1f, 1f, 0.45f);
                 GUI.DrawTextureWithTexCoords(r, skin.Gems, ClassicSkin.GemUv(spell.Icon));
                 GUI.color = colour;
                 if (GUI.Button(r, "", _hit))
-                    _client.Cast(gem);
+                {
+                    if (_bookSelected is int picked)
+                    {
+                        _client.Memorize(gem, picked); // a spell picked up in the book goes here
+                        _bookSelected = null;
+                    }
+                    else
+                        _client.Cast(gem);
+                }
                 var mouse = Event.current?.mousePosition;
                 if (mouse is { } m && r.Contains(m))
                     hovered = $"{gem + 1}: {spell.Name} ({spell.Mana} mana)";
@@ -280,6 +295,63 @@ namespace EQClassic.Unity
             GUI.color = colour;
         }
 
+        private int _bookSpread;
+        private int? _bookSelected;
+
+        /// <summary>
+        /// The Trilogy spell book over the view: two pages of four spells (their gem, name, level and
+        /// mana), the arrows turn the pages, DONE closes. A click memorises the spell in the first empty
+        /// gem; with every gem taken it is picked up, and a click on a gem puts it there.
+        /// </summary>
+        private void ClassicBook(ClassicSkin skin, Rect view)
+        {
+            float bx = view.width / 400f, by = view.height / 320f;
+            Rect B(float x, float y, float w, float h) => new Rect(view.x + x * bx, view.y + y * by, w * bx, h * by);
+            GUI.DrawTextureWithTexCoords(view, skin.Book, ClassicSkin.Uv(0, 0, 400, 320));
+            var spells = _client.SpellBook?.Spells.OrderBy(s => s.Level).ThenBy(s => s.Name).ToList() ?? new List<Shared.Zone.SpellView>();
+            int spreads = System.Math.Max(1, (spells.Count + 7) / 8);
+            _bookSpread = Mathf.Clamp(_bookSpread, 0, spreads - 1);
+            var ink = new GUIStyle(_parchment) { wordWrap = true };
+            ink.normal.textColor = new Color(0.15f, 0.1f, 0.05f);
+            for (int i = 0; i < 8; i++)
+            {
+                int index = _bookSpread * 8 + i;
+                if (index >= spells.Count)
+                    break;
+                var spell = spells[index];
+                float px = i < 4 ? 32 : 210, py = 30 + (i % 4) * 56;
+                var slot = B(px, py, 160, 52);
+                if (_bookSelected == spell.SpellId)
+                    Fill(slot, new Color(1f, 0.9f, 0.4f, 0.35f));
+                GUI.DrawTextureWithTexCoords(B(px + 2, py + 12, 30, 23), skin.Gems, ClassicSkin.GemUv(spell.Icon));
+                GUI.Label(B(px + 36, py + 2, 124, 30), spell.Name, ink);
+                GUI.Label(B(px + 36, py + 30, 124, 20), $"Level {spell.Level}  {spell.Mana} mana", ink);
+                if (Hit(slot))
+                    PickFromBook(spell);
+            }
+            if (Hit(B(8, 278, 34, 30))) _bookSpread--;
+            if (Hit(B(358, 278, 34, 30))) _bookSpread++;
+            if (Hit(B(177, 279, 46, 18)))
+            {
+                _bookSelected = null;
+                ToggleWindow(HudLayout.Book);
+            }
+            GUI.Label(B(60, 284, 110, 18), $"{_bookSpread + 1} / {spreads}", ink);
+        }
+
+        private void PickFromBook(Shared.Zone.SpellView spell)
+        {
+            for (int gem = 0; gem < GameClient.GemCount; gem++)
+                if (_client.GemSpell(gem) == null)
+                {
+                    _client.Memorize(gem, spell.SpellId);
+                    _bookSelected = null;
+                    return;
+                }
+            _bookSelected = spell.SpellId;
+            AddMessage($"Click a spell gem to put {spell.Name} there.");
+        }
+
         /// <summary>Screens in the middle of the view (two side by side at most); how many were drawn.</summary>
         private int DrawViewWindows(Rect view)
         {
@@ -295,7 +367,14 @@ namespace EQClassic.Unity
             if (_layout.IsOpen(HudLayout.Inventory))
                 main.Add(("Persona - inventory", InventoryPanel));
             if (_layout.IsOpen(HudLayout.Book))
+            {
+                if (Skin?.Book != null)
+                {
+                    ClassicBook(Skin, view);
+                    return 1; // the book takes the whole view, as in the Trilogy client
+                }
                 main.Add(("Spell book", BookPanel));
+            }
             if (_layout.IsOpen(HudLayout.Skills))
                 main.Add(("Skills", SkillsPanel));
             if (_layout.IsOpen(HudLayout.Help))

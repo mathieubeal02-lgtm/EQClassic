@@ -14,6 +14,8 @@ namespace EQClassic.Unity
     {
         public Texture2D Frame { get; private set; }
         public Texture2D Gems { get; private set; }
+        /// <summary>The spell book (book.bmp): the open book fills the 400 × 320 of the view, from the top left of the sheet.</summary>
+        public Texture2D Book { get; private set; }
 
         /// <summary>The art's own size: every place in the frame is measured on it.</summary>
         public const float Width = 640f, Height = 480f;
@@ -34,7 +36,11 @@ namespace EQClassic.Unity
                 var files = PfsArchive.Read(File.ReadAllBytes(path));
                 if (!files.TryGetValue("main1.bmp", out var frame) || !files.TryGetValue("spelgems.bmp", out var gems))
                     return null;
-                return new ClassicSkin { Frame = Texture(frame), Gems = Texture(gems) };
+                return new ClassicSkin
+                {
+                    Frame = Texture(frame), Gems = Texture(gems),
+                    Book = files.TryGetValue("book.bmp", out var book) ? Texture(book) : null,
+                };
             }
             catch (System.Exception e)
             {
