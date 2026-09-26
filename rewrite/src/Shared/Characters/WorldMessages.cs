@@ -75,10 +75,11 @@ namespace EQClassic.Shared.Characters
     }
 
     /// <summary>
-    /// Where the character goes (legacy OP_ZoneServerInfo). Until zones run in the rewrite (M3),
-    /// this is the zone and position saved in the character's profile.
+    /// Where the character goes (legacy OP_ZoneServerInfo): the zone saved in the profile, the zone
+    /// server to connect to, and a single-use key for it (<see cref="Zone.ZoneEnterRequest"/>).
     /// </summary>
-    public sealed record EnterWorldResponse(bool Accepted, string Message, string Zone, float X, float Y, float Z) : IMessage
+    public sealed record EnterWorldResponse(bool Accepted, string Message, string Zone, float X, float Y, float Z,
+        string ZoneAddress = "", int ZonePort = 0, string ZoneKey = "") : IMessage
     {
         public MessageType Type => MessageType.EnterWorldResponse;
 
@@ -92,10 +93,14 @@ namespace EQClassic.Shared.Characters
             writer.Put(X);
             writer.Put(Y);
             writer.Put(Z);
+            writer.Put(ZoneAddress);
+            writer.Put(ZonePort);
+            writer.Put(ZoneKey);
         }
 
         public static EnterWorldResponse ReadFields(NetDataReader reader) =>
-            new EnterWorldResponse(reader.GetBool(), reader.GetString(), reader.GetString(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat());
+            new EnterWorldResponse(reader.GetBool(), reader.GetString(), reader.GetString(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat(),
+                reader.GetString(), reader.GetInt(), reader.GetString());
     }
 
     /// <summary>Base statistics chosen at creation (legacy PlayerProfile STR..WIS).</summary>

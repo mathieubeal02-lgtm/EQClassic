@@ -20,8 +20,18 @@ public enum GridType
 /// </summary>
 public sealed class WaypointWalker
 {
-    private const float GroundSearchAbovePath = 10f;
-    private const float MaxDropBelowPath = 50f;
+    // Grid z sits about 3.75 above the floor (the legacy model offset). Searching 5 above the path
+    // finds that floor but not a ledge or crate a few units higher; accepting at most 15 below keeps
+    // an NPC walking over a gap on its path instead of dropping to a lower level. Measured on the
+    // live Qeynos (MySqlZoneDataTests.Live_qeynos_guards_stay_on_the_ground): with 10 above / 50
+    // below, an NPC going down to the sewers fell 48 units in one tick.
+    private const float GroundSearchAbovePath = 5f;
+    private const float MaxDropBelowPath = 15f;
+    // Vertical speed limits relative to the horizontal distance walked: at most a 45-degree climb,
+    // a descent up to three times steeper. Where a grid leg cuts across a ledge, the NPC climbs or
+    // steps down over a few ticks instead of teleporting between floors.
+    private const float MaxClimbPerUnit = 1f;
+    private const float MaxDescentPerUnit = 3f;
 
     private readonly IReadOnlyList<Vec3> _waypoints;
     private readonly ZoneCollisionMesh? _mesh;
@@ -43,6 +53,8 @@ public sealed class WaypointWalker
         Position = _legStart = waypoints[startIndex];
         _target = startIndex;
         AdvanceTarget();
+        // Stand on the ground under the first waypoint (grid z is ~3.75 above the floor).
+        Position = Position with { Z = GroundAt(Position.X, Position.Y) };
     }
 
     /// <summary>Moves up to <paramref name="distance"/> units; returns true when a waypoint was reached.</summary>
@@ -53,14 +65,21 @@ public sealed class WaypointWalker
         float remaining = MathF.Sqrt(dx * dx + dy * dy);
         if (remaining <= distance)
         {
-            Position = target with { Z = GroundAt(target.X, target.Y) };
-            _legStart = target;
+            Position = target with { Z = LimitVertical(GroundAt(target.X, target.Y), remaining) };
+            _legStart = target with { Z = Position.Z };
             AdvanceTarget();
             return true;
         }
         float x = Position.X + dx / remaining * distance, y = Position.Y + dy / remaining * distance;
-        Position = new Vec3(x, y, GroundAt(x, y));
+        Position = new Vec3(x, y, LimitVertical(GroundAt(x, y), distance));
         return false;
+    }
+
+    private float LimitVertical(float desiredZ, float horizontal)
+    {
+        float dz = desiredZ - Position.Z;
+        float up = MaxClimbPerUnit * horizontal, down = MaxDescentPerUnit * horizontal;
+        return Position.Z + Math.Clamp(dz, -down, up);
     }
 
     private float GroundAt(float x, float y)

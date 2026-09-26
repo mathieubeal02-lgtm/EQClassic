@@ -61,6 +61,26 @@ public class WaypointWalkerTests
     }
 
     [Fact]
+    public void A_ledge_across_the_path_is_climbed_not_popped()
+    {
+        // Floor at z=0 for EQ x < 50, a ledge at z=12 for x >= 50; the grid walks straight across.
+        var mesh = ZoneCollisionMesh.ParseLantern(
+        [
+            "v,0,0,0", "v,100,0,0", "v,100,0,50", "v,0,0,50", "i,0,0,1,2", "i,0,0,2,3",
+            "v,0,12,50", "v,100,12,50", "v,100,12,100", "v,0,12,100", "i,0,4,5,6", "i,0,4,6,7",
+        ]);
+        var walker = new WaypointWalker([new(10, 50, 3.75f), new(90, 50, 15.75f)], mesh);
+        float last = walker.Position.Z, biggest = 0;
+        while (!walker.Step(0.32f)) // one 20 Hz tick at the legacy walk speed
+        {
+            biggest = MathF.Max(biggest, walker.Position.Z - last);
+            last = walker.Position.Z;
+        }
+        Assert.True(biggest <= 0.33f, $"rose {biggest} in one step");
+        Assert.Equal(12f, walker.Position.Z, precision: 1);
+    }
+
+    [Fact]
     public void A_grid_needs_two_waypoints()
     {
         Assert.Throws<ArgumentException>(() => new WaypointWalker([new(0, 0, 0)], mesh: null));

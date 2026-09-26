@@ -21,4 +21,11 @@ public enum MessageType : byte
     EnterWorldResponse = 13,
     CreateCharacterRequest = 14,
     CreateCharacterResponse = 15,
+    ZoneEnterRequest = 16,
+    ZoneEnterResponse = 17,
+    PlayerMove = 18,
+    EntityPositions = 19,
+    MoveCorrection = 20,
+    EntitySpawned = 21,
+    EntityRemoved = 22,
 }

@@ -2,12 +2,14 @@ using EQClassic.Shared.Characters;
 using EQClassic.Shared.Client;
 using EQClassic.Shared.Login;
 using EQClassic.Shared.Protocol;
+using EQClassic.Shared.Zone;
 
 // Command-line client for the rewrite: logs in (encrypted), lists the worlds, gets a world key, then
 // joins World, lists the characters and optionally enters the world with one of them.
 // One [ OK ]/[FAIL] line per step; exit code 0 when every step passed.
 //   EQClassic.Cli <host> <user> <password> [--port N] [--fingerprint HEX] [--world ID] [--enter NAME]
 //                 [--create NAME [--race 9] [--class 10] [--start-zone grobb]]   (default: troll shaman in Grobb)
+//                 [--zone-seconds 10]   with --enter: stay that long in the zone and report NPC movement
 if (args.Length < 3)
 {
     Console.Error.WriteLine("usage: EQClassic.Cli <host> <user> <password> [--port N] [--fingerprint HEX] [--world ID] [--enter NAME]");
@@ -21,6 +23,7 @@ string? enter = null;
 string? create = null;
 int race = 9, @class = 10;
 string startZone = "grobb";
+int zoneSeconds = 10;
 for (int i = 3; i < args.Length - 1; i++)
 {
     switch (args[i])
@@ -33,6 +36,7 @@ for (int i = 3; i < args.Length - 1; i++)
         case "--race": race = int.Parse(args[++i]); break;
         case "--class": @class = int.Parse(args[++i]); break;
         case "--start-zone": startZone = args[++i]; break;
+        case "--zone-seconds": zoneSeconds = int.Parse(args[++i]); break;
     }
 }
 
@@ -126,6 +130,49 @@ if (enter is not null && world?.Accepted == true)
     client.Send(new EnterWorldRequest(enter));
     var entered = Next<EnterWorldResponse>();
     Step(entered?.Accepted == true, "enter world", entered is null ? "no answer" : entered.Accepted ? $"{enter} in {entered.Zone} at ({entered.X:0.#}, {entered.Y:0.#}, {entered.Z:0.#})" : entered.Message);
+
+    if (entered is { Accepted: true, ZonePort: > 0 })
+    {
+        client.Disconnect();
+        WaitUntil(() => false, 200);
+        client.Dispose();
+        client = new LoginClient();
+        inbox.Clear();
+        client.Connect(entered.ZoneAddress, entered.ZonePort);
+        WaitUntil(() => client.State != ConnectionState.Connecting);
+        client.Send(new ZoneEnterRequest(enter, entered.ZoneKey));
+        var zone = Next<ZoneEnterResponse>();
+        Step(zone?.Accepted == true, "zone", zone is null ? "no answer" : zone.Accepted
+            ? $"in {zone.Zone} as entity {zone.YourEntityId}, {zone.Entities.Count(e => !e.IsPlayer)} NPC(s), {zone.Entities.Count(e => e.IsPlayer)} player(s)" : zone.Message);
+        if (zone?.Accepted == true)
+        {
+            var names = zone.Entities.ToDictionary(e => e.Id, e => e.Name);
+            var lastZ = zone.Entities.ToDictionary(e => e.Id, e => e.Z);
+            var moving = new HashSet<int>();
+            (float Step, string Name) worstUp = (0, ""), worstDown = (0, "");
+            int updates = 0;
+            var until = DateTime.UtcNow.AddSeconds(zoneSeconds);
+            while (DateTime.UtcNow < until)
+            {
+                foreach (var m in client.Poll())
+                {
+                    if (m is not EntityPositions p) continue;
+                    updates++;
+                    foreach (var e in p.Positions)
+                    {
+                        moving.Add(e.Id);
+                        float dz = e.Z - lastZ.GetValueOrDefault(e.Id, e.Z);
+                        if (dz > worstUp.Step) worstUp = (dz, names.GetValueOrDefault(e.Id, "?"));
+                        if (-dz > worstDown.Step) worstDown = (-dz, names.GetValueOrDefault(e.Id, "?"));
+                        lastZ[e.Id] = e.Z;
+                    }
+                }
+                Thread.Sleep(10);
+            }
+            Step(updates > 0 && worstUp.Step <= 6, "npc movement",
+                $"{updates} updates in {zoneSeconds} s, {moving.Count} moving entities, largest rise {worstUp.Step:0.0} ({worstUp.Name}), largest drop {worstDown.Step:0.0} ({worstDown.Name})");
+        }
+    }
 }
 
 client.Disconnect();

@@ -2,6 +2,7 @@ using System;
 using EQClassic.Shared.Characters;
 using EQClassic.Shared.Login;
 using EQClassic.Shared.Security;
+using EQClassic.Shared.Zone;
 using LiteNetLib.Utils;
 
 namespace EQClassic.Shared.Protocol;
@@ -46,6 +47,13 @@ public static class MessageCodec
                 MessageType.EnterWorldResponse => EnterWorldResponse.ReadFields(reader),
                 MessageType.CreateCharacterRequest => CreateCharacterRequest.ReadFields(reader),
                 MessageType.CreateCharacterResponse => CreateCharacterResponse.ReadFields(reader),
+                MessageType.ZoneEnterRequest => ZoneEnterRequest.ReadFields(reader),
+                MessageType.ZoneEnterResponse => ZoneEnterResponse.ReadFields(reader),
+                MessageType.PlayerMove => PlayerMove.ReadFields(reader),
+                MessageType.EntityPositions => EntityPositions.ReadFields(reader),
+                MessageType.MoveCorrection => MoveCorrection.ReadFields(reader),
+                MessageType.EntitySpawned => EntitySpawned.ReadFields(reader),
+                MessageType.EntityRemoved => EntityRemoved.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

@@ -1,6 +1,8 @@
 using EQClassic.Server.Accounts;
 using EQClassic.Server.Characters;
 using EQClassic.Server.Login;
+using EQClassic.Server.Zone;
+using EQClassic.Shared.World;
 using EQClassic.Shared.Characters;
 using EQClassic.Shared.Login;
 using EQClassic.Shared.Protocol;
@@ -40,6 +42,9 @@ public sealed class WorldServer : IDisposable
     private readonly NetDataWriter _writer = new();
 
     public Action<string>? Log { get; set; }
+
+    /// <summary>Where characters are sent after entering the world; without it EnterWorld only reports the saved zone.</summary>
+    public ZoneHandoff? Zones { get; set; }
 
     public WorldServer(int worldId, WorldDirectory directory, IWorldAccountStore accounts, ICharacterStore characters, ICreationData? creationData = null)
     {
@@ -133,7 +138,10 @@ public sealed class WorldServer : IDisposable
         if (character is null)
             return EnterWorldResponse.Refused(UnknownCharacter);
         var p = character.Profile;
-        return new EnterWorldResponse(true, "", p.Zone, p.X, p.Y, p.Z);
+        if (Zones is null)
+            return new EnterWorldResponse(true, "", p.Zone, p.X, p.Y, p.Z);
+        var key = Zones.Keys.Issue(new ZoneTicket(p.Name, p.Zone, session.WorldAccountId, p.Race, p.Gender, p.Level, new Vec3(p.X, p.Y, p.Z)));
+        return new EnterWorldResponse(true, "", p.Zone, p.X, p.Y, p.Z, Zones.Address, Zones.Port, key);
     }
 
     private void Send(NetPeer peer, IMessage message)
@@ -143,3 +151,6 @@ public sealed class WorldServer : IDisposable
         peer.Send(_writer, DeliveryMethod.ReliableOrdered);
     }
 }
+
+/// <summary>The zone server World hands characters to.</summary>
+public sealed record ZoneHandoff(ZoneKeys Keys, string Address, int Port);
