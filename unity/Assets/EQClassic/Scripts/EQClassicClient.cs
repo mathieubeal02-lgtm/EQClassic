@@ -109,6 +109,8 @@ namespace EQClassic.Unity
                     _client.FaceTarget();
                 if (Input.GetKeyDown(KeyCode.C))
                     _client.Consider();
+                if (Input.GetKeyDown(KeyCode.H))
+                    _client.Hail();
                 if (Input.GetKeyDown(KeyCode.X))
                     _client.ToggleSit();
                 if (Input.GetKeyDown(KeyCode.L))

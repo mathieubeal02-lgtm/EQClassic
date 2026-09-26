@@ -11,7 +11,7 @@ namespace EQClassic.Server.Zone;
 /// the ticket World issued, and the zone instance is booted on first use. <see cref="Tick"/> advances
 /// every instance and sends each player what moved in their zone.
 /// </summary>
-public sealed class ZoneServer : IDisposable
+public sealed partial class ZoneServer : IDisposable
 {
     public const int DefaultPort = 7100; // the legacy zones use 7000+ under Wine
     public const string BadKey = "Your zone key has expired or is invalid. Please return to character select.";
@@ -92,6 +92,7 @@ public sealed class ZoneServer : IDisposable
     /// <summary>Advances every zone and broadcasts what happened: positions, spawns, deaths, zoning.</summary>
     public void Tick(float seconds)
     {
+        ApplyQuests();
         foreach (var instance in _instances.Values.ToList())
         {
             var moved = instance.Tick(seconds);
@@ -367,6 +368,12 @@ public sealed class ZoneServer : IDisposable
                 case ZoneInstance.Removed removed:
                     SendToZone(instance, new EntityRemoved(removed.EntityId));
                     break;
+                case ZoneInstance.NpcSpoke spoke when instance.Get(spoke.NpcId) is { } npc:
+                    NpcSpoke(instance, npc, spoke);
+                    break;
+                case ZoneInstance.HandedIn handedIn:
+                    HandIn(instance, handedIn);
+                    break;
                 case ZoneInstance.Engaged engaged:
                     Log?.Invoke($"{instance.ShortName}: {instance.Get(engaged.NpcId)?.Name} aggroes {instance.Get(engaged.PlayerId)?.Name}");
                     break;
@@ -515,6 +522,8 @@ public sealed class ZoneServer : IDisposable
             foreach (var (other, p) in _players)
                 if (p.Instance == speaker.Instance && p.Instance.Get(p.EntityId) is { } e && Distance2(e.Position, at) <= SayRange * SayRange)
                     Send(other, message, DeliveryMethod.ReliableOrdered);
+            if (chat.Channel == ChatChannel.Say)
+                Said(speaker.Instance, speaker.EntityId, chat.Text);
         }
         else
         {
@@ -672,10 +681,14 @@ public sealed class ZoneServer : IDisposable
     private TradeWindow TradeWindowOf(ZoneInstance instance, ZoneInstance.Entity p)
     {
         var none = new TradeOffer(Array.Empty<ItemView>(), Array.Empty<int>(), 0, false);
-        if (p.Trade is not { } mine || instance.Get(mine.PartnerId) is not { Trade: { } theirs } partner)
+        if (p.Trade is not { } mine || instance.Get(mine.PartnerId) is not { } partner)
             return new TradeWindow("", none, none);
         TradeOffer Offer(ZoneInstance.Entity who, ZoneInstance.TradeSide side) => new(
             side.Slots.Select(s => View(who.Inventory!.ItemAt(s), who.Inventory.ChargesAt(s))).ToList(), side.Slots, (int)side.Coins.TotalCopper, side.Accepted);
+        if (!partner.IsPlayer)
+            return new TradeWindow(DisplayName(partner.Name), Offer(p, mine), none); // giving to an NPC
+        if (partner.Trade is not { } theirs)
+            return new TradeWindow("", none, none);
         return new TradeWindow(partner.Name, Offer(p, mine), Offer(partner, theirs));
     }
 

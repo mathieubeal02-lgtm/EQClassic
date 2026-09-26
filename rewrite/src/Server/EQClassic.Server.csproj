@@ -24,4 +24,7 @@
     <EmbeddedResource Include="..\..\..\tools\eqbot\charcreate_template.inc" LogicalName="charcreate_template.inc" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Quests/quest-host.pl" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

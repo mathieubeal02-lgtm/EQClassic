@@ -135,10 +135,13 @@ namespace EQClassic.ClientCore
                         MessageReceived?.Invoke("Usage: /pet attack | /pet back off | /pet get lost");
                     break;
                 case ChatAction.Trade:
-                    if (TargetId is int tradeWith && Zone.Get(tradeWith) is { Spawn: { IsPlayer: true } })
+                    if (TargetId is int tradeWith && Zone.Get(tradeWith) is { Spawn: { IsCorpse: false } })
                         _connection?.Send(new TradeCommand(TradeAction.Request, tradeWith));
                     else
-                        MessageReceived?.Invoke("Target a player to trade with.");
+                        MessageReceived?.Invoke("Target someone to trade with.");
+                    break;
+                case ChatAction.Hail:
+                    Hail();
                     break;
                 case ChatAction.Help:
                     foreach (var help in Chat.HelpLines)
@@ -288,6 +291,15 @@ namespace EQClassic.ClientCore
                 _connection?.Send(new LootEnd(corpse));
             LootingCorpse = null;
             LootItems = Array.Empty<ItemView>();
+        }
+
+        /// <summary>Hails the target (H, /hail): "Hail, name", which NPCs with a quest answer.</summary>
+        public void Hail()
+        {
+            if (_state != GameState.InZone)
+                return;
+            var target = TargetId is int id && Zone != null && id != Zone.YourEntityId ? Zone.Get(id) : null;
+            _connection?.Send(new ChatSend(ChatChannel.Say, "", target == null ? "Hail" : $"Hail, {target.DisplayName}"));
         }
 
         /// <summary>Considers the target (C): the answer arrives as a line in <see cref="MessageReceived"/>.</summary>

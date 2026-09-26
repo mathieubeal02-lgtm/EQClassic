@@ -120,17 +120,20 @@ public sealed class DatabaseFactions : IFactionStandings
         if (npc.PrimaryFaction <= 0 || _data.NpcList(npc.PrimaryFaction) is not { } list)
             return messages;
         foreach (var (factionId, hit) in list.Hits)
-        {
-            if (factionId <= 0 || _data.Faction(factionId) is not { } faction)
-                continue;
-            int mods = faction.Modifiers(player.Fighter.Class, player.Race, deity);
-            int current = player.FactionValue(factionId) + hit;
-            int total = current + mods;
-            player.SetFactionValue(factionId, Math.Clamp(total, FactionRules.Min, FactionRules.Max) - mods);
-            if (FactionRules.HitMessage(faction.Name, hit, Math.Max(total, FactionRules.Min)) is { } message)
+            if (Adjust(player, factionId, hit, deity) is { } message)
                 messages.Add(message);
-        }
         return messages;
+    }
+
+    /// <summary>One faction moved by a hit (a kill, or quest::faction), the total kept within ±1500; the message.</summary>
+    public string? Adjust(ZoneInstance.Entity player, int factionId, int hit, int deity)
+    {
+        if (factionId <= 0 || _data.Faction(factionId) is not { } faction)
+            return null;
+        int mods = faction.Modifiers(player.Fighter.Class, player.Race, deity);
+        int total = player.FactionValue(factionId) + hit + mods;
+        player.SetFactionValue(factionId, Math.Clamp(total, FactionRules.Min, FactionRules.Max) - mods);
+        return FactionRules.HitMessage(faction.Name, hit, Math.Max(total, FactionRules.Min));
     }
 }
 

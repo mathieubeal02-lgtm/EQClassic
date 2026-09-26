@@ -26,8 +26,22 @@ public sealed partial class ZoneInstance
     public void RequestTrade(int playerId, int targetId)
     {
         if (!_entities.TryGetValue(playerId, out var player) || !player.IsPlayer || !_entities.TryGetValue(targetId, out var target)
-            || !target.IsPlayer || target == player)
+            || target == player || target.IsCorpse)
             return;
+        if (!target.IsPlayer)
+        {
+            // Giving to an NPC: only the player's side; the NPC takes what it is given (quest hand-ins).
+            if (player.Trade is not null)
+                return;
+            if (Distance2(player.Position, target.Position) > TradeReach * TradeReach)
+            {
+                _events.Add(new Told(playerId, TooFarMessage));
+                return;
+            }
+            player.Trade = new TradeSide { PartnerId = targetId };
+            _events.Add(new TradeChanged(playerId));
+            return;
+        }
         if (player.Trade is not null || target.Trade is not null)
         {
             _events.Add(new Told(playerId, target.Trade is not null ? $"{target.Name} is busy trading." : "You are already trading."));
@@ -82,6 +96,11 @@ public sealed partial class ZoneInstance
         side.Accepted = false;
         if (_entities.TryGetValue(side.PartnerId, out var partner) && partner.Trade is { } other)
             other.Accepted = false;
+        if (partner is { IsPlayer: false })
+        {
+            _events.Add(new TradeChanged(player.Id));
+            return;
+        }
         _events.Add(new TradeChanged(player.Id));
         _events.Add(new TradeChanged(side.PartnerId));
     }
@@ -89,7 +108,14 @@ public sealed partial class ZoneInstance
     public void AcceptTrade(int playerId)
     {
         if (!_entities.TryGetValue(playerId, out var player) || player.Trade is not { } side
-            || !_entities.TryGetValue(side.PartnerId, out var partner) || partner.Trade is not { } other)
+            || !_entities.TryGetValue(side.PartnerId, out var partner))
+            return;
+        if (!partner.IsPlayer)
+        {
+            FinishNpcTrade(player, partner);
+            return;
+        }
+        if (partner.Trade is not { } other)
             return;
         side.Accepted = true;
         _events.Add(new TradeChanged(playerId));

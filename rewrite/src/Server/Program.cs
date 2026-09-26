@@ -13,8 +13,10 @@ using EQClassic.Shared.Protocol;
 //   EQClassic.Server [--port N] [--world-port N] [--zone-port N] [--public-address A]
 //                    [--db "<MySqlConnector connection string>"] [--lantern build/lantern-work/Exports]
 //                    [--key login-key.pem] [--allow-plaintext] [--zone-cfg runtime/cfg] [--spells runtime/spdat.eff]
+//                    [--quests quests] [--perl perl]
 // --lantern: LanternExtractor exports; a zone uses its collision mesh (with its solid objects) when
 // <zone>/Zone/Meshes/<zone>_collision.txt exists.
+// --quests: the legacy quest scripts (quests/<zone>/<npc>.pl and quests/plugins), run with Perl.
 // Without --db, only the runbook's test account (test / test) exists (in memory), with no characters.
 // The RSA key is created on first start and kept in --key (default login-key.pem): clients pin its
 // fingerprint, printed below, so it must survive restarts.
@@ -28,6 +30,8 @@ string keyPath = "login-key.pem";
 bool allowPlaintext = false;
 string? zoneCfg = null;
 string? spellFile = null;
+string? questsDir = null;
+string perl = "perl";
 for (int i = 0; i < args.Length; i++)
 {
     string? next = i + 1 < args.Length ? args[i + 1] : null;
@@ -43,6 +47,8 @@ for (int i = 0; i < args.Length; i++)
         case "--allow-plaintext": allowPlaintext = true; break;
         case "--zone-cfg" when next is not null: zoneCfg = next; i++; break;
         case "--spells" when next is not null: spellFile = next; i++; break;
+        case "--quests" when next is not null: questsDir = next; i++; break;
+        case "--perl" when next is not null: perl = next; i++; break;
     }
 }
 
@@ -50,6 +56,10 @@ for (int i = 0; i < args.Length; i++)
 zoneCfg ??= new[] { "runtime/cfg", "../runtime/cfg", "../../runtime/cfg" }.FirstOrDefault(Directory.Exists);
 // The client's spell file, as the legacy zone reads it (spdat.eff in the working directory; runtime/ in the repository).
 spellFile ??= new[] { "spdat.eff", "runtime/spdat.eff", "../runtime/spdat.eff", "../../runtime/spdat.eff" }.FirstOrDefault(File.Exists);
+// The legacy zone reads quests/ in its working directory.
+questsDir ??= new[] { "quests", "runtime/quests", "../runtime/quests", "../../runtime/quests" }.FirstOrDefault(Directory.Exists);
+var questHost = Path.Combine(AppContext.BaseDirectory, "Quests", "quest-host.pl");
+var quests = questsDir is not null && File.Exists(questHost) ? new EQClassic.Server.Quests.QuestEngine(Path.GetFullPath(questsDir), questHost, perl) : null;
 IReadOnlyList<EQClassic.Server.Spells.Spell>? spells = spellFile is null ? null : EQClassic.Server.Spells.Spell.ReadFile(File.ReadAllBytes(spellFile));
 
 var rsa = RSA.Create(2048);
@@ -102,6 +112,7 @@ using var zones = new ZoneServer(zoneKeys, name =>
 {
     Log = server.Log, Characters = characters, PublicAddress = worldAddress, Items = items,
     FactionValues = db is null ? null : new MySqlFactionValueStore(db),
+    Quests = quests,
 };
 zones.Start(zonePort);
 if (db is not null && ReadTimeOfDay(db) is { } tod)
@@ -119,6 +130,7 @@ world.Start(worldPort);
 Console.WriteLine($"World on UDP {world.Port}, zones on UDP {zones.Port}, announced as {worldAddress}.");
 Console.WriteLine($"Login server listening on UDP {server.Port} (protocol {ProtocolInfo.ConnectionKey}), accounts: {(db is null ? "test account only" : "database")}.");
 Console.WriteLine(spells is null ? "No spdat.eff found: nobody can cast." : $"{spells.Count} spells read from {spellFile}.");
+Console.WriteLine(quests is null ? "No quests directory: NPCs have nothing to say." : $"Quests from {quests.QuestsDirectory}.");
 Console.WriteLine($"Server key fingerprint: {server.Fingerprint}");
 Console.WriteLine("Ctrl+C to stop.");
 
