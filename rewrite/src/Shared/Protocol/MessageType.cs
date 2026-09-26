@@ -75,4 +75,6 @@ public enum MessageType : byte
     TradeCommand = 67,
     TradeWindow = 68,
     PetCommand = 69,
+    BankCommand = 70,
+    BankContents = 71,
 }

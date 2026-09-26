@@ -113,6 +113,28 @@ public static class ProfileTemplate
 
     public static sbyte GetCharges(byte[] p, int slot) => (sbyte)p[ItemPropertiesOffset + ItemPropertiesSize * slot + ChargesOffset];
 
+    /// <summary>The bank: its 8 slots, its bags' 80 cells (0xFFFF when empty) and its money.</summary>
+    public static void SetBank(byte[] p, IReadOnlyList<int> items, IReadOnlyList<int> charges, IReadOnlyList<int> bagItems, IReadOnlyList<int> bagCharges,
+        EQClassic.Server.Zone.Coins coins)
+    {
+        static ushort Id(int id) => id == 0 ? (ushort)0xFFFF : (ushort)id;
+        static byte Charge(int c) => (byte)(sbyte)Math.Clamp(c, sbyte.MinValue, sbyte.MaxValue);
+        for (int i = 0; i < Math.Min(items.Count, PlayerProfile.BankSlots); i++)
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(p.AsSpan(PlayerProfile.BankItemsOffset + 2 * i), Id(items[i]));
+            p[PlayerProfile.BankPropertiesOffset + ItemPropertiesSize * i + ChargesOffset] = Charge(i < charges.Count ? charges[i] : 0);
+        }
+        for (int i = 0; i < Math.Min(bagItems.Count, PlayerProfile.BagSlotsTotal); i++)
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(p.AsSpan(PlayerProfile.BankBagItemsOffset + 2 * i), Id(bagItems[i]));
+            p[PlayerProfile.BankBagPropertiesOffset + ItemPropertiesSize * i + ChargesOffset] = Charge(i < bagCharges.Count ? bagCharges[i] : 0);
+        }
+        BinaryPrimitives.WriteInt32LittleEndian(p.AsSpan(PlayerProfile.BankCoinsOffset), coins.Platinum);
+        BinaryPrimitives.WriteInt32LittleEndian(p.AsSpan(PlayerProfile.BankCoinsOffset + 4), coins.Gold);
+        BinaryPrimitives.WriteInt32LittleEndian(p.AsSpan(PlayerProfile.BankCoinsOffset + 8), coins.Silver);
+        BinaryPrimitives.WriteInt32LittleEndian(p.AsSpan(PlayerProfile.BankCoinsOffset + 12), coins.Copper);
+    }
+
     /// <summary>One cell of a bag (containerinv and bagItemProprieties), 0-79.</summary>
     public static void SetBagItem(byte[] p, int cell, ushort item, sbyte charges)
     {

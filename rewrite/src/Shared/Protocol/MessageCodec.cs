@@ -101,6 +101,8 @@ public static class MessageCodec
                 MessageType.TradeCommand => TradeCommand.ReadFields(reader),
                 MessageType.TradeWindow => TradeWindow.ReadFields(reader),
                 MessageType.PetCommand => PetCommand.ReadFields(reader),
+                MessageType.BankCommand => BankCommand.ReadFields(reader),
+                MessageType.BankContents => BankContents.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

@@ -230,6 +230,20 @@ public sealed class ZoneServer : IDisposable
                 Group(peer, grouper, group);
                 break;
 
+            case BankCommand bank when _players.TryGetValue(peer, out var banker):
+                var bi = banker.Instance;
+                switch (bank.Action)
+                {
+                    case BankAction.Open: bi.OpenBank(banker.EntityId, bank.NpcId); break;
+                    case BankAction.Close: bi.CloseBank(banker.EntityId); break;
+                    case BankAction.Money:
+                        bi.BankMoney(banker.EntityId, new Coins(bank.DepositPlatinum, bank.DepositGold, bank.DepositSilver, bank.DepositCopper),
+                            new Coins(bank.WithdrawPlatinum, bank.WithdrawGold, bank.WithdrawSilver, bank.WithdrawCopper));
+                        break;
+                }
+                Broadcast(bi, bi.DrainEvents());
+                break;
+
             case PetCommand petCommand when _players.TryGetValue(peer, out var master):
                 master.Instance.CommandPet(master.EntityId, (ZoneInstance.PetOrder)(int)petCommand.Order);
                 Broadcast(master.Instance, master.Instance.DrainEvents());
@@ -314,7 +328,8 @@ public sealed class ZoneServer : IDisposable
             Log?.Invoke($"zone {ticket.Zone} booted: {instance.Entities.Count()} NPC(s)");
         }
         var profile = ticket.Profile;
-        var inventory = profile is null ? null : ZoneInstance.PlayerInventory.From(profile.Inventory, profile.Charges, profile.Coins, profile.BagItems, profile.BagCharges);
+        var inventory = profile is null ? null : ZoneInstance.PlayerInventory.From(profile.Inventory, profile.Charges, profile.Coins, profile.BagItems, profile.BagCharges)
+            .WithBank(profile.BankItems, profile.BankCharges, profile.BankBagItems, profile.BankBagCharges, profile.BankCoins);
         // One skills array for the zone's skill-ups and the fighter builder below.
         var skills = profile is null ? null : Enumerable.Range(0, EQClassic.Server.Combat.SkillCaps.SkillCount).Select(profile.Skill).ToArray();
         var progress = profile is null ? null : new ZoneInstance.PlayerProgress(profile.Exp, profile.BindZone,
@@ -385,6 +400,8 @@ public sealed class ZoneServer : IDisposable
                     break;
                 case ZoneInstance.InventoryChanged changed when PeerOf(instance, changed.PlayerId) is { } ownerPeer && instance.Get(changed.PlayerId) is { } owner:
                     Send(ownerPeer, InventoryOf(owner), DeliveryMethod.ReliableOrdered);
+                    if (owner.BankerId is not null)
+                        Send(ownerPeer, BankOf(owner), DeliveryMethod.ReliableOrdered); // a move may have touched the bank
                     break;
                 case ZoneInstance.AppearanceChanged appearance:
                     SendToZone(instance, new EntityAppearance(appearance.EntityId, appearance.Sitting));
@@ -428,6 +445,9 @@ public sealed class ZoneServer : IDisposable
                     break;
                 case ZoneInstance.SkillsChanged changedSkills when PeerOf(instance, changedSkills.PlayerId) is { } skilledPeer && instance.Get(changedSkills.PlayerId) is { } skilled:
                     Send(skilledPeer, SkillsOf(skilled), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.BankChanged bankChanged when PeerOf(instance, bankChanged.PlayerId) is { } bankPeer && instance.Get(bankChanged.PlayerId) is { } banking:
+                    Send(bankPeer, BankOf(banking), DeliveryMethod.ReliableOrdered);
                     break;
                 case ZoneInstance.TradeChanged traded when PeerOf(instance, traded.PlayerId) is { } tradePeer && instance.Get(traded.PlayerId) is { } tradingPlayer:
                     Send(tradePeer, TradeWindowOf(instance, tradingPlayer), DeliveryMethod.ReliableOrdered);
@@ -639,6 +659,16 @@ public sealed class ZoneServer : IDisposable
         }
     }
 
+    private BankContents BankOf(ZoneInstance.Entity p)
+    {
+        var inv = p.Inventory ?? new ZoneInstance.PlayerInventory();
+        var c = inv.BankCoins;
+        return new BankContents(p.BankerId is not null,
+            Enumerable.Range(0, ZoneInstance.PlayerInventory.BankSlots).Select(i => View(inv.BankItems[i], inv.BankCharges[i])).ToList(),
+            Enumerable.Range(0, ZoneInstance.PlayerInventory.BagSlotsTotal).Select(i => View(inv.BankBagItems[i], inv.BankBagCharges[i])).ToList(),
+            c.Platinum, c.Gold, c.Silver, c.Copper);
+    }
+
     private TradeWindow TradeWindowOf(ZoneInstance instance, ZoneInstance.Entity p)
     {
         var none = new TradeOffer(Array.Empty<ItemView>(), Array.Empty<int>(), 0, false);
@@ -717,6 +747,9 @@ public sealed class ZoneServer : IDisposable
                 Inventory = now.Inventory?.Items.ToArray() ?? p.Inventory, Charges = now.Inventory?.Charges.ToArray() ?? p.Charges,
                 Coins = now.Inventory?.Coins ?? p.Coins,
                 BagItems = now.Inventory?.BagItems.ToArray() ?? p.BagItems, BagCharges = now.Inventory?.BagCharges.ToArray() ?? p.BagCharges,
+                BankItems = now.Inventory?.BankItems.ToArray() ?? p.BankItems, BankCharges = now.Inventory?.BankCharges.ToArray() ?? p.BankCharges,
+                BankBagItems = now.Inventory?.BankBagItems.ToArray() ?? p.BankBagItems, BankBagCharges = now.Inventory?.BankBagCharges.ToArray() ?? p.BankBagCharges,
+                BankCoins = now.Inventory?.BankCoins ?? p.BankCoins,
                 Mana = now.Mana, SpellBook = now.Book, SpellGemIds = now.Gems.ToArray(),
                 Buffs = ZoneInstance.SaveBuffs(now).Select(b => (b.SpellId, b.CasterLevel, b.TicsLeft)).ToArray(),
                 BindZone = now.BindZone, BindX = now.Bind.X, BindY = now.Bind.Y, BindZ = now.Bind.Z,
@@ -749,7 +782,10 @@ public sealed class ZoneServer : IDisposable
         Characters?.SavePosition(player.Ticket.CharacterName, zone, at.X, at.Y, at.Z, state?.Hp,
             player.Ticket.Profile is null ? null : state?.Exp, player.Ticket.Profile is null ? null : state?.Level);
         if (player.Ticket.Profile is not null && state?.Inventory is { } inventory)
+        {
             Characters?.SaveInventory(player.Ticket.CharacterName, inventory.Items, inventory.Charges, inventory.Coins, inventory.BagItems, inventory.BagCharges);
+            Characters?.SaveBank(player.Ticket.CharacterName, inventory.BankItems, inventory.BankCharges, inventory.BankBagItems, inventory.BankBagCharges, inventory.BankCoins);
+        }
         if (player.Ticket.Profile is not null && state is not null)
             Characters?.SaveSkills(player.Ticket.CharacterName, state.Skills);
         if (player.Ticket.Profile is not null && state is not null)

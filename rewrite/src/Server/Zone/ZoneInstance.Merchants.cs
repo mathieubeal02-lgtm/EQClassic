@@ -61,6 +61,11 @@ public sealed partial class ZoneInstance
 
     public void OpenMerchant(int playerId, int npcId)
     {
+        if (_entities.TryGetValue(npcId, out var maybeBanker) && maybeBanker.Npc?.Combat.Class == BankerClass)
+        {
+            OpenBank(playerId, npcId); // U on a banker opens the bank
+            return;
+        }
         if (!_entities.TryGetValue(playerId, out var player) || !player.IsPlayer || !_entities.TryGetValue(npcId, out var npc)
             || npc.Npc is not { MerchantId: > 0 } template || npc.IsCorpse)
             return;

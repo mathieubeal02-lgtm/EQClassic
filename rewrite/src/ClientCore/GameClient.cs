@@ -366,6 +366,21 @@ namespace EQClassic.ClientCore
             return null;
         }
 
+        /// <summary>The bank window (U on a banker), or null.</summary>
+        public BankContents? Bank { get; private set; }
+
+        public void CloseBank()
+        {
+            Bank = null;
+            _connection?.Send(new BankCommand(BankAction.Close));
+        }
+
+        /// <summary>Money into the bank (deposit) and out of it (withdraw), coin by coin.</summary>
+        public void BankMoney(int depositPlatinum, int depositGold, int depositSilver, int depositCopper,
+            int withdrawPlatinum, int withdrawGold, int withdrawSilver, int withdrawCopper) =>
+            _connection?.Send(new BankCommand(BankAction.Money, 0, depositPlatinum, depositGold, depositSilver, depositCopper,
+                withdrawPlatinum, withdrawGold, withdrawSilver, withdrawCopper));
+
         /// <summary>The trade window, or null.</summary>
         public TradeWindow? Trade { get; private set; }
 
@@ -597,6 +612,9 @@ namespace EQClassic.ClientCore
                 case PlayerExperience experience:
                     Experience = experience;
                     break;
+                case BankContents bank:
+                    Bank = bank.Open ? bank : null;
+                    break;
                 case TradeWindow trade:
                     Trade = trade.Partner.Length == 0 ? null : trade;
                     break;
@@ -644,6 +662,7 @@ namespace EQClassic.ClientCore
                     MaxHp = health.MaxHp;
                     break;
                 case ZoneChange change:
+                    Bank = null;
                     LootingCorpse = null;
                     Trade = null;
                     Merchant = null;

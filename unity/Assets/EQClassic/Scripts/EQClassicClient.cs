@@ -224,7 +224,7 @@ namespace EQClassic.Unity
         {
             var inventory = _client.Inventory;
             GUILayout.BeginArea(new Rect(Screen.width - 640, 60, 300, Screen.height - 120), GUI.skin.box);
-            GUILayout.Label(_heldSlot is int held && inventory != null ? $"Inventory - holding {ItemIn(inventory, held).Name}" : "Inventory");
+            GUILayout.Label(_heldSlot is int held && inventory != null ? $"Inventory - holding {HeldName(inventory, held)}" : "Inventory");
             if (inventory == null)
             {
                 GUILayout.Label("(not received yet)");
@@ -250,6 +250,64 @@ namespace EQClassic.Unity
         }
 
         private Vector2 _inventoryScroll;
+
+        private Vector2 _bankScroll;
+        private string _bankP = "0", _bankG = "0", _bankS = "0", _bankC = "0";
+
+        /// <summary>
+        /// The bank (U on a banker): its 8 slots and the bags in them, picked up and put down like the
+        /// inventory's (the inventory opens beside it), and money in or out.
+        /// </summary>
+        private void DrawBank(BankContents bank)
+        {
+            _inventoryOpen = true;
+            GUILayout.BeginArea(new Rect(Screen.width - 330, 60, 320, Screen.height - 120), GUI.skin.box);
+            GUILayout.Label("Bank");
+            _bankScroll = GUILayout.BeginScrollView(_bankScroll);
+            for (int i = 0; i < bank.Slots.Count; i++)
+            {
+                var item = bank.Slots[i];
+                DrawInventoryRow(BankContents.BankBase + i, $"Bank {i + 1}", item);
+                for (int cell = 0; cell < item.BagSlots && cell < PlayerInventory.BagCells; cell++)
+                {
+                    int index = i * PlayerInventory.BagCells + cell;
+                    DrawInventoryRow(BankContents.BankBagBase + index, $"    {cell + 1}", index < bank.Bags.Count ? bank.Bags[index] : new ItemView(0, "", 0));
+                }
+            }
+            GUILayout.EndScrollView();
+            GUILayout.Label($"In the bank: {bank.Platinum}p {bank.Gold}g {bank.Silver}s {bank.Copper}c");
+            GUILayout.BeginHorizontal();
+            _bankP = GUILayout.TextField(_bankP);
+            _bankG = GUILayout.TextField(_bankG);
+            _bankS = GUILayout.TextField(_bankS);
+            _bankC = GUILayout.TextField(_bankC);
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Deposit"))
+                _client.BankMoney(Number(_bankP), Number(_bankG), Number(_bankS), Number(_bankC), 0, 0, 0, 0);
+            if (GUILayout.Button("Withdraw"))
+                _client.BankMoney(0, 0, 0, 0, Number(_bankP), Number(_bankG), Number(_bankS), Number(_bankC));
+            if (GUILayout.Button("Done"))
+            {
+                _client.CloseBank();
+                _inventoryOpen = false;
+            }
+            GUILayout.EndHorizontal();
+            GUILayout.EndArea();
+        }
+
+        /// <summary>The name of the item picked up, which may be in the bank.</summary>
+        private string HeldName(PlayerInventory inventory, int slot)
+        {
+            if (_client.Bank is { } bank && slot >= BankContents.BankBase)
+            {
+                if (slot < BankContents.BankBase + bank.Slots.Count)
+                    return bank.Slots[slot - BankContents.BankBase].Name;
+                int cell = slot - BankContents.BankBagBase;
+                return cell >= 0 && cell < bank.Bags.Count ? bank.Bags[cell].Name : "";
+            }
+            return ItemIn(inventory, slot).Name;
+        }
 
         private static ItemView ItemIn(PlayerInventory inventory, int slot)
         {
@@ -579,6 +637,8 @@ namespace EQClassic.Unity
                     DrawMerchant(merchant);
                 if (_client.Trade is { } trade)
                     DrawTrade(trade);
+                if (_client.Bank is { } bank)
+                    DrawBank(bank);
                 return;
             }
 

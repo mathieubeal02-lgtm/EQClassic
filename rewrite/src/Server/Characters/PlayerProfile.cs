@@ -50,6 +50,14 @@ public sealed record PlayerProfile(
     public IReadOnlyList<int> BagItems { get; init; } = Array.Empty<int>();
     public IReadOnlyList<int> BagCharges { get; init; } = Array.Empty<int>();
     public const int BagItemsOffset = 798, BagPropertiesOffset = 978, BagSlotsTotal = 80;
+    /// <summary>The bank: bank_inv[8] and bank_cont_inv[80] (item ids), their properties (charges at +2), the bank's money.</summary>
+    public IReadOnlyList<int> BankItems { get; init; } = Array.Empty<int>();
+    public IReadOnlyList<int> BankCharges { get; init; } = Array.Empty<int>();
+    public IReadOnlyList<int> BankBagItems { get; init; } = Array.Empty<int>();
+    public IReadOnlyList<int> BankBagCharges { get; init; } = Array.Empty<int>();
+    public EQClassic.Server.Zone.Coins BankCoins { get; init; }
+    public const int BankItemsOffset = 3980, BankBagItemsOffset = 3996, BankPropertiesOffset = 2944, BankBagPropertiesOffset = 3024,
+        BankCoinsOffset = 2476, BankSlots = 8;
     public EQClassic.Server.Zone.Coins Coins { get; init; }
     /// <summary>Skill values by skill id; 254 (not trained yet) and 255 (cannot learn) read as 0.</summary>
     public IReadOnlyList<int> Skills { get; init; } = Array.Empty<int>();
@@ -113,6 +121,13 @@ public sealed record PlayerProfile(
             Charges = ReadCharges(profile),
             BagItems = ReadIds(profile, BagItemsOffset, BagSlotsTotal),
             BagCharges = ReadBagCharges(profile),
+            BankItems = profile.Length >= BankBagItemsOffset + 2 * BagSlotsTotal ? ReadIds(profile, BankItemsOffset, BankSlots) : Array.Empty<int>(),
+            BankBagItems = profile.Length >= BankBagItemsOffset + 2 * BagSlotsTotal ? ReadIds(profile, BankBagItemsOffset, BagSlotsTotal) : Array.Empty<int>(),
+            BankCharges = ReadChargesAt(profile, BankPropertiesOffset, BankSlots),
+            BankBagCharges = ReadChargesAt(profile, BankBagPropertiesOffset, BagSlotsTotal),
+            BankCoins = new EQClassic.Server.Zone.Coins(
+                BinaryPrimitives.ReadInt32LittleEndian(profile[BankCoinsOffset..]), BinaryPrimitives.ReadInt32LittleEndian(profile[(BankCoinsOffset + 4)..]),
+                BinaryPrimitives.ReadInt32LittleEndian(profile[(BankCoinsOffset + 8)..]), BinaryPrimitives.ReadInt32LittleEndian(profile[(BankCoinsOffset + 12)..])),
             Coins = new EQClassic.Server.Zone.Coins(
                 BinaryPrimitives.ReadInt32LittleEndian(profile[CoinsOffset..]), BinaryPrimitives.ReadInt32LittleEndian(profile[(CoinsOffset + 4)..]),
                 BinaryPrimitives.ReadInt32LittleEndian(profile[(CoinsOffset + 8)..]), BinaryPrimitives.ReadInt32LittleEndian(profile[(CoinsOffset + 12)..])),
@@ -120,6 +135,14 @@ public sealed record PlayerProfile(
                 ? profile.Slice(SkillsOffset, SkillCount).ToArray().Select(b => b >= 254 ? 0 : (int)b).ToArray()
                 : Array.Empty<int>(),
         };
+    }
+
+    private static int[] ReadChargesAt(ReadOnlySpan<byte> profile, int offset, int count)
+    {
+        var charges = new int[count];
+        for (int i = 0; i < count && offset + ItemPropertiesSize * i + 2 < profile.Length; i++)
+            charges[i] = (sbyte)profile[offset + ItemPropertiesSize * i + 2];
+        return charges;
     }
 
     private static int[] ReadBagCharges(ReadOnlySpan<byte> profile)

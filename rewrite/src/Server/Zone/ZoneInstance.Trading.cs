@@ -49,7 +49,8 @@ public sealed partial class ZoneInstance
     public void OfferItem(int playerId, int slot)
     {
         if (!_entities.TryGetValue(playerId, out var player) || player.Trade is not { } side || player.Inventory is not { } inventory
-            || inventory.ItemAt(slot) == 0 || PlayerInventory.IsBagSlot(slot) && side.Slots.Contains(PlayerInventory.BagOf(slot)))
+            || inventory.ItemAt(slot) == 0 || slot >= PlayerInventory.Slots && !PlayerInventory.IsBagSlot(slot) // not from the bank
+            || PlayerInventory.IsBagSlot(slot) && side.Slots.Contains(PlayerInventory.BagOf(slot)))
             return;
         if (!side.Slots.Remove(slot))
         {

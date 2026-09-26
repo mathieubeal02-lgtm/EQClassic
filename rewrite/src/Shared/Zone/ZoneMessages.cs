@@ -1003,4 +1003,52 @@ namespace EQClassic.Shared.Zone
         public void WriteFields(NetDataWriter writer) => writer.Put((byte)Order);
         public static PetCommand ReadFields(NetDataReader reader) => new PetCommand((PetOrder)reader.GetByte());
     }
+
+    public enum BankAction : byte { Open = 0, Close = 1, Money = 2 }
+
+    /// <summary>
+    /// Client to zone server: open the bank at a banker (NpcId), close it, or move money: Deposit* go
+    /// into the bank, Withdraw* come out, coin by coin.
+    /// </summary>
+    public sealed record BankCommand(BankAction Action, int NpcId = 0, int DepositPlatinum = 0, int DepositGold = 0, int DepositSilver = 0,
+        int DepositCopper = 0, int WithdrawPlatinum = 0, int WithdrawGold = 0, int WithdrawSilver = 0, int WithdrawCopper = 0) : IMessage
+    {
+        public MessageType Type => MessageType.BankCommand;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put((byte)Action);
+            writer.Put(NpcId);
+            foreach (int v in new[] { DepositPlatinum, DepositGold, DepositSilver, DepositCopper, WithdrawPlatinum, WithdrawGold, WithdrawSilver, WithdrawCopper })
+                writer.Put(v);
+        }
+
+        public static BankCommand ReadFields(NetDataReader reader) =>
+            new BankCommand((BankAction)reader.GetByte(), reader.GetInt(), reader.GetInt(), reader.GetInt(), reader.GetInt(), reader.GetInt(),
+                reader.GetInt(), reader.GetInt(), reader.GetInt(), reader.GetInt());
+    }
+
+    /// <summary>
+    /// Zone server to the player: the bank window (8 slots numbered 2000-2007, the bags' cells 2030 +
+    /// bag × 10 + cell, the money), or its closing (Open false).
+    /// </summary>
+    public sealed record BankContents(bool Open, IReadOnlyList<ItemView> Slots, IReadOnlyList<ItemView> Bags, int Platinum, int Gold, int Silver, int Copper) : IMessage
+    {
+        public const int BankBase = 2000, BankBagBase = 2030;
+        public MessageType Type => MessageType.BankContents;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(Open);
+            ItemViews.Write(writer, Slots);
+            ItemViews.Write(writer, Bags);
+            writer.Put(Platinum);
+            writer.Put(Gold);
+            writer.Put(Silver);
+            writer.Put(Copper);
+        }
+
+        public static BankContents ReadFields(NetDataReader reader) =>
+            new BankContents(reader.GetBool(), ItemViews.Read(reader), ItemViews.Read(reader), reader.GetInt(), reader.GetInt(), reader.GetInt(), reader.GetInt());
+    }
 }

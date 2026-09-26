@@ -130,6 +130,8 @@ public sealed partial class ZoneInstance
         public int? PetId { get; internal set; }
         /// <summary>Players: their side of a trade in progress, or null.</summary>
         public TradeSide? Trade { get; internal set; }
+        /// <summary>Players: the banker whose window is open (the bank slots are reachable), or null.</summary>
+        public int? BankerId { get; internal set; }
         /// <summary>Players: the merchant whose window is open, and its goods.</summary>
         public int? MerchantId { get; internal set; }
         internal IReadOnlyList<int> MerchantGoods = Array.Empty<int>();
@@ -184,21 +186,38 @@ public sealed partial class ZoneInstance
     public sealed class PlayerInventory
     {
         public const int Slots = 30, FirstGeneral = 22, BagSlotBase = 250, BagCells = 10, BagCount = 8, BagSlotsTotal = BagCount * BagCells;
+        /// <summary>The bank (bank_inv[8], slots 2000-2007) and its bags' contents (bank_cont_inv[80], 2030 + bag × 10 + cell).</summary>
+        public const int BankBase = 2000, BankSlots = 8, BankBagBase = 2030;
         public int[] Items { get; } = new int[Slots];
         public int[] Charges { get; } = new int[Slots];
         public int[] BagItems { get; } = new int[BagSlotsTotal];
         public int[] BagCharges { get; } = new int[BagSlotsTotal];
+        public int[] BankItems { get; } = new int[BankSlots];
+        public int[] BankCharges { get; } = new int[BankSlots];
+        public int[] BankBagItems { get; } = new int[BagSlotsTotal];
+        public int[] BankBagCharges { get; } = new int[BagSlotsTotal];
         public Coins Coins { get; set; }
+        public Coins BankCoins { get; set; }
 
         public static bool IsBagSlot(int slot) => slot >= BagSlotBase && slot < BagSlotBase + BagSlotsTotal;
-        /// <summary>The general slot of the bag holding a bag slot.</summary>
-        public static int BagOf(int bagSlot) => FirstGeneral + (bagSlot - BagSlotBase) / BagCells;
-        public static int CellOf(int bagSlot) => (bagSlot - BagSlotBase) % BagCells;
-        public static int BagSlot(int generalSlot, int cell) => BagSlotBase + (generalSlot - FirstGeneral) * BagCells + cell;
+        public static bool IsBank(int slot) => slot >= BankBase && slot < BankBase + BankSlots;
+        public static bool IsBankBagSlot(int slot) => slot >= BankBagBase && slot < BankBagBase + BagSlotsTotal;
+        /// <summary>A cell of a bag, in the inventory or in the bank.</summary>
+        public static bool IsCell(int slot) => IsBagSlot(slot) || IsBankBagSlot(slot);
+        /// <summary>A slot that may hold a bag with contents: the general slots and the bank.</summary>
+        public static bool IsContainerSlot(int slot) => IsGeneral(slot) || IsBank(slot);
+        /// <summary>The slot of the bag holding a cell.</summary>
+        public static int BagOf(int cell) => IsBankBagSlot(cell) ? BankBase + (cell - BankBagBase) / BagCells : FirstGeneral + (cell - BagSlotBase) / BagCells;
+        public static int CellOf(int cell) => (IsBankBagSlot(cell) ? cell - BankBagBase : cell - BagSlotBase) % BagCells;
+        /// <summary>The cell of the bag in a general or bank slot.</summary>
+        public static int BagSlot(int containerSlot, int cell) =>
+            IsBank(containerSlot) ? BankBagBase + (containerSlot - BankBase) * BagCells + cell : BagSlotBase + (containerSlot - FirstGeneral) * BagCells + cell;
         public static bool IsGeneral(int slot) => slot >= FirstGeneral && slot < Slots;
 
-        public int ItemAt(int slot) => slot is >= 0 and < Slots ? Items[slot] : IsBagSlot(slot) ? BagItems[slot - BagSlotBase] : 0;
-        public int ChargesAt(int slot) => slot is >= 0 and < Slots ? Charges[slot] : IsBagSlot(slot) ? BagCharges[slot - BagSlotBase] : 0;
+        public int ItemAt(int slot) => slot is >= 0 and < Slots ? Items[slot] : IsBagSlot(slot) ? BagItems[slot - BagSlotBase]
+            : IsBank(slot) ? BankItems[slot - BankBase] : IsBankBagSlot(slot) ? BankBagItems[slot - BankBagBase] : 0;
+        public int ChargesAt(int slot) => slot is >= 0 and < Slots ? Charges[slot] : IsBagSlot(slot) ? BagCharges[slot - BagSlotBase]
+            : IsBank(slot) ? BankCharges[slot - BankBase] : IsBankBagSlot(slot) ? BankBagCharges[slot - BankBagBase] : 0;
 
         public void Set(int slot, int item, int charges)
         {
@@ -206,11 +225,26 @@ public sealed partial class ZoneInstance
                 (Items[slot], Charges[slot]) = (item, charges);
             else if (IsBagSlot(slot))
                 (BagItems[slot - BagSlotBase], BagCharges[slot - BagSlotBase]) = (item, charges);
+            else if (IsBank(slot))
+                (BankItems[slot - BankBase], BankCharges[slot - BankBase]) = (item, charges);
+            else if (IsBankBagSlot(slot))
+                (BankBagItems[slot - BankBagBase], BankBagCharges[slot - BankBagBase]) = (item, charges);
         }
 
-        /// <summary>Whether the bag in a general slot holds anything.</summary>
-        public bool BagHasItems(int generalSlot) =>
-            IsGeneral(generalSlot) && Enumerable.Range(0, BagCells).Any(c => BagItems[(generalSlot - FirstGeneral) * BagCells + c] != 0);
+        /// <summary>Whether the bag in a general or bank slot holds anything.</summary>
+        public bool BagHasItems(int containerSlot) =>
+            IsContainerSlot(containerSlot) && Enumerable.Range(0, BagCells).Any(c => ItemAt(BagSlot(containerSlot, c)) != 0);
+
+        /// <summary>The bank part of the profile.</summary>
+        public PlayerInventory WithBank(IReadOnlyList<int> items, IReadOnlyList<int> charges, IReadOnlyList<int> bagItems, IReadOnlyList<int> bagCharges, Coins coins)
+        {
+            for (int i = 0; i < BankSlots; i++)
+                (BankItems[i], BankCharges[i]) = (i < items.Count ? items[i] : 0, i < charges.Count ? charges[i] : 0);
+            for (int i = 0; i < BagSlotsTotal; i++)
+                (BankBagItems[i], BankBagCharges[i]) = (i < bagItems.Count ? bagItems[i] : 0, i < bagCharges.Count ? bagCharges[i] : 0);
+            BankCoins = coins;
+            return this;
+        }
 
         public static PlayerInventory From(IReadOnlyList<int> items, IReadOnlyList<int> charges, Coins coins,
             IReadOnlyList<int>? bagItems = null, IReadOnlyList<int>? bagCharges = null)
@@ -657,7 +691,7 @@ public sealed partial class ZoneInstance
     public void MoveItem(int playerId, int from, int to)
     {
         if (!_entities.TryGetValue(playerId, out var player) || player.Inventory is not { } inventory
-            || !ValidSlot(inventory, from) || !ValidSlot(inventory, to) || from == to || inventory.ItemAt(from) == 0)
+            || !ValidSlot(player, inventory, from) || !ValidSlot(player, inventory, to) || from == to || inventory.ItemAt(from) == 0)
             return;
         if (player.Trade is { } trade && (trade.Slots.Contains(from) || trade.Slots.Contains(to)))
         {
@@ -668,8 +702,8 @@ public sealed partial class ZoneInstance
         int moving = inventory.ItemAt(from), swapped = inventory.ItemAt(to);
         string? refusal = CanWear(player, moving, to) ?? CanWear(player, swapped, from)
             ?? CanBag(inventory, moving, to) ?? CanBag(inventory, swapped, from);
-        // A bag that holds items only moves between general slots (its contents follow it).
-        if (refusal is null && (inventory.BagHasItems(from) && !PlayerInventory.IsGeneral(to) || inventory.BagHasItems(to) && !PlayerInventory.IsGeneral(from)))
+        // A bag that holds items only moves between general and bank slots (its contents follow it).
+        if (refusal is null && (inventory.BagHasItems(from) && !PlayerInventory.IsContainerSlot(to) || inventory.BagHasItems(to) && !PlayerInventory.IsContainerSlot(from)))
             refusal = "You cannot move a bag that has items in it there.";
         if (refusal is null && WouldClashTwoHanded(inventory, from, to))
             refusal = "You cannot use a two-handed weapon with something in your off hand.";
@@ -682,7 +716,7 @@ public sealed partial class ZoneInstance
         int movingCharges = inventory.ChargesAt(from), swappedCharges = inventory.ChargesAt(to);
         inventory.Set(to, moving, movingCharges);
         inventory.Set(from, swapped, swappedCharges);
-        if (PlayerInventory.IsGeneral(from) && PlayerInventory.IsGeneral(to))
+        if (PlayerInventory.IsContainerSlot(from) && PlayerInventory.IsContainerSlot(to))
             for (int c = 0; c < PlayerInventory.BagCells; c++)
             {
                 int a = PlayerInventory.BagSlot(from, c), b = PlayerInventory.BagSlot(to, c);
@@ -695,21 +729,29 @@ public sealed partial class ZoneInstance
             RebuildFighter(player);
     }
 
-    /// <summary>A worn or general slot, or a cell of a bag that is there and has that many cells.</summary>
-    private bool ValidSlot(PlayerInventory inventory, int slot) =>
-        slot is >= 0 and < PlayerInventory.Slots
-        || PlayerInventory.IsBagSlot(slot) && Items?.Get(inventory.Items[PlayerInventory.BagOf(slot)]) is { IsContainer: true } bag
-           && PlayerInventory.CellOf(slot) < bag.BagSlots;
+    /// <summary>
+    /// A worn or general slot, the bank while a banker is open, or a cell of a bag that is there and
+    /// has that many cells.
+    /// </summary>
+    private bool ValidSlot(Entity player, PlayerInventory inventory, int slot)
+    {
+        bool bank = player.BankerId is not null;
+        if (slot is >= 0 and < PlayerInventory.Slots || PlayerInventory.IsBank(slot) && bank)
+            return true;
+        if (PlayerInventory.IsBankBagSlot(slot) && !bank || !PlayerInventory.IsCell(slot))
+            return false;
+        return Items?.Get(inventory.ItemAt(PlayerInventory.BagOf(slot))) is { IsContainer: true } bag && PlayerInventory.CellOf(slot) < bag.BagSlots;
+    }
 
     /// <summary>Why this item cannot go into that bag cell (no bag in a bag, sizes), or null.</summary>
     private string? CanBag(PlayerInventory inventory, int itemId, int slot)
     {
-        if (itemId == 0 || !PlayerInventory.IsBagSlot(slot))
+        if (itemId == 0 || !PlayerInventory.IsCell(slot))
             return null;
         var item = Items?.Get(itemId);
         if (item is { IsContainer: true })
             return "You cannot put a bag in a bag.";
-        var bag = Items?.Get(inventory.Items[PlayerInventory.BagOf(slot)]);
+        var bag = Items?.Get(inventory.ItemAt(PlayerInventory.BagOf(slot)));
         return item is not null && bag is not null && item.Size > bag.BagSize ? "That item is too large for the bag." : null;
     }
 
@@ -746,7 +788,7 @@ public sealed partial class ZoneInstance
             return;
         var item = corpse.Items[index];
         // A player's own item goes back where it was, when that slot is free (a bag cell needs its bag).
-        int slot = item.Slot >= 0 && inventory.ItemAt(item.Slot) == 0 && ValidSlot(inventory, item.Slot)
+        int slot = item.Slot >= 0 && inventory.ItemAt(item.Slot) == 0 && ValidSlot(player, inventory, item.Slot)
             ? item.Slot : inventory.FreeSlotFor(Items?.Get(item.ItemId), id => Items?.Get(id));
         if (slot < 0)
         {
@@ -876,6 +918,7 @@ public sealed partial class ZoneInstance
         Emergencies();
         AdvanceWeather();
         CheckTrades();
+        CheckBanks();
         if (_time >= _nextRegen)
             TickBuffs(); // before the regeneration below moves _nextRegen: same 6 s tic
         Regenerate();
