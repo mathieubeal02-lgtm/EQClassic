@@ -20,6 +20,10 @@ public sealed record PlayerProfile(
     private const int YOffset = 2408, XOffset = 2412, ZOffset = 2416, HeadingOffset = 2420;
     private const int ZoneOffset = 2424, ZoneLength = 15;
     public const int CurHpOffset = 120;
+    public const int ExpOffset = 64;
+    // bind_point_zone[20], then bind_location as y[5], x[5], z[5] (slot 0 is where death sends you).
+    // The header puts bind_location at 3828; the stored profiles have it 4 bytes later.
+    public const int BindZoneOffset = 2844, BindZoneLength = 20, BindYOffset = 3832, BindXOffset = 3852, BindZOffset = 3872;
     private const int StrOffset = 123, StaOffset = 124, DexOffset = 126, AgiOffset = 128;
     private const int InventoryOffset = 168, InventorySlots = 30;
     private const int SkillsOffset = 2508, SkillCount = 74;
@@ -36,6 +40,13 @@ public sealed record PlayerProfile(
     public IReadOnlyList<int> Skills { get; init; } = Array.Empty<int>();
 
     public int Skill(int id) => id < Skills.Count ? Skills[id] : 0;
+
+    public uint Exp { get; init; }
+    /// <summary>Where death sends the character (bind point, slot 0); empty zone when unknown.</summary>
+    public string BindZone { get; init; } = "";
+    public float BindX { get; init; }
+    public float BindY { get; init; }
+    public float BindZ { get; init; }
 
     private static readonly Encoding Latin1 = Encoding.Latin1;
 
@@ -58,6 +69,11 @@ public sealed record PlayerProfile(
             Zone: CString(profile.Slice(ZoneOffset, ZoneLength)))
         {
             CurHp = BinaryPrimitives.ReadInt16LittleEndian(profile[CurHpOffset..]),
+            Exp = BinaryPrimitives.ReadUInt32LittleEndian(profile[ExpOffset..]),
+            BindZone = profile.Length >= BindZOffset + 4 ? CString(profile.Slice(BindZoneOffset, BindZoneLength)) : "",
+            BindX = profile.Length >= BindZOffset + 4 ? BinaryPrimitives.ReadSingleLittleEndian(profile[BindXOffset..]) : 0,
+            BindY = profile.Length >= BindZOffset + 4 ? BinaryPrimitives.ReadSingleLittleEndian(profile[BindYOffset..]) : 0,
+            BindZ = profile.Length >= BindZOffset + 4 ? BinaryPrimitives.ReadSingleLittleEndian(profile[BindZOffset..]) : 0,
             Str = profile[StrOffset],
             Sta = profile[StaOffset],
             Dex = profile[DexOffset],

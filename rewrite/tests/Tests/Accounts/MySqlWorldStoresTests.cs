@@ -97,6 +97,10 @@ public sealed class MySqlWorldStoresTests : IDisposable
         var p = store.ListForAccount(24).Single().Profile;
         Assert.Equal(("innothule", -612.29f, -2789.26f, -31.44f), (p.Zone, p.X, p.Y, p.Z));
         Assert.Equal(("Qwalker", 9, 10), (p.Name, p.Race, p.Class)); // the rest of the blob is untouched
+
+        store.SavePosition("Qwalker", "innothule", 0, 0, 0, hp: 57, exp: 123_456, level: 12);
+        p = store.ListForAccount(24).Single().Profile;
+        Assert.Equal((57, 123_456u, 12), (p.CurHp, p.Exp, p.Level));
     }
 
     private void Insert(string cs, int account, string name, byte[]? profile)

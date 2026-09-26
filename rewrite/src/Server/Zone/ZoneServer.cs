@@ -128,7 +128,10 @@ public sealed class ZoneServer : IDisposable
                 {
                     Send(peer, DoorsOf(entered.Instance), DeliveryMethod.ReliableOrdered); // after the entry: same channel, in order
                     if (entered.Instance.Get(entered.EntityId) is { } me)
+                    {
                         Send(peer, new PlayerHealth(me.Hp, me.Fighter.MaxHp), DeliveryMethod.ReliableOrdered);
+                        Send(peer, ExperienceOf(me), DeliveryMethod.ReliableOrdered);
+                    }
                 }
                 break;
 
@@ -199,9 +202,12 @@ public sealed class ZoneServer : IDisposable
             _instances[ticket.Zone] = instance;
             Log?.Invoke($"zone {ticket.Zone} booted: {instance.Entities.Count()} NPC(s)");
         }
-        var fighter = ticket.Profile is { } profile ? EQClassic.Server.Combat.Combatant.ForPlayer(profile, Items) : null;
-        var entity = instance.AddPlayer(ticket.CharacterName, ticket.Race, ticket.Gender, ticket.Level, ticket.Position,
-            ticket.Profile?.Heading ?? 0, fighter, ticket.Profile?.CurHp);
+        var profile = ticket.Profile;
+        var progress = profile is null ? null : new ZoneInstance.PlayerProgress(profile.Exp, profile.BindZone,
+            new Vec3(profile.BindX, profile.BindY, profile.BindZ),
+            level => EQClassic.Server.Combat.Combatant.ForPlayer(profile with { Level = level }, Items));
+        var entity = instance.AddPlayer(ticket.CharacterName, ticket.Race, ticket.Gender, profile?.Level ?? ticket.Level, ticket.Position,
+            profile?.Heading ?? 0, null, profile?.CurHp, progress);
         _players[peer] = new Player { Instance = instance, EntityId = entity.Id, Ticket = ticket };
         foreach (var (other, p) in _players)
             if (other != peer && p.Instance == instance)
@@ -246,6 +252,9 @@ public sealed class ZoneServer : IDisposable
                     break;
                 case ZoneInstance.Considered considered when PeerOf(instance, considered.PlayerId) is { } asker:
                     Send(asker, new ConsiderResult(considered.EntityId, considered.Standing, considered.Con), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.ExperienceChanged xp when PeerOf(instance, xp.PlayerId) is { } learner && instance.Get(xp.PlayerId) is { } who:
+                    Send(learner, ExperienceOf(who), DeliveryMethod.ReliableOrdered);
                     break;
                 case ZoneInstance.AppearanceChanged appearance:
                     SendToZone(instance, new EntityAppearance(appearance.EntityId, appearance.Sitting));
@@ -349,6 +358,11 @@ public sealed class ZoneServer : IDisposable
                 Send(peer, message, DeliveryMethod.ReliableOrdered);
     }
 
+    private static PlayerExperience ExperienceOf(ZoneInstance.Entity p) =>
+        new(p.Exp, EQClassic.Server.Combat.Experience.ForLevel(p.Level, p.Fighter.Class, p.Race),
+            p.Level >= EQClassic.Server.Combat.Experience.MaxLevel ? uint.MaxValue : EQClassic.Server.Combat.Experience.ForLevel(p.Level + 1, p.Fighter.Class, p.Race),
+            p.Level);
+
     private NetPeer? PeerOf(ZoneInstance instance, int entityId) =>
         _players.FirstOrDefault(kv => kv.Value.Instance == instance && kv.Value.EntityId == entityId).Key;
 
@@ -363,7 +377,12 @@ public sealed class ZoneServer : IDisposable
         if (peer is null)
             return;
         var d = crossed.Destination;
-        var ticket = player.Ticket with { Zone = crossed.Line.TargetZone, Position = d };
+        // The next zone starts from the character as it is now (level, experience, hit points), not as World read it.
+        var now = instance.Get(player.EntityId);
+        var profile = player.Ticket.Profile is { } p && now is not null
+            ? p with { Level = now.Level, Exp = now.Exp, CurHp = now.Hp, Zone = crossed.Line.TargetZone, X = d.X, Y = d.Y, Z = d.Z }
+            : player.Ticket.Profile;
+        var ticket = player.Ticket with { Zone = crossed.Line.TargetZone, Position = d, Level = now?.Level ?? player.Ticket.Level, Profile = profile };
         var key = _keys.Issue(ticket);
         Log?.Invoke($"{peer.Address}: {ticket.CharacterName} zones {instance.ShortName} -> {ticket.Zone}");
         Send(peer, new ZoneChange(ticket.Zone, PublicAddress, Port, key, d.X, d.Y, d.Z), DeliveryMethod.ReliableOrdered);
@@ -383,7 +402,9 @@ public sealed class ZoneServer : IDisposable
             return;
         var last = player.Instance.Get(player.EntityId)?.Position ?? player.Ticket.Position;
         var (zone, at) = saveAs ?? (player.Instance.ShortName, last);
-        Characters?.SavePosition(player.Ticket.CharacterName, zone, at.X, at.Y, at.Z, player.Instance.Get(player.EntityId)?.Hp);
+        var state = player.Instance.Get(player.EntityId);
+        Characters?.SavePosition(player.Ticket.CharacterName, zone, at.X, at.Y, at.Z, state?.Hp,
+            player.Ticket.Profile is null ? null : state?.Exp, player.Ticket.Profile is null ? null : state?.Level);
         player.Instance.RemovePlayer(player.EntityId);
         foreach (var (other, p) in _players)
             if (p.Instance == player.Instance)

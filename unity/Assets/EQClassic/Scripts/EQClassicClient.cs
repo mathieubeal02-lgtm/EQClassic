@@ -179,6 +179,10 @@ namespace EQClassic.Unity
                         $"The zone '{_presenter.MissingZone}' is not installed in this client (not imported from Lantern).\nYou are there for the server, but nothing can be drawn.");
                 DrawBar(new Rect(10, 34, 220, 16), _client.MaxHp > 0 ? (float)_client.Hp / _client.MaxHp : 0f, new Color(0.8f, 0.1f, 0.1f),
                     $"{_client.Hp} / {_client.MaxHp}" + (_client.AutoAttacking ? "  attacking" : "") + (_client.Sitting ? "  sitting" : ""));
+                if (_client.Experience is { } xp)
+                    DrawBar(new Rect(10, 54, 220, 8), xp.Fraction, new Color(0.9f, 0.8f, 0.2f), "");
+                if (_client.Experience is { } lvl)
+                    GUI.Label(new Rect(10, 62, 220, 20), $"Level {lvl.Level}  {(int)(lvl.Fraction * 100)}%");
                 if (_client.TargetId is int target && _client.Zone?.Get(target) is { } t)
                 {
                     var colour = GUI.color;

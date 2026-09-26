@@ -42,7 +42,7 @@ public sealed class ZoneInstance
         public bool IsPlayer { get; }
         public int Race { get; }
         public int Gender { get; }
-        public int Level { get; }
+        public int Level { get; internal set; }
         public float Size { get; }
         public Vec3 Position { get; internal set; }
         public float Heading { get; internal set; }
@@ -69,6 +69,11 @@ public sealed class ZoneInstance
         /// <summary>Players: where they entered the zone (death returns them there until binding exists).</summary>
         internal Vec3 EntryPosition;
         internal double LastCombatTime = double.NegativeInfinity;
+        /// <summary>Players: experience, and how to rebuild their fighter at another level.</summary>
+        public uint Exp { get; internal set; }
+        internal PlayerProgress? Progress;
+        /// <summary>NPCs: damage taken from each player (the most damage earns the experience).</summary>
+        internal Dictionary<int, int>? DamageBy;
 
         public int HpPercent => Fighter.MaxHp <= 0 ? 0 : Math.Clamp((int)Math.Ceiling(100.0 * Hp / Fighter.MaxHp), 0, 100);
 
@@ -92,6 +97,7 @@ public sealed class ZoneInstance
     public sealed record Slain(int VictimId, string VictimName, int KillerId, string KillerName) : ZoneEvent;
     public sealed record Considered(int PlayerId, int EntityId, Standing Standing, ConColor Con) : ZoneEvent;
     public sealed record AppearanceChanged(int EntityId, bool Sitting) : ZoneEvent;
+    public sealed record ExperienceChanged(int PlayerId, uint Exp, int Level) : ZoneEvent;
 
     private const int BankerClass = 40, MerchantClass = 41;
 
@@ -136,15 +142,21 @@ public sealed class ZoneInstance
 
     /// <param name="fighter">Melee numbers from the profile; null gives a plain level-based fighter (tests).</param>
     /// <param name="hp">Saved hit points; null or out of range gives full health.</param>
-    public Entity AddPlayer(string name, int race, int gender, int level, Vec3 position, float heading = 0, Combatant? fighter = null, int? hp = null)
+    public Entity AddPlayer(string name, int race, int gender, int level, Vec3 position, float heading = 0, Combatant? fighter = null, int? hp = null,
+        PlayerProgress? progress = null)
     {
         var player = Add(name, true, race, gender, level, 6f, position, heading);
         player.LastMoveTime = _time;
-        player.Fighter = fighter ?? DefaultPlayer(level);
+        player.Progress = progress;
+        player.Exp = progress?.Exp ?? 0;
+        player.Fighter = fighter ?? progress?.FighterAt?.Invoke(level) ?? DefaultPlayer(level);
         player.Hp = hp is int h && h > 0 && h <= player.Fighter.MaxHp ? h : player.Fighter.MaxHp;
         player.EntryPosition = position;
         return player;
     }
+
+    /// <summary>What a player brings besides position: experience, bind point, and their fighter at any level.</summary>
+    public sealed record PlayerProgress(uint Exp, string BindZone, Vec3 Bind, Func<int, Combatant>? FighterAt);
 
     private static Combatant DefaultPlayer(int level) =>
         new(true, level, CombatFormulas.Warrior, CombatFormulas.ClientBaseHp(level, CombatFormulas.Warrior, 75),
@@ -453,7 +465,14 @@ public sealed class ZoneInstance
         var result = Melee.Swing(attacker.Fighter, defender.Fighter, _random, defender.Sitting);
         attacker.LastCombatTime = defender.LastCombatTime = _time;
         if (result.Hit)
+        {
             defender.Hp -= result.Damage;
+            if (attacker.IsPlayer && !defender.IsPlayer)
+            {
+                defender.DamageBy ??= new Dictionary<int, int>();
+                defender.DamageBy[attacker.Id] = defender.DamageBy.GetValueOrDefault(attacker.Id) + result.Damage;
+            }
+        }
         _events.Add(new Swung(attacker.Id, defender.Id, result.Hit ? result.Damage : 0, defender.HpPercent));
         if (!defender.IsPlayer && defender.TargetId is null)
         {
@@ -466,15 +485,62 @@ public sealed class ZoneInstance
             return;
         _events.Add(new Slain(defender.Id, defender.Name, attacker.Id, attacker.Name));
         if (defender.IsPlayer)
+        {
             PlayerDied(defender);
+        }
         else
+        {
+            RewardKill(defender);
             Kill(defender.Id);
+        }
     }
 
     /// <summary>
-    /// A slain player: every NPC after them lets go, and they come back at full health where they
-    /// entered the zone. (The legacy client returns to its bind point, with a corpse and lost
-    /// experience: not ported yet.)
+    /// NPC::Death: the player who did the most damage gets NPC level² × 75 experience (capped at a
+    /// tenth of their level), unless the NPC cons green to them or is a merchant or banker.
+    /// Groups and pets are not modelled yet.
+    /// </summary>
+    private void RewardKill(Entity npc)
+    {
+        if (npc.DamageBy is null || npc.Npc is null || npc.Npc.Combat.Class is BankerClass or MerchantClass)
+            return;
+        var (killerId, _) = npc.DamageBy.OrderByDescending(kv => kv.Value).First();
+        if (!_entities.TryGetValue(killerId, out var player) || !player.IsPlayer)
+            return;
+        if (ConsiderRules.LevelCon(player.Level, npc.Level) == ConColor.Green)
+            return;
+        uint gain = Experience.Capped(Experience.ForKill(npc.Level), player.Level, player.Fighter.Class, player.Race);
+        if (gain > 0)
+            SetExperience(player, player.Exp + gain);
+    }
+
+    /// <summary>Client::SetEXP: new total, level from it, the legacy messages, fighter rebuilt on a level change.</summary>
+    private void SetExperience(Entity player, uint exp)
+    {
+        if (exp == player.Exp)
+            return;
+        int level = Math.Clamp(Experience.LevelFor(exp, player.Fighter.Class, player.Race), 1, Experience.MaxLevel);
+        _events.Add(new Told(player.Id, exp > player.Exp ? "You gain experience!!" : "You have lost experience."));
+        player.Exp = exp;
+        if (level != player.Level)
+        {
+            _events.Add(new Told(player.Id, level > player.Level
+                ? $"You have gained a level! Welcome to level {level}!" : $"You have lost a level! Welcome to level {level}!"));
+            player.Level = level;
+            if (player.Progress?.FighterAt is { } rebuild)
+            {
+                player.Fighter = rebuild(level);
+                player.Hp = Math.Min(player.Hp, player.Fighter.MaxHp);
+                _events.Add(new HealthChanged(player.Id, player.Hp, player.Fighter.MaxHp));
+            }
+        }
+        _events.Add(new ExperienceChanged(player.Id, player.Exp, player.Level));
+    }
+
+    /// <summary>
+    /// A slain player (Client::Death): every NPC after them lets go, they lose experience from level
+    /// 6 (ExpLost), and come back at full health at their bind point, in this zone or another; where
+    /// they entered the zone when the bind point is unknown. No corpse yet (it needs the inventory).
     /// </summary>
     private void PlayerDied(Entity player)
     {
@@ -483,12 +549,21 @@ public sealed class ZoneInstance
         player.AutoAttack = false;
         player.PlayerTargetId = null;
         player.Sitting = false;
+        uint loss = Experience.DeathLoss(player.Level, player.Exp);
+        if (loss > 0)
+            SetExperience(player, player.Exp - loss);
         player.Hp = player.Fighter.MaxHp;
-        player.Position = player.EntryPosition;
+        _events.Add(new HealthChanged(player.Id, player.Hp, player.Fighter.MaxHp));
+        var bind = player.Progress is { BindZone: { Length: > 0 } zone } p ? (Zone: zone, Position: p.Bind) : (Zone: ShortName, Position: player.EntryPosition);
+        if (!string.Equals(bind.Zone, ShortName, StringComparison.OrdinalIgnoreCase))
+        {
+            _events.Add(new CrossedZoneLine(player.Id, new ZoneLine(0, player.Position, 0, bind.Zone, bind.Position), bind.Position));
+            return;
+        }
+        player.Position = bind.Position;
         player.LastMoveTime = _time;
         player.Moved = true;
-        _events.Add(new Teleported(player.Id, player.EntryPosition, DeathReason));
-        _events.Add(new HealthChanged(player.Id, player.Hp, player.Fighter.MaxHp));
+        _events.Add(new Teleported(player.Id, bind.Position, DeathReason));
     }
 
     /// <summary>

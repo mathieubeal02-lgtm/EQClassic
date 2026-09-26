@@ -54,6 +54,8 @@ namespace EQClassic.ClientCore
         public int? TargetId { get; private set; }
         public bool AutoAttacking { get; private set; }
         public int Hp { get; private set; }
+        /// <summary>Experience, level and progress through the level (0-1), from the server.</summary>
+        public PlayerExperience? Experience { get; private set; }
         public int MaxHp { get; private set; }
         /// <summary>A melee swing near the player (for animations; the text goes to <see cref="MessageReceived"/>).</summary>
         public event Action<CombatEvent>? CombatReceived;
@@ -350,6 +352,9 @@ namespace EQClassic.ClientCore
                 case EntityAppearance appearance:
                     Zone?.Apply(appearance);
                     break;
+                case PlayerExperience experience:
+                    Experience = experience;
+                    break;
                 case PlayerHealth health:
                     Hp = health.Hp;
                     MaxHp = health.MaxHp;
@@ -357,6 +362,8 @@ namespace EQClassic.ClientCore
                 case ZoneChange change:
                     Zone = null;
                     Player = null;
+                    TargetId = null;
+                    AutoAttacking = false;
                     Open(change.Address, change.Port, new ZoneEnterRequest(_characterName, change.ZoneKey), GameState.EnteringZone);
                     break;
             }

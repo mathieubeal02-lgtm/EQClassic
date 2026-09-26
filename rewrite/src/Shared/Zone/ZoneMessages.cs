@@ -407,4 +407,24 @@ namespace EQClassic.Shared.Zone
         public MessageType Type => MessageType.WhoRequest;
         public void WriteFields(NetDataWriter writer) { }
     }
+
+    /// <summary>Zone server to one client: experience, the totals at the start of this level and of the next, and the level.</summary>
+    public sealed record PlayerExperience(uint Exp, uint LevelStart, uint NextLevel, int Level) : IMessage
+    {
+        public MessageType Type => MessageType.PlayerExperience;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(Exp);
+            writer.Put(LevelStart);
+            writer.Put(NextLevel);
+            writer.Put(Level);
+        }
+
+        public static PlayerExperience ReadFields(NetDataReader reader) =>
+            new PlayerExperience(reader.GetUInt(), reader.GetUInt(), reader.GetUInt(), reader.GetInt());
+
+        /// <summary>Progress through the level, 0 to 1.</summary>
+        public float Fraction => NextLevel > LevelStart ? (float)((double)(Exp - System.Math.Min(Exp, LevelStart)) / (NextLevel - LevelStart)) : 0f;
+    }
 }

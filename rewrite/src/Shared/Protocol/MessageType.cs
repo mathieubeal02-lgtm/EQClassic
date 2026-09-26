@@ -44,4 +44,5 @@ public enum MessageType : byte
     ChatSend = 36,
     ChatMessage = 37,
     WhoRequest = 38,
+    PlayerExperience = 39,
 }

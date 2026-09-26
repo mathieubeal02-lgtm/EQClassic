@@ -47,8 +47,8 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 |---|---|---|---|
 | Chat window | Say, shout, OOC, tells, group, guild, emotes, channels, scrolling | Partial: Enter to type; say, shout, OOC, auction, tells (across zones), emotes; last 12 lines on screen. No group/guild channels, no scrolling back | 1 |
 | Slash commands | /who, /loc, /sit, /camp, /con, /target... | Partial: /say /shout /ooc /auction /tell /em /who /loc /sit /stand /camp /con /target | 1 |
-| Player window | HP, mana, stamina, experience bars | Partial: HP as text | 1 |
-| Target window | Name, health, consider colour | Partial: name and health as text | 1 |
+| Player window | HP, mana, stamina, experience bars | Partial: HP and experience bars, level; no mana or stamina yet | 1 |
+| Target window | Name, health, consider colour | Written (name in con colour, health bar), to check in Unity | 1 |
 | Consider (C) | Con colour and faction message | Done (faction always indifferent until the faction port) | — |
 | Inventory | Worn slots, bags, weight, money | Todo (server: items, profile slots) | 2 |
 | Loot | Corpse window | Todo (server: loot tables) | 2 |
