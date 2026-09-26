@@ -344,7 +344,8 @@ namespace EQClassic.Unity
         /// <summary>The skills window (K): every skill the character has, with its value.</summary>
         private void DrawSkills()
         {
-            GUILayout.BeginArea(new Rect(Screen.width / 2 - 160, 80, 320, Screen.height - 200), GUI.skin.box);
+            // On the right, where the merchant's window goes: the inventory stays visible beside it.
+            GUILayout.BeginArea(new Rect(Screen.width - 330, 60, 320, Screen.height - 200), GUI.skin.box);
             GUILayout.Label("Skills");
             _skillsScroll = GUILayout.BeginScrollView(_skillsScroll);
             var values = _client.Skills?.Values;
