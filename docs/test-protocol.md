@@ -33,7 +33,7 @@ and plays these scenarios, each reported OK / FAIL with what it saw, in a Markdo
 | second player enters | bot2 / bot2, Qpartner (made if missing) | both players in one zone |
 | group: invite, follow, chat | /invite, /follow, /g | both see the group, the line reaches the other |
 | trade an item | /trade, offer, accept both | the other player gets the item |
-| translocate: asked, accepted | group Qpartner, #cast 1336 (Translocate: Fay) on them | Qpartner gets the offer, says yes, lands in gfaydark |
+| translocate: asked, accepted | group Qpartner, #cast 1336 (Fay) or 1337 (Tox, when already in gfaydark) on them | Qpartner gets the offer, says yes, lands in the other zone |
 | GM: #flymode | #flymode on, then off | the client flies, then falls again |
 | quest: proximity greeting | #zone erudnint, carry the note 18729, go to Lanken Rjarn | EVENT_SPAWN sets his box, EVENT_ENTER greets |
 

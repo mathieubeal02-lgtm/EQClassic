@@ -401,7 +401,7 @@ Step("trade an item", () =>
 });
 Step("translocate: asked, accepted", () =>
 {
-    // Qbot translocates Qpartner (grouped) to Greater Faydark: Qpartner is asked and says yes.
+    // Qbot translocates Qpartner (grouped): Qpartner is asked and says yes.
     int heardBefore;
     lock (partnerHeard) heardBefore = partnerHeard.Count;
     Chat("/invite Qpartner");
@@ -411,10 +411,16 @@ Step("translocate: asked, accepted", () =>
     var them = client.Zone!.Entities.FirstOrDefault(e => e.Spawn.IsPlayer && e.Spawn.Name == "Qpartner");
     if (them is null) return (false, "Qpartner not seen");
     client.SetTarget(them.Id);
-    Chat("#cast 1336");
+    // Moved for real: a new zone view (another zone), or far from where Qpartner stood (already in gfaydark).
+    var zoneBefore = partner.Zone;
+    var at = partner.Player?.Position ?? default;
+    // Fay, or Tox when Qpartner is already in Greater Faydark (where an earlier run left them).
+    var (spellId, destination) = partner.Zone?.Zone == "gfaydark" ? (1337, "tox") : (1336, "gfaydark");
+    Chat($"#cast {spellId}");
     bool asked = Run(() => partner.Translocation != null, 8);
     partner.AnswerTranslocate(true);
-    bool moved = Run(() => partner.State == GameState.InZone && partner.Zone?.Zone == "gfaydark", 30);
+    bool moved = Run(() => partner.State == GameState.InZone && partner.Zone?.Zone == destination && partner.Player is { } p
+        && (partner.Zone != zoneBefore || Math.Abs(p.Position.X - at.X) + Math.Abs(p.Position.Y - at.Y) > 50), 30);
     Chat("/disband");
     return (asked && moved, $"asked {asked}, in {partner.Zone?.Zone}");
 });
