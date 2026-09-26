@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Client logic with no engine dependency: connection flow (login → world → zone), world state with
+    interpolation, local movement. The Unity client (unity/EQClassicClient) is a thin layer over it,
+    so this project must stay on netstandard2.1 APIs (Unity 2021.3). net10.0 is built for the tests.
+  -->
+  <PropertyGroup>
+    <TargetFramework></TargetFramework>
+    <TargetFrameworks>netstandard2.1;net10.0</TargetFrameworks>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Shared\EQClassic.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
+    <Compile Include="..\Shared\Polyfills\IsExternalInit.cs" Link="Polyfills\IsExternalInit.cs" />
+  </ItemGroup>
+
+</Project>

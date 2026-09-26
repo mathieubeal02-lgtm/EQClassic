@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Compiles the Unity client scripts (unity/Assets/EQClassic/Scripts) against minimal stubs of
+    the UnityEngine/UnityEditor APIs they use, with Unity 2021.3's C# 9 and netstandard2.1. It
+    catches C# and logic errors without a Unity installation; it does NOT prove the Unity API
+    names and signatures (the stubs are written from the Unity documentation). Opening the
+    project in Unity is the real check (docs/unity-client.md).
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <DefineConstants>$(DefineConstants);UNITY_EDITOR</DefineConstants>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS0649;CS0414</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Assets\EQClassic\Scripts\**\*.cs" Link="Scripts\%(RecursiveDir)%(Filename)%(Extension)" />
+    <ProjectReference Include="..\..\rewrite\src\ClientCore\EQClassic.ClientCore.csproj" />
+  </ItemGroup>
+
+</Project>

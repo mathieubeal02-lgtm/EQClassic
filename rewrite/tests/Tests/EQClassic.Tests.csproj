@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Shared\EQClassic.Shared.csproj" />
     <ProjectReference Include="..\..\src\Server\EQClassic.Server.csproj" />
+    <ProjectReference Include="..\..\src\ClientCore\EQClassic.ClientCore.csproj" />
   </ItemGroup>
 
 </Project>
