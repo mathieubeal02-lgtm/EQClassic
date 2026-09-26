@@ -60,7 +60,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Buff window | | Todo | 3 |
 | Options, key bindings | | Todo | 3 |
 | Login and server select | | Done (IMGUI, to restyle) | — |
-| Character select and creation | 3D models, race/class/deity/city choices, stat points | Partial: list and a fixed troll shaman | 2 |
+| Character select and creation | 3D models, race/class/deity/city choices, stat points | Partial: race, gender, class, deity, city among the start_zones combinations, bonus points, name; no 3D preview, no face choice | 2 |
 
 ## Sound
 

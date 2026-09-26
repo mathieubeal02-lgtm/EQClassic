@@ -37,6 +37,37 @@ public class CharacterCreationTests
         Assert.Equal(203 & 0xFF, raw[55]);
         Assert.Equal(3, raw[72]);
         Assert.Equal(new byte[] { 108, 119, 45, 75, 52, 83, 95 }, raw[123..130]);
+        // Languages of a troll (common 95, troll 100), level 1 shaman hit points, bound where it starts.
+        Assert.Equal((95, 100), (raw[130], raw[130 + 6]));
+        Assert.Equal((25, "grobb", 0f, -100f, 4f), (p.CurHp, p.BindZone, p.BindX, p.BindY, p.BindZ));
+    }
+
+    [Fact]
+    public void Statistics_must_spend_exactly_the_bonus_points()
+    {
+        var (creation, _, _) = Setup();
+        Assert.Equal(CharacterCreation.InvalidChoice, creation.Create(24, Request() with { Stats = new CharacterStats(75, 75, 75, 75, 75, 75, 75) }));
+        Assert.Equal(CharacterCreation.InvalidChoice, creation.Create(24, Request() with { Stats = TrollShamanStats with { Wis = 96 } })); // 31 points
+        Assert.Null(creation.Create(24, Request() with { Stats = TrollShamanStats with { Wis = 70, Str = 133 } }));   // 25 in STR instead
+    }
+
+    [Fact]
+    public void Only_the_combinations_start_zones_offers()
+    {
+        var (creation, _, data) = Setup();
+        data.OptionList.Add(new CreationOption(9, 10, 203, 1, "grobb"));
+        Assert.Equal(CharacterCreation.InvalidChoice, creation.Create(24, Request() with { Deity = 206 }));
+        Assert.Null(creation.Create(24, Request()));
+    }
+
+    [Fact]
+    public void Creation_rules_match_the_characters_the_trilogy_client_made()
+    {
+        // Lanlaan, a high elf paladin created with the Trilogy client: 20 points, all in STR and STA.
+        Assert.Null(CreationRules.CheckStats(5, 3, new CharacterStats(75, 80, 90, 70, 92, 85, 100)));
+        Assert.Null(CreationRules.CheckStats(9, 10, TrollShamanStats));
+        Assert.Equal((new CharacterStats(85, 85, 75, 75, 75, 80, 75), 25), CreationRules.Starting(1, 1)); // human warrior
+        Assert.Equal(new Dictionary<int, int> { [0] = 100, [3] = 100 }, CreationRules.Languages(5));
     }
 
     [Fact]

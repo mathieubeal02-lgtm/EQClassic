@@ -31,6 +31,27 @@ public static class ProfileTemplate
     public static void SetLevel(byte[] p, int level) => p[60] = (byte)level;
     public static void SetFace(byte[] p, int face) => p[72] = (byte)face;
     public static void SetZone(byte[] p, string zone) => WriteString(p, 2424, 15, zone);
+    /// <summary>languages[24] at 130: every language to 0, then the given skills.</summary>
+    public static void SetLanguages(byte[] p, IReadOnlyDictionary<int, int> languages)
+    {
+        p.AsSpan(130, 24).Clear();
+        foreach (var (id, skill) in languages)
+            if (id is >= 0 and < 24)
+                p[130 + id] = (byte)skill;
+    }
+
+    /// <summary>Bind point: zone, and the same place in the five bind_location slots (slot 0 is where death sends you).</summary>
+    public static void SetBind(byte[] p, string zone, float x, float y, float z)
+    {
+        WriteString(p, PlayerProfile.BindZoneOffset, PlayerProfile.BindZoneLength, zone);
+        for (int slot = 0; slot < 5; slot++)
+        {
+            BinaryPrimitives.WriteSingleLittleEndian(p.AsSpan(PlayerProfile.BindYOffset + 4 * slot), y);
+            BinaryPrimitives.WriteSingleLittleEndian(p.AsSpan(PlayerProfile.BindXOffset + 4 * slot), x);
+            BinaryPrimitives.WriteSingleLittleEndian(p.AsSpan(PlayerProfile.BindZOffset + 4 * slot), z);
+        }
+    }
+
     public static void SetExp(byte[] p, uint exp) => BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(PlayerProfile.ExpOffset), exp);
     public static void SetCurHp(byte[] p, int hp) => BinaryPrimitives.WriteInt16LittleEndian(p.AsSpan(PlayerProfile.CurHpOffset), (short)Math.Clamp(hp, 0, short.MaxValue));
 

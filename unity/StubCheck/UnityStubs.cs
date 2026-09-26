@@ -265,6 +265,10 @@ namespace UnityEngine
         public static string PasswordField(string password, char maskChar) => password;
         public static bool Button(string text) => false;
         public static void Space(float pixels) { }
+        public static int SelectionGrid(int selected, string[] texts, int xCount) => selected;
+        public static int Toolbar(int selected, string[] texts) => selected;
+        public static void BeginHorizontal() { }
+        public static void EndHorizontal() { }
     }
 }
 

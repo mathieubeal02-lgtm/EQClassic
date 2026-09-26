@@ -1,3 +1,4 @@
+using EQClassic.Shared.Characters;
 using EQClassic.Server.Characters;
 using MySqlConnector;
 
@@ -17,8 +18,8 @@ public sealed class MySqlCreationDataTests : IDisposable
         Execute(cs, $"INSERT INTO `{_prefix}name_filter` VALUES ('banana'), ('drizzt'), ('Kamin')");
         Execute(cs, $"CREATE TABLE `{_prefix}zone_ids` (zoneidnumber int, short_name varchar(32)) DEFAULT CHARSET=latin1");
         Execute(cs, $"INSERT INTO `{_prefix}zone_ids` VALUES (52, 'grobb'), (40, 'neriaka')");
-        Execute(cs, $"CREATE TABLE `{_prefix}start_zones` (x float, y float, z float, zone_id int, player_class int, player_race int, player_deity int) DEFAULT CHARSET=latin1");
-        Execute(cs, $"INSERT INTO `{_prefix}start_zones` VALUES (-366.4, -581.9, 24.7, 40, 10, 9, 203), (10, 20, 30, 52, 10, 9, 203), (11, 21, 31, 52, 10, 9, 206)");
+        Execute(cs, $"CREATE TABLE `{_prefix}start_zones` (x float, y float, z float, zone_id int, player_class int, player_race int, player_deity int, player_choice int) DEFAULT CHARSET=latin1");
+        Execute(cs, $"INSERT INTO `{_prefix}start_zones` VALUES (-366.4, -581.9, 24.7, 40, 10, 9, 203, 5), (10, 20, 30, 52, 10, 9, 203, 1), (11, 21, 31, 52, 10, 9, 206, 1)");
         Execute(cs, $"CREATE TABLE `{_prefix}starting_items` (id int AUTO_INCREMENT PRIMARY KEY, race int, class int, itemid int) DEFAULT CHARSET=latin1");
         Execute(cs, $"INSERT INTO `{_prefix}starting_items` (race, class, itemid) VALUES (0,0,9990), (0,0,9991), (0,10,9999), (9,10,18791), (1,1,5)");
         _created = true;
@@ -46,6 +47,14 @@ public sealed class MySqlCreationDataTests : IDisposable
         Assert.Equal((11f, 21f, 31f), Data.StartPosition("grobb", 9, 10));
         Assert.Equal((-366f, -581f, 24f), Data.StartPosition("neriaka", 9, 10));
         Assert.Null(Data.StartPosition("qeynos", 9, 10));
+    }
+
+    [DbFact]
+    public void Options_are_the_start_zones_rows()
+    {
+        Assert.Equal(
+            [new CreationOption(9, 10, 203, 1, "grobb"), new CreationOption(9, 10, 203, 5, "neriaka"), new CreationOption(9, 10, 206, 1, "grobb")],
+            Data.Options());
     }
 
     [DbFact]

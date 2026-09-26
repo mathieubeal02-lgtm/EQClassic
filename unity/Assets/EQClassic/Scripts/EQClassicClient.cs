@@ -20,6 +20,8 @@ namespace EQClassic.Unity
         private string _user = "";
         private string _password = "";
         private string _newName = "";
+        private CharacterBuilder _builder;
+        private bool _creating;
         private readonly System.Collections.Generic.List<string> _messages = new System.Collections.Generic.List<string>();
         private bool _chatOpen;
         private string _chatLine = "";
@@ -102,6 +104,59 @@ namespace EQClassic.Unity
             _messages.Add(text);
             if (_messages.Count > 100)
                 _messages.RemoveAt(0);
+        }
+
+        /// <summary>The creation screen: race, gender, class, deity, city among the server's combinations, points, name.</summary>
+        private void DrawCreation()
+        {
+            var b = _builder;
+            GUILayout.Label("Race");
+            var races = new System.Collections.Generic.List<int>(b.Races);
+            int race = GUILayout.SelectionGrid(races.IndexOf(b.Race), races.ConvertAll(CreationRules.RaceName).ToArray(), 3);
+            if (race >= 0 && races[race] != b.Race)
+                b.SelectRace(races[race]);
+            b.Gender = GUILayout.Toolbar(b.Gender, new[] { "Male", "Female" });
+            GUILayout.Label("Class");
+            var classes = new System.Collections.Generic.List<int>(b.Classes);
+            int cls = GUILayout.SelectionGrid(classes.IndexOf(b.Class), classes.ConvertAll(CreationRules.ClassName).ToArray(), 3);
+            if (cls >= 0 && classes[cls] != b.Class)
+                b.SelectClass(classes[cls]);
+            GUILayout.Label("Deity");
+            var deities = new System.Collections.Generic.List<int>(b.Deities);
+            int deity = GUILayout.SelectionGrid(deities.IndexOf(b.Deity), deities.ConvertAll(CreationRules.DeityName).ToArray(), 3);
+            if (deity >= 0 && deities[deity] != b.Deity)
+                b.SelectDeity(deities[deity]);
+            GUILayout.Label("City");
+            var zones = new System.Collections.Generic.List<string>(b.Zones);
+            int zone = GUILayout.SelectionGrid(zones.IndexOf(b.Zone), zones.ToArray(), 3);
+            if (zone >= 0 && zones[zone] != b.Zone)
+                b.SelectZone(zones[zone]);
+            GUILayout.Label($"Statistics ({b.PointsLeft} points left)");
+            for (int i = 0; i < 7; i++)
+            {
+                GUILayout.BeginHorizontal();
+                GUILayout.Label($"{CharacterBuilder.StatNames[i]}  {b.Stat(i)}");
+                if (GUILayout.Button("-"))
+                    b.RemovePoint(i);
+                if (GUILayout.Button("+"))
+                    b.AddPoint(i);
+                GUILayout.EndHorizontal();
+            }
+            GUILayout.Label("Name");
+            _newName = GUILayout.TextField(_newName);
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(b.Complete ? "Create" : "Create (spend every point first)") && b.Complete)
+            {
+                _client.CreateCharacter(b.Request(_newName));
+                _builder = null;
+                _creating = false;
+            }
+            if (GUILayout.Button("Cancel"))
+            {
+                _builder = null;
+                _creating = false;
+            }
+            GUILayout.EndHorizontal();
         }
 
         private static Texture2D _white;
@@ -195,7 +250,7 @@ namespace EQClassic.Unity
                 return;
             }
 
-            GUILayout.BeginArea(new Rect(20, 20, 420, 520), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(20, 20, 460, Screen.height - 40), GUI.skin.box);
             GUILayout.Label("EQClassic");
             if (_client?.LastError != null)
                 GUILayout.Label("Error: " + _client.LastError);
@@ -236,10 +291,20 @@ namespace EQClassic.Unity
                         if (GUILayout.Button($"{c.Name}  level {c.Level}  -  {c.Zone}"))
                             _client.EnterWorld(c.Name);
                     GUILayout.Space(10);
-                    GUILayout.Label("New troll shaman (Grobb)");
-                    _newName = GUILayout.TextField(_newName);
-                    if (GUILayout.Button("Create"))
-                        _client.CreateCharacter(new CreateCharacterRequest(_newName, 9, 10, 0, 203, 1, "grobb", new CharacterStats(108, 119, 45, 75, 52, 83, 95)));
+                    if (_builder == null)
+                    {
+                        if (GUILayout.Button("New character"))
+                        {
+                            _client.RequestCreationOptions();
+                            _creating = true;
+                        }
+                        if (_creating && _client.CreationOptions is { Count: > 0 } options)
+                            _builder = new CharacterBuilder(options);
+                    }
+                    else
+                    {
+                        DrawCreation();
+                    }
                     break;
 
                 default:

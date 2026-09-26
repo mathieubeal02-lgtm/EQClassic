@@ -150,4 +150,38 @@ namespace EQClassic.Shared.Characters
 
         public override int GetHashCode() => Characters.Count;
     }
+
+    /// <summary>Client to World: the race / class / deity / city combinations creation offers.</summary>
+    public sealed record CreationOptionsRequest : IMessage
+    {
+        public MessageType Type => MessageType.CreationOptionsRequest;
+        public void WriteFields(NetDataWriter writer) { }
+    }
+
+    public sealed record CreationOptionsResponse(IReadOnlyList<CreationOption> Options) : IMessage
+    {
+        public MessageType Type => MessageType.CreationOptionsResponse;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put((ushort)Options.Count);
+            foreach (var o in Options)
+            {
+                writer.Put((byte)o.Race);
+                writer.Put((byte)o.Class);
+                writer.Put((ushort)o.Deity);
+                writer.Put((byte)o.Choice);
+                writer.Put(o.Zone);
+            }
+        }
+
+        public static CreationOptionsResponse ReadFields(NetDataReader reader)
+        {
+            int count = reader.GetUShort();
+            var list = new List<CreationOption>(count);
+            for (int i = 0; i < count; i++)
+                list.Add(new CreationOption(reader.GetByte(), reader.GetByte(), reader.GetUShort(), reader.GetByte(), reader.GetString()));
+            return new CreationOptionsResponse(list);
+        }
+    }
 }

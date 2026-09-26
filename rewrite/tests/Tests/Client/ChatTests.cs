@@ -43,3 +43,45 @@ public class ChatTests
         Assert.Equal("Your Location is -60.00, 40.00, 3.13", Chat.Location(new Vec3(40, -60, 3.13f)));
     }
 }
+
+public class CharacterBuilderTests
+{
+    private static readonly IReadOnlyList<EQClassic.Shared.Characters.CreationOption> Options =
+    [
+        new(1, 1, 140, 1, "qeynos"), new(1, 1, 140, 2, "freportn"), new(1, 2, 212, 1, "qeynos"),
+        new(9, 10, 203, 5, "grobb"), new(9, 10, 206, 5, "grobb"),
+    ];
+
+    [Fact]
+    public void Choices_narrow_down_as_the_trilogy_screen_did()
+    {
+        var b = new CharacterBuilder(Options);
+        Assert.Equal([1, 9], b.Races);
+        Assert.Equal((1, 1, 140, "qeynos"), (b.Race, b.Class, b.Deity, b.Zone));
+        Assert.Equal(["qeynos", "freportn"], b.Zones);
+        b.SelectClass(2);
+        Assert.Equal((212, "qeynos"), (b.Deity, b.Zone));
+        b.SelectRace(9);
+        Assert.Equal((10, 203, "grobb"), (b.Class, b.Deity, b.Zone));
+        Assert.Equal([203, 206], b.Deities);
+    }
+
+    [Fact]
+    public void Points_are_spent_one_at_a_time_and_the_request_passes_the_server_rules()
+    {
+        var b = new CharacterBuilder(Options);
+        b.SelectRace(9);
+        Assert.Equal((30, 114), (b.PointsLeft, b.Stat(1))); // troll shaman: STA 109 + 5
+        Assert.False(b.Complete);
+        for (int i = 0; i < 5; i++) b.AddPoint(1);
+        for (int i = 0; i < 30; i++) b.AddPoint(6); // only 25 left
+        Assert.Equal((0, 119, 95), (b.PointsLeft, b.Stat(1), b.Stat(6)));
+        b.RemovePoint(6);
+        Assert.Equal(1, b.PointsLeft);
+        b.AddPoint(6);
+        Assert.True(b.Complete);
+        var request = b.Request("Qnew");
+        Assert.Null(EQClassic.Shared.Characters.CreationRules.CheckStats(request.Race, request.Class, request.Stats));
+        Assert.Equal(new EQClassic.Shared.Characters.CharacterStats(108, 119, 45, 75, 52, 83, 95), request.Stats);
+    }
+}

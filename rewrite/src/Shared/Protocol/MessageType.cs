@@ -47,4 +47,6 @@ public enum MessageType : byte
     PlayerExperience = 39,
     ZoneInfo = 40,
     TimeOfDay = 41,
+    CreationOptionsRequest = 42,
+    CreationOptionsResponse = 43,
 }

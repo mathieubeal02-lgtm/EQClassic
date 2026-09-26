@@ -228,6 +228,15 @@ namespace EQClassic.ClientCore
             SetState(GameState.EnteringWorld);
         }
 
+        /// <summary>The combinations creation offers (race, class, deity, city), once World answered <see cref="RequestCreationOptions"/>.</summary>
+        public IReadOnlyList<CreationOption>? CreationOptions { get; private set; }
+
+        public void RequestCreationOptions()
+        {
+            Require(GameState.CharacterSelect);
+            _connection?.Send(new CreationOptionsRequest());
+        }
+
         public void CreateCharacter(CreateCharacterRequest request)
         {
             Require(GameState.CharacterSelect);
@@ -291,6 +300,9 @@ namespace EQClassic.ClientCore
                     if (!world.Accepted) { Fail(world.Message); break; }
                     Characters = world.Characters;
                     SetState(GameState.CharacterSelect);
+                    break;
+                case CreationOptionsResponse options:
+                    CreationOptions = options.Options;
                     break;
                 case CreateCharacterResponse created:
                     if (!created.Accepted) LastError = created.Message;

@@ -94,6 +94,10 @@ public sealed class WorldServer : IDisposable
                 Send(peer, HandleEnter(session, enter));
                 break;
 
+            case CreationOptionsRequest when _sessions.ContainsKey(peer):
+                Send(peer, new CreationOptionsResponse(_creation.Options()));
+                break;
+
             case CreateCharacterRequest create when _sessions.TryGetValue(peer, out var creator):
                 var error = _creation.Create(creator.WorldAccountId, create);
                 Log?.Invoke($"{peer.Address}: account {creator.WorldAccountId} create '{create.Name}' -> {error ?? "created"}");

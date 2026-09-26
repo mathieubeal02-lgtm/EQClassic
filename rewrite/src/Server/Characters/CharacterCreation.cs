@@ -36,8 +36,14 @@ public sealed class CharacterCreation
         if (!Races.Contains(request.Race) || request.Class is < 1 or > 14 || request.Gender is < 0 or > 1
             || request.StartZone.Length is 0 or > 14 || !request.StartZone.All(c => char.IsAsciiLetterOrDigit(c)))
             return InvalidChoice;
-        var s = request.Stats;
-        if (new[] { s.Str, s.Sta, s.Cha, s.Dex, s.Int, s.Agi, s.Wis }.Any(v => v is < 1 or > 255))
+        // The Trilogy client applied the creation rules itself; the rewrite checks them (CreationRules):
+        // statistics = race base + class additions + exactly the bonus points, and a combination
+        // start_zones offers (when the table is there).
+        if (CreationRules.CheckStats(request.Race, request.Class, request.Stats) is not null)
+            return InvalidChoice;
+        var options = _data.Options();
+        if (options.Count > 0 && !options.Any(o => o.Race == request.Race && o.Class == request.Class && o.Deity == request.Deity
+                                                  && string.Equals(o.Zone, request.StartZone, StringComparison.OrdinalIgnoreCase)))
             return InvalidChoice;
         if (_characters.ListForAccount(worldAccountId).Count >= CharacterStoreExtensions.MaxCharacters)
             return TooManyCharacters;
@@ -45,6 +51,8 @@ public sealed class CharacterCreation
         var profile = BuildProfile(request);
         return _characters.TryCreate(worldAccountId, name, profile) ? null : NameTaken;
     }
+
+    public IReadOnlyList<CreationOption> Options() => _data.Options();
 
     public byte[] BuildProfile(CreateCharacterRequest r)
     {
@@ -58,8 +66,15 @@ public sealed class CharacterCreation
         ProfileTemplate.SetFace(p, r.Face);
         ProfileTemplate.SetStats(p, r.Stats.Str, r.Stats.Sta, r.Stats.Cha, r.Stats.Dex, r.Stats.Int, r.Stats.Agi, r.Stats.Wis);
         ProfileTemplate.SetZone(p, r.StartZone);
+        ProfileTemplate.SetLanguages(p, CreationRules.Languages(r.Race));
+        ProfileTemplate.SetCurHp(p, EQClassic.Server.Combat.CombatFormulas.ClientBaseHp(1, r.Class, r.Stats.Sta));
         if (_data.StartPosition(r.StartZone, r.Race, r.Class) is var (x, y, z))
+        {
             ProfileTemplate.SetPosition(p, x, y, z);
+            // start_zones has no bind data in this database (the Trilogy client knew each city's bind):
+            // bind where the character starts rather than keep the template's (innothule, for a troll).
+            ProfileTemplate.SetBind(p, r.StartZone, x, y, z);
+        }
 
         int slot = ProfileTemplate.FirstGeneralSlot;
         foreach (int item in _data.StartingItems(r.Race, r.Class))

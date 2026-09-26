@@ -16,6 +16,9 @@ public interface ICreationData
 
     /// <summary>Legacy SetStartingItems: starting_items for (race or 0, class or 0), by id.</summary>
     IReadOnlyList<int> StartingItems(int race, int @class);
+
+    /// <summary>The combinations creation offers: every start_zones row (race, class, deity, city choice, start zone).</summary>
+    IReadOnlyList<EQClassic.Shared.Characters.CreationOption> Options();
 }
 
 public sealed class InMemoryCreationData : ICreationData
@@ -23,6 +26,8 @@ public sealed class InMemoryCreationData : ICreationData
     public List<string> FilteredPatterns { get; } = new();
     public Dictionary<(string Zone, int Race, int Class), (float, float, float)> StartPositions { get; } = new();
     public List<(int Race, int Class, int Item)> Items { get; } = new();
+    public List<EQClassic.Shared.Characters.CreationOption> OptionList { get; } = new();
+    public IReadOnlyList<EQClassic.Shared.Characters.CreationOption> Options() => OptionList;
 
     public bool IsNameFiltered(string name) =>
         FilteredPatterns.Any(p => System.Text.RegularExpressions.Regex.IsMatch(name,
@@ -69,6 +74,23 @@ public sealed class MySqlCreationData : ICreationData
             // The legacy code stores atoi() of each value: whole units.
             last = (MathF.Truncate(reader.GetFloat(0)), MathF.Truncate(reader.GetFloat(1)), MathF.Truncate(reader.GetFloat(2)));
         return last;
+    }
+
+    public IReadOnlyList<EQClassic.Shared.Characters.CreationOption> Options()
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT s.player_race, s.player_class, s.player_deity, s.player_choice, z.short_name
+            FROM `{_p}start_zones` s JOIN `{_p}zone_ids` z ON z.zoneidnumber = s.zone_id
+            ORDER BY s.player_race, s.player_class, s.player_deity, s.player_choice
+            """;
+        using var reader = command.ExecuteReader();
+        var options = new List<EQClassic.Shared.Characters.CreationOption>();
+        while (reader.Read())
+            options.Add(new EQClassic.Shared.Characters.CreationOption(Convert.ToInt32(reader.GetValue(0)), Convert.ToInt32(reader.GetValue(1)),
+                Convert.ToInt32(reader.GetValue(2)), Convert.ToInt32(reader.GetValue(3)), reader.GetString(4)));
+        return options;
     }
 
     public IReadOnlyList<int> StartingItems(int race, int @class)

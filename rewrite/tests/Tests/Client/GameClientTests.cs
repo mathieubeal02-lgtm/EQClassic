@@ -22,6 +22,9 @@ public sealed class GameClientTests : IDisposable
     private readonly InMemoryCharacterStore _characters = new();
     private readonly List<GameClient> _clients = new();
 
+    /// <summary>The troll shaman of the Trilogy creation packet: base + class additions + 30 points (STA 5, WIS 25).</summary>
+    private static readonly CharacterStats TrollShaman = new(108, 119, 45, 75, 52, 83, 95);
+
     public GameClientTests()
     {
         var directory = new WorldDirectory();
@@ -38,6 +41,7 @@ public sealed class GameClientTests : IDisposable
         _zones.Start(0);
         var creation = new InMemoryCreationData();
         creation.StartPositions[("grobb", 9, 10)] = (40, -60, 3.13f); // 70 units from the zone line
+        creation.OptionList.AddRange([new CreationOption(9, 10, 203, 1, "grobb"), new CreationOption(1, 1, 140, 1, "qeynos")]);
         var worldAccounts = new InMemoryWorldAccountStore();
         worldAccounts.Link(16, 24, "bot");
         _world = new WorldServer(1, directory, worldAccounts, _characters, creation) { Zones = new ZoneHandoff(keys, "127.0.0.1", _zones.Port) };
@@ -97,7 +101,7 @@ public sealed class GameClientTests : IDisposable
     {
         var watcher = InZone("Qbot");
         var walker = AtCharacterSelect();
-        walker.CreateCharacter(new CreateCharacterRequest("Qwalk", 9, 10, 0, 203, 1, "grobb", new CharacterStats(75, 75, 75, 75, 75, 75, 75)));
+        walker.CreateCharacter(new CreateCharacterRequest("Qwalk", 9, 10, 0, 203, 1, "grobb", TrollShaman));
         Run(() => walker.Characters.Any(c => c.Name == "Qwalk"));
         walker.EnterWorld("Qwalk");
         Run(() => walker.State == GameState.InZone);
@@ -119,7 +123,7 @@ public sealed class GameClientTests : IDisposable
     {
         var watcher = InZone("Qbot");
         var user = AtCharacterSelect();
-        user.CreateCharacter(new CreateCharacterRequest("Qdoor", 9, 10, 0, 203, 1, "grobb", new CharacterStats(75, 75, 75, 75, 75, 75, 75)));
+        user.CreateCharacter(new CreateCharacterRequest("Qdoor", 9, 10, 0, 203, 1, "grobb", TrollShaman));
         Run(() => user.Characters.Any(c => c.Name == "Qdoor"));
         user.EnterWorld("Qdoor");
         Run(() => user.State == GameState.InZone);
@@ -197,7 +201,7 @@ public sealed class GameClientTests : IDisposable
     {
         var qbot = InZone("Qbot");
         var other = AtCharacterSelect();
-        other.CreateCharacter(new CreateCharacterRequest("Qchat", 9, 10, 0, 203, 1, "grobb", new CharacterStats(75, 75, 75, 75, 75, 75, 75)));
+        other.CreateCharacter(new CreateCharacterRequest("Qchat", 9, 10, 0, 203, 1, "grobb", TrollShaman));
         Run(() => other.Characters.Any(c => c.Name == "Qchat"));
         other.EnterWorld("Qchat");
         Run(() => other.State == GameState.InZone);
@@ -221,6 +225,16 @@ public sealed class GameClientTests : IDisposable
         Assert.Contains("[1 Shaman] Qchat (Troll)", heard);
         qbot.ExecuteChat("/loc");
         Assert.Contains("Your Location is 10.00, 10.00, 4.00", heard);
+    }
+
+    [Fact]
+    public void Creation_offers_the_start_zones_combinations()
+    {
+        var client = AtCharacterSelect();
+        client.RequestCreationOptions();
+        Assert.True(Run(() => client.CreationOptions is not null));
+        Assert.Equal(2, client.CreationOptions!.Count);
+        Assert.Contains(new CreationOption(1, 1, 140, 1, "qeynos"), client.CreationOptions);
     }
 
     [Fact]
