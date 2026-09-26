@@ -85,6 +85,20 @@ public sealed class MySqlWorldStoresTests : IDisposable
         Assert.Equal("innothule", list[0].Profile.Zone);
     }
 
+    [DbFact]
+    public void Saved_position_is_written_into_the_profile_blob()
+    {
+        var cs = DbFactAttribute.ConnectionString!;
+        Insert(cs, 24, "Qwalker", ProfileBuilder.Build("Qwalker", 9, 10, 1, "grobb", 1, 2, 3));
+        var store = new MySqlCharacterStore(cs, CharacterTable);
+
+        store.SavePosition("Qwalker", "innothule", -612.29f, -2789.26f, -31.44f);
+
+        var p = store.ListForAccount(24).Single().Profile;
+        Assert.Equal(("innothule", -612.29f, -2789.26f, -31.44f), (p.Zone, p.X, p.Y, p.Z));
+        Assert.Equal(("Qwalker", 9, 10), (p.Name, p.Race, p.Class)); // the rest of the blob is untouched
+    }
+
     private void Insert(string cs, int account, string name, byte[]? profile)
     {
         using var c = new MySqlConnection(cs);

@@ -177,4 +177,27 @@ namespace EQClassic.Shared.Zone
         public void WriteFields(NetDataWriter writer) => writer.Put(Id);
         public static EntityRemoved ReadFields(NetDataReader reader) => new EntityRemoved(reader.GetInt());
     }
+
+    /// <summary>
+    /// Zone to client: you crossed a zone line. Reconnect to Address:Port and send a
+    /// <see cref="ZoneEnterRequest"/> with this key; you arrive at (X, Y, Z) in Zone.
+    /// </summary>
+    public sealed record ZoneChange(string Zone, string Address, int Port, string ZoneKey, float X, float Y, float Z) : IMessage
+    {
+        public MessageType Type => MessageType.ZoneChange;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(Zone);
+            writer.Put(Address);
+            writer.Put(Port);
+            writer.Put(ZoneKey);
+            writer.Put(X);
+            writer.Put(Y);
+            writer.Put(Z);
+        }
+
+        public static ZoneChange ReadFields(NetDataReader reader) =>
+            new ZoneChange(reader.GetString(), reader.GetString(), reader.GetInt(), reader.GetString(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat());
+    }
 }

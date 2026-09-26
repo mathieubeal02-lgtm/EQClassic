@@ -4,24 +4,38 @@ using MySqlConnector;
 namespace EQClassic.Server.Zone;
 
 /// <summary>An NPC type as the zone needs it (legacy npc_types_without, the table the C++ zone reads).</summary>
-public sealed record NpcTemplate(int Id, string Name, int Race, int Gender, int Level, float Size, float WalkSpeed = NpcTemplate.DefaultWalkSpeed)
+public sealed record NpcTemplate(int Id, string Name, int Race, int Gender, int Level, float Size, float WalkSpeed = NpcTemplate.DefaultWalkSpeed,
+    float RunSpeed = 1.25f, bool Undead = false, int PrimaryFaction = 0)
 {
     /// <summary>Legacy NPCs walk at walkspeed 0.7 (Mob::GetWalkSpeed; the charm helper in client.cpp uses it too).</summary>
     public const float DefaultWalkSpeed = 0.7f;
 
     /// <summary>Legacy NPC::CheckMyWalkingStatus: animation = walkspeed * 4, 2.3 units per second per animation step.</summary>
     public float WalkUnitsPerSecond => WalkSpeed * 4f * 2.3f;
+
+    /// <summary>Engaged NPCs run: animation = runspeed * 7 (NPC::CheckMyWalkingStatus), 2.3 units per step.</summary>
+    public float RunUnitsPerSecond => RunSpeed * 7f * 2.3f;
 }
 
 /// <summary>A spawn2 row: a place, its spawn group's candidates (spawnentry, chance) and its waypoint grid.</summary>
-public sealed record SpawnPoint(int Id, Vec3 Position, float Heading, int GridId, IReadOnlyList<(NpcTemplate Npc, int Chance)> Candidates);
+public sealed record SpawnPoint(int Id, Vec3 Position, float Heading, int GridId, IReadOnlyList<(NpcTemplate Npc, int Chance)> Candidates,
+    int RespawnSeconds = 640, int Variance = 0);
+
+/// <summary>
+/// A zone_points row: a player within Range (Zrange) of Position goes to TargetZone at Target;
+/// KeepX/KeepY keep that coordinate of the player instead (the lines up between zones).
+/// </summary>
+public sealed record ZoneLine(int Id, Vec3 Position, float Range, string TargetZone, Vec3 Target, bool KeepX = false, bool KeepY = false);
 
 public sealed record Waypoint(Vec3 Position, int PauseSeconds);
 
 /// <summary>A grid (grid + grid_entries by number).</summary>
 public sealed record Grid(int Id, GridType Type, IReadOnlyList<Waypoint> Waypoints);
 
-public sealed record ZoneData(string ShortName, IReadOnlyList<SpawnPoint> Spawns, IReadOnlyDictionary<int, Grid> Grids);
+public sealed record ZoneData(string ShortName, IReadOnlyList<SpawnPoint> Spawns, IReadOnlyDictionary<int, Grid> Grids, IReadOnlyList<ZoneLine>? ZoneLines = null)
+{
+    public IReadOnlyList<ZoneLine> Lines => ZoneLines ?? Array.Empty<ZoneLine>();
+}
 
 public interface IZoneDataSource
 {
@@ -64,11 +78,12 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
         if (zoneId is null)
             return null;
 
-        var spawns = new Dictionary<int, (Vec3 Pos, float Heading, int Grid, List<(NpcTemplate, int)> Candidates)>();
+        var spawns = new Dictionary<int, (Vec3 Pos, float Heading, int Grid, int Respawn, int Variance, List<(NpcTemplate, int)> Candidates)>();
         using (var cmd = connection.CreateCommand())
         {
             cmd.CommandText = $"""
-                SELECT s.id, s.x, s.y, s.z, s.heading, s.pathgrid, n.id, n.name, n.race, n.gender, n.level, n.size, e.chance
+                SELECT s.id, s.x, s.y, s.z, s.heading, s.pathgrid, n.id, n.name, n.race, n.gender, n.level, n.size, e.chance,
+                       s.respawntime, s.variance, n.runspeed, n.bodytype, n.npc_faction_id
                 FROM `{_p}spawn2` s
                 JOIN `{_p}spawnentry` e ON e.spawngroupID = s.spawngroupID
                 JOIN `{_p}npc_types_without` n ON n.id = e.npcID
@@ -81,10 +96,15 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
             {
                 int id = r.GetInt32(0);
                 if (!spawns.TryGetValue(id, out var spawn))
-                    spawns[id] = spawn = (new Vec3(r.GetFloat(1), r.GetFloat(2), r.GetFloat(3)), r.GetFloat(4), r.GetInt32(5), new List<(NpcTemplate, int)>());
+                    spawns[id] = spawn = (new Vec3(r.GetFloat(1), r.GetFloat(2), r.GetFloat(3)), r.GetFloat(4), r.GetInt32(5),
+                        Convert.ToInt32(r.GetValue(13)), Convert.ToInt32(r.GetValue(14)), new List<(NpcTemplate, int)>());
                 float size = Convert.ToSingle(r.GetValue(11));
+                float runspeed = Convert.ToSingle(r.GetValue(15));
                 var npc = new NpcTemplate(r.GetInt32(6), r.GetString(7), Convert.ToInt32(r.GetValue(8)), Convert.ToInt32(r.GetValue(9)),
-                    Convert.ToInt32(r.GetValue(10)), size > 0 ? size : 6f);
+                    Convert.ToInt32(r.GetValue(10)), size > 0 ? size : 6f,
+                    RunSpeed: runspeed > 0 ? runspeed : 1.25f,
+                    Undead: Convert.ToInt32(r.GetValue(16)) == 3, // BT_Undead
+                    PrimaryFaction: Convert.ToInt32(r.GetValue(17)));
                 spawn.Candidates.Add((npc, Convert.ToInt32(r.GetValue(12))));
             }
         }
@@ -112,11 +132,23 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
                 list.Add(new Waypoint(new Vec3(r.GetFloat(1), r.GetFloat(2), r.GetFloat(3)), r.GetInt32(4)));
             }
         }
+        var lines = new List<ZoneLine>();
+        using (var cmd = connection.CreateCommand())
+        {
+            // Same columns as Database::loadZoneLines (range = Zrange).
+            cmd.CommandText = $"SELECT id, x, y, z, target_zone, target_x, target_y, target_z, Zrange, keepX, keepY FROM `{_p}zone_points` WHERE zone = @zone";
+            cmd.Parameters.AddWithValue("@zone", shortName);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                lines.Add(new ZoneLine(r.GetInt32(0), new Vec3(r.GetFloat(1), r.GetFloat(2), r.GetFloat(3)), Convert.ToSingle(r.GetValue(8)),
+                    r.GetString(4), new Vec3(r.GetFloat(5), r.GetFloat(6), r.GetFloat(7)), Convert.ToInt32(r.GetValue(9)) == 1, Convert.ToInt32(r.GetValue(10)) == 1));
+        }
+
         var grids = points.ToDictionary(kv => kv.Key,
             kv => new Grid(kv.Key, gridTypes.GetValueOrDefault(kv.Key, 3) == 0 ? GridType.Circular : GridType.BackAndForth, kv.Value));
 
         return new ZoneData(shortName,
-            spawns.Select(kv => new SpawnPoint(kv.Key, kv.Value.Pos, kv.Value.Heading, kv.Value.Grid, kv.Value.Candidates)).ToList(),
-            grids);
+            spawns.Select(kv => new SpawnPoint(kv.Key, kv.Value.Pos, kv.Value.Heading, kv.Value.Grid, kv.Value.Candidates, kv.Value.Respawn, kv.Value.Variance)).ToList(),
+            grids, lines);
     }
 }

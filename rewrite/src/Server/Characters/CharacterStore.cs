@@ -12,6 +12,12 @@ public interface ICharacterStore
 
     /// <summary>Inserts a created character; false when the name is taken (character_.name is unique).</summary>
     bool TryCreate(int accountId, string name, byte[] profile);
+
+    /// <summary>
+    /// Writes the zone and position into the character's profile (the fields the legacy zone saves
+    /// on camp and zoning), so both server generations see where the character is.
+    /// </summary>
+    void SavePosition(string name, string zone, float x, float y, float z);
 }
 
 public static class CharacterStoreExtensions
@@ -35,6 +41,20 @@ public sealed class InMemoryCharacterStore : ICharacterStore
         _characters.Add(new CharacterRecord(_characters.Count + 1, accountId, PlayerProfile.Read(profile)!));
         Profiles[name] = profile;
         return true;
+    }
+
+    public void SavePosition(string name, string zone, float x, float y, float z)
+    {
+        int i = _characters.FindIndex(c => string.Equals(c.Profile.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (i < 0)
+            return;
+        var c = _characters[i];
+        _characters[i] = c with { Profile = c.Profile with { Zone = zone, X = x, Y = y, Z = z } };
+        if (Profiles.TryGetValue(name, out var raw))
+        {
+            ProfileTemplate.SetZone(raw, zone);
+            ProfileTemplate.SetPosition(raw, x, y, z);
+        }
     }
 
     /// <summary>Raw profiles of created characters (tests).</summary>
@@ -76,6 +96,34 @@ public sealed class MySqlCharacterStore : ICharacterStore
                 result.Add(new CharacterRecord(reader.GetInt32(0), reader.GetInt32(1), profile));
         }
         return result;
+    }
+
+    public void SavePosition(string name, string zone, float x, float y, float z)
+    {
+        using var connection = new MySqlConnection(_connectionString);
+        connection.Open();
+        using var tx = connection.BeginTransaction();
+        byte[]? profile;
+        using (var select = connection.CreateCommand())
+        {
+            select.Transaction = tx;
+            select.CommandText = $"SELECT profile FROM `{_table}` WHERE name = @name FOR UPDATE";
+            select.Parameters.AddWithValue("@name", name);
+            profile = select.ExecuteScalar() as byte[];
+        }
+        if (profile is null || profile.Length < PlayerProfile.MinimumLength)
+            return;
+        ProfileTemplate.SetZone(profile, zone);
+        ProfileTemplate.SetPosition(profile, x, y, z);
+        using (var update = connection.CreateCommand())
+        {
+            update.Transaction = tx;
+            update.CommandText = $"UPDATE `{_table}` SET profile = @profile WHERE name = @name";
+            update.Parameters.AddWithValue("@profile", profile);
+            update.Parameters.AddWithValue("@name", name);
+            update.ExecuteNonQuery();
+        }
+        tx.Commit();
     }
 
     /// <summary>One INSERT with the full profile (the legacy two steps: reserve with NULL, then UPDATE).</summary>

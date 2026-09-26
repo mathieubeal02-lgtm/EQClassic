@@ -28,4 +28,5 @@ public enum MessageType : byte
     MoveCorrection = 20,
     EntitySpawned = 21,
     EntityRemoved = 22,
+    ZoneChange = 23,
 }

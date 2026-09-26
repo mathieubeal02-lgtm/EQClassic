@@ -23,13 +23,16 @@ public sealed class ZoneServerTests : IDisposable
     private readonly WorldServer _world;
     private readonly ZoneServer _zones;
     private readonly List<(LoginClient Client, Queue<IMessage> Inbox)> _clients = new();
+    private readonly InMemoryCharacterStore _characters = new();
 
     public ZoneServerTests()
     {
         var zoneData = new InMemoryZoneDataSource();
         zoneData.Zones["grobb"] = new ZoneData("grobb",
             [new SpawnPoint(1, new Vec3(0, 0, 4), 0, 3, [(new NpcTemplate(52001, "a_troll_guard", 9, 0, 20, 8f), 100)])],
-            new Dictionary<int, Grid> { [3] = new Grid(3, GridType.BackAndForth, [new Waypoint(new Vec3(0, 0, 4), 0), new Waypoint(new Vec3(0, 200, 4), 0)]) });
+            new Dictionary<int, Grid> { [3] = new Grid(3, GridType.BackAndForth, [new Waypoint(new Vec3(0, 0, 4), 0), new Waypoint(new Vec3(0, 200, 4), 0)]) },
+            [new ZoneLine(396, new Vec3(50.34f, -129.93f, 3.13f), 20, "innothule", new Vec3(-612.29f, -2789.26f, -31.44f))]);
+        zoneData.Zones["innothule"] = new ZoneData("innothule", [], new Dictionary<int, Grid>());
         // A busy zone: 300 patrolling NPCs, all near the entrance, plus one far away.
         var patrol = new Grid(9, GridType.BackAndForth, [new Waypoint(new Vec3(0, 0, 0), 0), new Waypoint(new Vec3(50, 0, 0), 0)]);
         var far = new Grid(10, GridType.BackAndForth, [new Waypoint(new Vec3(5000, 5000, 0), 0), new Waypoint(new Vec3(5050, 5000, 0), 0)]);
@@ -38,10 +41,10 @@ public sealed class ZoneServerTests : IDisposable
              new SpawnPoint(999, new Vec3(5000, 5000, 0), 0, 10, [(new NpcTemplate(999, "far_away", 1, 0, 1, 6f), 100)])],
             new Dictionary<int, Grid> { [9] = patrol, [10] = far });
         var keys = new ZoneKeys();
-        _zones = new ZoneServer(keys, name => zoneData.Load(name) is { } d ? new ZoneInstance(d) : null);
+        _zones = new ZoneServer(keys, name => zoneData.Load(name) is { } d ? new ZoneInstance(d) : null) { Characters = _characters };
         _zones.Start(0);
 
-        var characters = new InMemoryCharacterStore();
+        var characters = _characters;
         characters.Add(ProfileBuilder.Record(15, 24, "Qbot", 9, 10, 1, "grobb", x: 10, y: 10, z: 4));
         characters.Add(ProfileBuilder.Record(16, 24, "Qbottwo", 9, 10, 1, "grobb", x: 20, y: 20, z: 4));
         characters.Add(ProfileBuilder.Record(17, 24, "Qlost", 9, 10, 1, "nowhere"));
@@ -133,6 +136,37 @@ public sealed class ZoneServerTests : IDisposable
 
         var correction = Assert.IsType<MoveCorrection>(Next(zone, m => m is MoveCorrection));
         Assert.Equal((10f, 10f), (correction.X, correction.Y));
+    }
+
+    [Fact]
+    public void Walking_onto_a_zone_line_moves_the_character_to_the_next_zone_and_saves_it()
+    {
+        var (zone, _) = EnterZone("Qbot");
+        Pump(zone.Client, () => false, ms: 700, tick: true); // let time pass: the zone line is ~150 units away
+        zone.Client.Send(new PlayerMove(50, -128, 3.13f, 180));
+
+        var change = Assert.IsType<ZoneChange>(Next(zone, m => m is ZoneChange, tick: true));
+        Assert.Equal(("innothule", _zones.Port), (change.Zone, change.Port));
+        Assert.Equal((-612.29f, -2789.26f), (change.X, change.Y));
+        var saved = _characters.ListForAccount(24).Single(c => c.Profile.Name == "Qbot").Profile;
+        Assert.Equal(("innothule", -612.29f, -2789.26f), (saved.Zone, saved.X, saved.Y));
+
+        var next = Connect(change.Port);
+        var entered = Assert.IsType<ZoneEnterResponse>(Exchange(next, new ZoneEnterRequest("Qbot", change.ZoneKey)));
+        Assert.True(entered.Accepted, entered.Message);
+        Assert.Equal("innothule", entered.Zone);
+        Assert.Contains(entered.Entities, e => e.Name == "Qbot" && e.X == -612.29f);
+    }
+
+    [Fact]
+    public void Leaving_saves_the_last_position()
+    {
+        var (zone, _) = EnterZone("Qbottwo");
+        Pump(zone.Client, () => false, ms: 300, tick: true);
+        zone.Client.Send(new PlayerMove(22, 23, 4, 0));
+        Pump(zone.Client, () => false, ms: 200, tick: true);
+        zone.Client.Disconnect();
+        Assert.True(Pump(zone.Client, () => _characters.ListForAccount(24).Single(c => c.Profile.Name == "Qbottwo").Profile.X == 22f, tick: true));
     }
 
     [Fact]

@@ -105,6 +105,54 @@ public sealed class ZoneCollisionMesh
         return best;
     }
 
+    /// <summary>
+    /// True when nothing of the mesh crosses the segment a→b (legacy CheckCoordLos): used for aggro.
+    /// Möller–Trumbore over the triangles of the cells the segment passes through.
+    /// </summary>
+    public bool LineOfSight(Vec3 a, Vec3 b)
+    {
+        float dx = b.X - a.X, dy = b.Y - a.Y, dz = b.Z - a.Z;
+        float length = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+        if (length < 1e-4f)
+            return true;
+        int steps = (int)(MathF.Sqrt(dx * dx + dy * dy) / (CellSize / 2)) + 1;
+        var seen = new HashSet<int>();
+        for (int s = 0; s <= steps; s++)
+        {
+            float t = (float)s / steps;
+            if (!_cells.TryGetValue(CellOf(a.X + dx * t, a.Y + dy * t), out var candidates))
+                continue;
+            foreach (int tri in candidates)
+                if (seen.Add(tri) && SegmentHits(tri, a, dx, dy, dz))
+                    return false;
+        }
+        return true;
+    }
+
+    private bool SegmentHits(int t, Vec3 p, float dx, float dy, float dz)
+    {
+        var v0 = _vertices[_triangles[3 * t]];
+        var v1 = _vertices[_triangles[3 * t + 1]];
+        var v2 = _vertices[_triangles[3 * t + 2]];
+        float e1x = v1.X - v0.X, e1y = v1.Y - v0.Y, e1z = v1.Z - v0.Z;
+        float e2x = v2.X - v0.X, e2y = v2.Y - v0.Y, e2z = v2.Z - v0.Z;
+        float hx = dy * e2z - dz * e2y, hy = dz * e2x - dx * e2z, hz = dx * e2y - dy * e2x;
+        float det = e1x * hx + e1y * hy + e1z * hz;
+        if (MathF.Abs(det) < 1e-9f)
+            return false;
+        float f = 1f / det;
+        float sx = p.X - v0.X, sy = p.Y - v0.Y, sz = p.Z - v0.Z;
+        float u = f * (sx * hx + sy * hy + sz * hz);
+        if (u < 0f || u > 1f)
+            return false;
+        float qx = sy * e1z - sz * e1y, qy = sz * e1x - sx * e1z, qz = sx * e1y - sy * e1x;
+        float v = f * (dx * qx + dy * qy + dz * qz);
+        if (v < 0f || u + v > 1f)
+            return false;
+        float hit = f * (e2x * qx + e2y * qy + e2z * qz);
+        return hit > 0.01f && hit < 0.99f; // end points (standing on a floor) do not count
+    }
+
     private float? HeightInTriangle(int t, float x, float y)
     {
         var a = _vertices[_triangles[3 * t]];

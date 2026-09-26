@@ -17,12 +17,14 @@ public sealed class MySqlZoneDataTests : IDisposable
             return;
         Execute(cs, $"CREATE TABLE `{_prefix}zone_ids` (zoneidnumber int, short_name varchar(32))");
         Execute(cs, $"INSERT INTO `{_prefix}zone_ids` VALUES (2, 'qeynos2')");
-        Execute(cs, $"CREATE TABLE `{_prefix}spawn2` (id int, spawngroupID int, zone varchar(16), x float, y float, z float, heading float, pathgrid int)");
-        Execute(cs, $"INSERT INTO `{_prefix}spawn2` VALUES (10, 100, 'qeynos2', 134, 10, 3.75, 64, 7), (11, 101, 'qeynos2', 1, 2, 3, 0, 0), (12, 102, 'qeynos', 0, 0, 0, 0, 0)");
+        Execute(cs, $"CREATE TABLE `{_prefix}spawn2` (id int, spawngroupID int, zone varchar(16), x float, y float, z float, heading float, pathgrid int, respawntime int, variance int)");
+        Execute(cs, $"INSERT INTO `{_prefix}spawn2` VALUES (10, 100, 'qeynos2', 134, 10, 3.75, 64, 7, 1200, 10), (11, 101, 'qeynos2', 1, 2, 3, 0, 0, 640, 0), (12, 102, 'qeynos', 0, 0, 0, 0, 0, 640, 0)");
         Execute(cs, $"CREATE TABLE `{_prefix}spawnentry` (spawngroupID int, npcID int, chance int)");
         Execute(cs, $"INSERT INTO `{_prefix}spawnentry` VALUES (100, 2007, 100), (101, 1, 50), (101, 2, 50), (102, 1, 100)");
-        Execute(cs, $"CREATE TABLE `{_prefix}npc_types_without` (id int, name varchar(64), race int, gender int, level int, size float)");
-        Execute(cs, $"INSERT INTO `{_prefix}npc_types_without` VALUES (2007, 'Guard_Hewet', 71, 0, 10, 6), (1, 'a_rat', 36, 2, 1, -1), (2, 'a_snake', 37, 2, 2, 3)");
+        Execute(cs, $"CREATE TABLE `{_prefix}npc_types_without` (id int, name varchar(64), race int, gender int, level int, size float, runspeed float, bodytype int, npc_faction_id int)");
+        Execute(cs, $"INSERT INTO `{_prefix}npc_types_without` VALUES (2007, 'Guard_Hewet', 71, 0, 10, 6, 1.25, 1, 219), (1, 'a_rat', 36, 2, 1, -1, 1.3, 21, 0), (2, 'a_snake', 37, 2, 2, 3, 0, 3, 0)");
+        Execute(cs, $"CREATE TABLE `{_prefix}zone_points` (id int, zone varchar(16), x float, y float, z float, target_zone varchar(16), target_x float, target_y float, target_z float, Zrange int, keepX int, keepY int)");
+        Execute(cs, $"INSERT INTO `{_prefix}zone_points` VALUES (977, 'qeynos2', 2.66, -148.38, 2.13, 'qeynos', -410.68, 456.42, 2.13, 8, 0, 0), (7, 'qeynos2', 73, 1350, 2.5, 'qeytoqrg', 95, -380, 0, 5, 1, 0), (1, 'qeynos', 0, 0, 0, 'qeynos2', 0, 0, 0, 5, 0, 0)");
         Execute(cs, $"CREATE TABLE `{_prefix}grid` (id int, zoneid int, type int)");
         Execute(cs, $"INSERT INTO `{_prefix}grid` VALUES (7, 2, 3), (8, 2, 0)");
         Execute(cs, $"CREATE TABLE `{_prefix}grid_entries` (gridid int, zoneid int, number int, x float, y float, z float, pause int)");
@@ -33,7 +35,7 @@ public sealed class MySqlZoneDataTests : IDisposable
     public void Dispose()
     {
         if (_created)
-            Execute(DbFactAttribute.ConnectionString!, $"DROP TABLE IF EXISTS `{_prefix}zone_ids`, `{_prefix}spawn2`, `{_prefix}spawnentry`, `{_prefix}npc_types_without`, `{_prefix}grid`, `{_prefix}grid_entries`");
+            Execute(DbFactAttribute.ConnectionString!, $"DROP TABLE IF EXISTS `{_prefix}zone_ids`, `{_prefix}spawn2`, `{_prefix}spawnentry`, `{_prefix}npc_types_without`, `{_prefix}grid`, `{_prefix}grid_entries`, `{_prefix}zone_points`");
     }
 
     [DbFact]
@@ -51,6 +53,14 @@ public sealed class MySqlZoneDataTests : IDisposable
         Assert.Equal([new Vec3(134, 10, 3.75f), new Vec3(144, 23, 3.75f)], grid.Waypoints.Select(w => w.Position)); // ordered by number
         Assert.Equal(5, grid.Waypoints[0].PauseSeconds);
         Assert.Equal(GridType.Circular, data.Grids[8].Type);
+        Assert.Equal((1200, 10), (guard.RespawnSeconds, guard.Variance));
+        var hewet = Assert.Single(guard.Candidates).Npc;
+        Assert.Equal((1.25f, false, 219), (hewet.RunSpeed, hewet.Undead, hewet.PrimaryFaction));
+        var snake = data.Spawns.Single(s => s.Id == 11).Candidates.Single(c => c.Npc.Name == "a_snake").Npc;
+        Assert.Equal((1.25f, true), (snake.RunSpeed, snake.Undead)); // runspeed 0 → default; bodytype 3 = undead
+        Assert.Equal(2, data.Lines.Count);
+        var toQrg = data.Lines.Single(l => l.TargetZone == "qeytoqrg");
+        Assert.Equal((5f, true, false), (toQrg.Range, toQrg.KeepX, toQrg.KeepY));
     }
 
     [DbFact]

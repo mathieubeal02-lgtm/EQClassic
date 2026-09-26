@@ -54,6 +54,7 @@ public static class MessageCodec
                 MessageType.MoveCorrection => MoveCorrection.ReadFields(reader),
                 MessageType.EntitySpawned => EntitySpawned.ReadFields(reader),
                 MessageType.EntityRemoved => EntityRemoved.ReadFields(reader),
+                MessageType.ZoneChange => ZoneChange.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

@@ -21,6 +21,7 @@ public sealed class ZoneServer : IDisposable
     {
         public required ZoneInstance Instance;
         public required int EntityId;
+        public required ZoneTicket Ticket;
     }
 
     private readonly ZoneKeys _keys;
@@ -42,6 +43,12 @@ public sealed class ZoneServer : IDisposable
     // type byte + tick (4) + count (2); each position is id + 4 floats.
     private const int PositionsHeaderSize = 7, PositionSize = 20;
 
+    /// <summary>Where a player saves on leaving (camp, disconnect, zoning). Optional.</summary>
+    public Characters.ICharacterStore? Characters { get; set; }
+
+    /// <summary>Address clients reach this server at, sent in <see cref="ZoneChange"/>.</summary>
+    public string PublicAddress { get; set; } = "127.0.0.1";
+
     /// <param name="boot">Creates a zone instance by short name, or null if the zone does not exist.</param>
     public ZoneServer(ZoneKeys keys, Func<string, ZoneInstance?> boot)
     {
@@ -49,7 +56,7 @@ public sealed class ZoneServer : IDisposable
         _boot = boot;
         _net = new NetManager(_listener) { AutoRecycle = true };
         _listener.ConnectionRequestEvent += request => request.AcceptIfKey(ProtocolInfo.ConnectionKey);
-        _listener.PeerDisconnectedEvent += (peer, _) => Leave(peer);
+        _listener.PeerDisconnectedEvent += (peer, _) => Leave(peer, null);
         _listener.NetworkReceiveEvent += OnReceive;
     }
 
@@ -64,12 +71,13 @@ public sealed class ZoneServer : IDisposable
 
     public void PollEvents() => _net.PollEvents();
 
-    /// <summary>Advances every zone and broadcasts the positions that changed.</summary>
+    /// <summary>Advances every zone and broadcasts what happened: positions, spawns, deaths, zoning.</summary>
     public void Tick(float seconds)
     {
-        foreach (var instance in _instances.Values)
+        foreach (var instance in _instances.Values.ToList())
         {
             var moved = instance.Tick(seconds);
+            Broadcast(instance, instance.DrainEvents());
             if (moved.Count == 0)
                 continue;
             float range2 = UpdateRange * UpdateRange;
@@ -121,6 +129,10 @@ public sealed class ZoneServer : IDisposable
                     Log?.Invoke($"{peer.Address}: move refused ({refused})");
                     Send(peer, new MoveCorrection(at.X, at.Y, at.Z, refused), DeliveryMethod.ReliableOrdered);
                 }
+                else
+                {
+                    Broadcast(player.Instance, player.Instance.DrainEvents());
+                }
                 break;
 
             default:
@@ -144,7 +156,7 @@ public sealed class ZoneServer : IDisposable
             Log?.Invoke($"zone {ticket.Zone} booted: {instance.Entities.Count()} NPC(s)");
         }
         var entity = instance.AddPlayer(ticket.CharacterName, ticket.Race, ticket.Gender, ticket.Level, ticket.Position);
-        _players[peer] = new Player { Instance = instance, EntityId = entity.Id };
+        _players[peer] = new Player { Instance = instance, EntityId = entity.Id, Ticket = ticket };
         foreach (var (other, p) in _players)
             if (other != peer && p.Instance == instance)
                 Send(other, new EntitySpawned(entity.ToSpawn()), DeliveryMethod.ReliableOrdered);
@@ -152,10 +164,55 @@ public sealed class ZoneServer : IDisposable
         return new ZoneEnterResponse(true, "", instance.ShortName, entity.Id, instance.Entities.Select(e => e.ToSpawn()).ToList());
     }
 
-    private void Leave(NetPeer peer)
+    private void Broadcast(ZoneInstance instance, IReadOnlyList<ZoneInstance.ZoneEvent> events)
+    {
+        foreach (var ev in events)
+        {
+            switch (ev)
+            {
+                case ZoneInstance.Spawned spawned:
+                    SendToZone(instance, new EntitySpawned(spawned.Entity.ToSpawn()));
+                    break;
+                case ZoneInstance.Removed removed:
+                    SendToZone(instance, new EntityRemoved(removed.EntityId));
+                    break;
+                case ZoneInstance.Engaged engaged:
+                    Log?.Invoke($"{instance.ShortName}: {instance.Get(engaged.NpcId)?.Name} aggroes {instance.Get(engaged.PlayerId)?.Name}");
+                    break;
+                case ZoneInstance.CrossedZoneLine crossed:
+                    ChangeZone(instance, crossed);
+                    break;
+            }
+        }
+    }
+
+    private void ChangeZone(ZoneInstance instance, ZoneInstance.CrossedZoneLine crossed)
+    {
+        var (peer, player) = _players.FirstOrDefault(kv => kv.Value.Instance == instance && kv.Value.EntityId == crossed.PlayerId);
+        if (peer is null)
+            return;
+        var d = crossed.Destination;
+        var ticket = player.Ticket with { Zone = crossed.Line.TargetZone, Position = d };
+        var key = _keys.Issue(ticket);
+        Log?.Invoke($"{peer.Address}: {ticket.CharacterName} zones {instance.ShortName} -> {ticket.Zone}");
+        Send(peer, new ZoneChange(ticket.Zone, PublicAddress, Port, key, d.X, d.Y, d.Z), DeliveryMethod.ReliableOrdered);
+        Leave(peer, saveAs: (ticket.Zone, d));
+    }
+
+    private void SendToZone(ZoneInstance instance, IMessage message)
+    {
+        foreach (var (peer, player) in _players)
+            if (player.Instance == instance)
+                Send(peer, message, DeliveryMethod.ReliableOrdered);
+    }
+
+    private void Leave(NetPeer peer, (string Zone, Vec3 Position)? saveAs = null)
     {
         if (!_players.Remove(peer, out var player))
             return;
+        var last = player.Instance.Get(player.EntityId)?.Position ?? player.Ticket.Position;
+        var (zone, at) = saveAs ?? (player.Instance.ShortName, last);
+        Characters?.SavePosition(player.Ticket.CharacterName, zone, at.X, at.Y, at.Z);
         player.Instance.RemovePlayer(player.EntityId);
         foreach (var (other, p) in _players)
             if (p.Instance == player.Instance)
