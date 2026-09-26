@@ -712,6 +712,8 @@ public sealed partial class ZoneInstance
     private void RebuildFighter(Entity e)
     {
         if (e.IsPlayer)
+            UpdateLooks(e);
+        if (e.IsPlayer)
         {
             if (e.Progress?.FighterAt is not { } rebuild)
                 return;
@@ -780,6 +782,15 @@ public sealed partial class ZoneInstance
             else
                 _events.Add(new BuffsChanged(e.Id));
         }
+    }
+
+    /// <summary>The armour and helmet a player's model shows: the chest (slot 17) and head (slot 2) items' material.</summary>
+    private void UpdateLooks(Entity player)
+    {
+        if (player.Inventory is not { } inventory)
+            return;
+        player.Texture = Items?.Get(inventory.ItemAt(17))?.Material ?? 0;
+        player.Helm = Items?.Get(inventory.ItemAt(2))?.Material ?? 0;
     }
 
     private void SetMana(Entity player, int mana)

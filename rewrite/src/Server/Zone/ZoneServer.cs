@@ -726,7 +726,7 @@ public sealed partial class ZoneServer : IDisposable
     private static SpellBook SpellBookOf(ZoneInstance instance, ZoneInstance.Entity p)
     {
         var spells = p.Book.Distinct().Select(instance.SpellById).OfType<EQClassic.Server.Spells.Spell>()
-            .Select(s => new SpellView(s.Id, s.Name, s.LevelFor(p.Fighter.Class) ?? 0, s.Mana, s.CastTimeMs, s.Beneficial, s.MemIcon))
+            .Select(s => new SpellView(s.Id, s.Name, s.LevelFor(p.Fighter.Class) ?? 0, s.Mana, s.CastTimeMs, s.Beneficial, s.MemIcon, s.Icon))
             .OrderBy(v => v.Level).ThenBy(v => v.Name, StringComparer.Ordinal)
             .ToList();
         return new SpellBook(spells, p.Gems);
@@ -744,7 +744,7 @@ public sealed partial class ZoneServer : IDisposable
     }
 
     private ItemView View(int itemId, int charges) =>
-        itemId == 0 ? new(0, "", charges) : Items?.Get(itemId) is { } item ? new(itemId, item.Name, charges, item.Price, item.IsContainer ? item.BagSlots : 0, item.ItemType)
+        itemId == 0 ? new(0, "", charges) : Items?.Get(itemId) is { } item ? new(itemId, item.Name, charges, item.Price, item.IsContainer ? item.BagSlots : 0, item.ItemType, item.Icon)
             : new(itemId, $"item #{itemId}", charges);
 
     private PlayerInventory InventoryOf(ZoneInstance.Entity p)

@@ -95,5 +95,11 @@ public class StaminaTests
         Assert.Equal(new PlayerStamina(32000, 0, 100), MessageCodec.Decode(MessageCodec.Encode(new PlayerStamina(32000, 0, 100))));
         Assert.Equal(new ConsumeItem(251), MessageCodec.Decode(MessageCodec.Encode(new ConsumeItem(251))));
         Assert.Equal(new EntityIllusion(7, 142, 1), MessageCodec.Decode(MessageCodec.Encode(new EntityIllusion(7, 142, 1))));
+        var guard = new EntitySpawn(3, "Guard_Tom", false, 71, 0, 20, 6f, 1, 2, 3, 90, false, Texture: 1, Helm: 1);
+        Assert.Equal(new EntitySpawned(guard), MessageCodec.Decode(MessageCodec.Encode(new EntitySpawned(guard))));
+        var book = (SpellBook)MessageCodec.Decode(MessageCodec.Encode(new SpellBook([new SpellView(200, "Minor Healing", 1, 10, 1000, true, 2051, 2510)], [200])));
+        Assert.Equal(2510, book.Spells[0].BookIcon);
+        var loot = (LootContents)MessageCodec.Decode(MessageCodec.Encode(new LootContents(9, [new ItemView(13014, "Muffin", 1, 5, 0, 14, 784)])));
+        Assert.Equal(784, loot.Items[0].Icon);
     }
 }

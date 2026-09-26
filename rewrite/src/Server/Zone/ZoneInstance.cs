@@ -81,7 +81,11 @@ public sealed partial class ZoneInstance
 
         public int HpPercent => Fighter.MaxHp <= 0 ? 0 : Math.Clamp((int)Math.Ceiling(100.0 * Hp / Fighter.MaxHp), 0, 100);
 
-        public EntitySpawn ToSpawn() => new(Id, Name, IsPlayer, LooksLike, Gender, Level, Size, Position.X, Position.Y, Position.Z, Heading, IsCorpse);
+        public EntitySpawn ToSpawn() => new(Id, Name, IsPlayer, LooksLike, Gender, Level, Size, Position.X, Position.Y, Position.Z, Heading, IsCorpse,
+            Npc?.Texture ?? Texture, Npc?.Helm ?? Helm);
+        /// <summary>Players: the armour their model shows (the chest item's material) and their helmet's (the head item's).</summary>
+        public int Texture { get; internal set; }
+        public int Helm { get; internal set; }
         /// <summary>The race others see: an illusion's, or its own.</summary>
         public int LooksLike => Bonuses.IllusionRace > 0 ? Bonuses.IllusionRace : Race;
 
@@ -389,6 +393,7 @@ public sealed partial class ZoneInstance
         foreach (var (id, value) in progress?.Factions ?? new Dictionary<int, int>())
             player.FactionValues[id] = value;
         player.Bind = progress?.Bind ?? default;
+        UpdateLooks(player);
         player.Hunger = progress?.Hunger ?? FullStamina;
         player.Thirst = progress?.Thirst ?? FullStamina;
         SetUpMagic(player, progress?.Magic);

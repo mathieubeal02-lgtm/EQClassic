@@ -25,6 +25,9 @@ public sealed record NpcTemplate(int Id, string Name, int Race, int Gender, int 
     public int MerchantId { get; init; }
     /// <summary>Hit points per tic (hp_regen_rate), when above the level's regeneration.</summary>
     public int RegenRate { get; init; }
+    /// <summary>The model's armour and helmet variants (npc_types texture, helmtexture).</summary>
+    public int Texture { get; init; }
+    public int Helm { get; init; }
 }
 
 /// <summary>
@@ -126,7 +129,7 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
     private const string TemplateColumns =
         "n.id, n.name, n.race, n.gender, n.level, n.size, n.runspeed, n.bodytype, n.npc_faction_id, " +
         "n.class, n.hp, n.mindmg, n.maxdmg, n.AC, n.ATK, n.Accuracy, n.avoidance, n.attack_speed, n.STR, n.loottable_id, " +
-        "n.MR, n.CR, n.DR, n.FR, n.PR, n.merchant_id, n.hp_regen_rate";
+        "n.MR, n.CR, n.DR, n.FR, n.PR, n.merchant_id, n.hp_regen_rate, n.texture, n.helmtexture";
 
     private static NpcTemplate ReadTemplate(MySqlDataReader r, int o)
     {
@@ -145,6 +148,8 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
             LoottableId = Int(r, o + 19),
             MerchantId = Int(r, o + 25),
             RegenRate = Int(r, o + 26),
+            Texture = Int(r, o + 27),
+            Helm = Int(r, o + 28),
         };
     }
 

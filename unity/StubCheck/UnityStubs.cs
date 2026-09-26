@@ -464,6 +464,21 @@ namespace UnityEngine.Rendering.Universal
     }
 }
 
+namespace Lantern.EQ.Equipment
+{
+    public abstract class VariantHandler : UnityEngine.MonoBehaviour { }
+
+    public class NonPlayableVariantHandler : VariantHandler
+    {
+        public void SetCurrentActiveVariant(int texture, int helmTexture) { }
+    }
+
+    public class Equipment2dHandler : VariantHandler
+    {
+        public void SetArmorSetActive(int skinId, int helmId) { }
+    }
+}
+
 namespace Lantern.EQ.Environment
 {
     public class SkyController : UnityEngine.MonoBehaviour

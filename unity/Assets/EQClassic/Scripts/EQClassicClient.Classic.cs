@@ -323,7 +323,10 @@ namespace EQClassic.Unity
                 var slot = B(px, py, 160, 52);
                 if (_bookSelected == spell.SpellId)
                     Fill(slot, new Color(1f, 0.9f, 0.4f, 0.35f));
-                GUI.DrawTextureWithTexCoords(B(px + 2, py + 12, 30, 23), skin.Gems, ClassicSkin.GemUv(spell.Icon));
+                if (skin.SpellIcons != null && spell.BookIcon >= 2500)
+                    GUI.DrawTextureWithTexCoords(B(px + 2, py + 8, 30, 30), skin.SpellIcons, ClassicSkin.SpellIconUv(spell.BookIcon));
+                else
+                    GUI.DrawTextureWithTexCoords(B(px + 2, py + 12, 30, 23), skin.Gems, ClassicSkin.GemUv(spell.Icon));
                 GUI.Label(B(px + 36, py + 2, 124, 30), spell.Name, ink);
                 GUI.Label(B(px + 36, py + 30, 124, 20), $"Level {spell.Level}  {spell.Mana} mana", ink);
                 if (Hit(slot))

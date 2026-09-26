@@ -16,6 +16,14 @@ namespace EQClassic.Unity
         public Texture2D Gems { get; private set; }
         /// <summary>The spell book (book.bmp): the open book fills the 400 × 320 of the view, from the top left of the sheet.</summary>
         public Texture2D Book { get; private set; }
+        /// <summary>The spells' square icons (spelicon.bmp): 40 × 40, five a row; spdat icon − 2500.</summary>
+        public Texture2D SpellIcons { get; private set; }
+
+        public static Rect SpellIconUv(int icon)
+        {
+            int k = icon - 2500;
+            return k < 0 || k >= 25 ? Uv(0, 0, 40, 40) : Uv(40 * (k % 5), 40 * (k / 5), 40, 40);
+        }
 
         /// <summary>The art's own size: every place in the frame is measured on it.</summary>
         public const float Width = 640f, Height = 480f;
@@ -40,6 +48,7 @@ namespace EQClassic.Unity
                 {
                     Frame = Texture(frame), Gems = Texture(gems),
                     Book = files.TryGetValue("book.bmp", out var book) ? Texture(book) : null,
+                    SpellIcons = files.TryGetValue("spelicon.bmp", out var icons) ? Texture(icons) : null,
                 };
             }
             catch (System.Exception e)

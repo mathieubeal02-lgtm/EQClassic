@@ -265,6 +265,13 @@ namespace EQClassic.Unity
                 // The spawn's size relative to its race's usual one (a giant guard, a gnome child...).
                 model.transform.localScale = model.transform.localScale * ModelCodes.Scale(entity.Spawn.Race, entity.Spawn.Size);
                 model.transform.localPosition = new Vector3(0f, FeetOffset(model), 0f);
+                // The armour and helmet the server gives (NPC texture / helmtexture, a player's chest and head material).
+                var npcVariants = model.GetComponentInChildren<Lantern.EQ.Equipment.NonPlayableVariantHandler>();
+                if (npcVariants != null)
+                    npcVariants.SetCurrentActiveVariant(entity.Spawn.Texture, entity.Spawn.Helm);
+                var armour = model.GetComponentInChildren<Lantern.EQ.Equipment.Equipment2dHandler>();
+                if (armour != null)
+                    armour.SetArmorSetActive(entity.Spawn.Texture, entity.Spawn.Helm);
                 var controller = model.GetComponentInChildren<CharacterAnimationController>();
                 if (entity.Spawn.IsCorpse)
                 {

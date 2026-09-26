@@ -20,8 +20,9 @@ namespace EQClassic.Shared.Zone
     }
 
     /// <summary>An entity as a client first sees it (legacy NewSpawn / zone spawn list).</summary>
+    /// <summary>An entity as clients draw it; Texture and Helm pick the model's armour and helmet variants (npc_types texture / helmtexture, or a player's chest and head items' material).</summary>
     public sealed record EntitySpawn(int Id, string Name, bool IsPlayer, int Race, int Gender, int Level, float Size, float X, float Y, float Z, float Heading,
-        bool IsCorpse = false);
+        bool IsCorpse = false, int Texture = 0, int Helm = 0);
 
     public sealed record ZoneEnterResponse(bool Accepted, string Message, string Zone, int YourEntityId, IReadOnlyList<EntitySpawn> Entities) : IMessage
     {
@@ -50,6 +51,8 @@ namespace EQClassic.Shared.Zone
                 writer.Put(e.Z);
                 writer.Put(e.Heading);
                 writer.Put(e.IsCorpse);
+                writer.Put((byte)e.Texture);
+                writer.Put((byte)e.Helm);
             }
         }
 
@@ -62,7 +65,7 @@ namespace EQClassic.Shared.Zone
             var list = new List<EntitySpawn>(count);
             for (int i = 0; i < count; i++)
                 list.Add(new EntitySpawn(reader.GetInt(), reader.GetString(), reader.GetBool(), reader.GetUShort(), reader.GetByte(), reader.GetByte(),
-                    reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetBool()));
+                    reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetBool(), reader.GetByte(), reader.GetByte()));
             return new ZoneEnterResponse(accepted, message, zone, you, list);
         }
 
@@ -519,7 +522,7 @@ namespace EQClassic.Shared.Zone
     /// <summary>An item as the client shows it: id, name, charges (0 when not stackable).</summary>
     /// <summary>An item as the windows show it; Price is its value in copper (items' price), which merchants multiply.</summary>
     /// <summary>An item as windows show it; ItemType is the item table's (14 food, 15 drink, 20 spell scroll...).</summary>
-    public sealed record ItemView(int ItemId, string Name, int Charges, int Price = 0, int BagSlots = 0, int ItemType = 0);
+    public sealed record ItemView(int ItemId, string Name, int Charges, int Price = 0, int BagSlots = 0, int ItemType = 0, int Icon = 0);
 
     internal static class ItemViews
     {
@@ -534,6 +537,7 @@ namespace EQClassic.Shared.Zone
                 writer.Put(i.Price);
                 writer.Put((byte)i.BagSlots);
                 writer.Put((byte)i.ItemType);
+                writer.Put((ushort)i.Icon);
             }
         }
 
@@ -542,7 +546,7 @@ namespace EQClassic.Shared.Zone
             int count = reader.GetUShort();
             var list = new List<ItemView>(count);
             for (int n = 0; n < count; n++)
-                list.Add(new ItemView(reader.GetInt(), reader.GetString(), reader.GetShort(), reader.GetInt(), reader.GetByte(), reader.GetByte()));
+                list.Add(new ItemView(reader.GetInt(), reader.GetString(), reader.GetShort(), reader.GetInt(), reader.GetByte(), reader.GetByte(), reader.GetUShort()));
             return list;
         }
     }
@@ -631,7 +635,8 @@ namespace EQClassic.Shared.Zone
     }
 
     /// <summary>A spell as the client shows it in the book and the gems.</summary>
-    public sealed record SpellView(int SpellId, string Name, int Level, int Mana, int CastMs, bool Beneficial, int Icon);
+    /// <summary>A spell of the book; Icon is its gem (spdat memicon), BookIcon its square icon (spdat icon).</summary>
+    public sealed record SpellView(int SpellId, string Name, int Level, int Mana, int CastMs, bool Beneficial, int Icon, int BookIcon = 0);
 
     /// <summary>
     /// Zone server to the player: the spells of their book (with their level for the player's class)
@@ -653,6 +658,7 @@ namespace EQClassic.Shared.Zone
                 writer.Put(s.CastMs);
                 writer.Put(s.Beneficial);
                 writer.Put((ushort)s.Icon);
+                writer.Put((ushort)s.BookIcon);
             }
             writer.Put((byte)Gems.Count);
             foreach (int g in Gems)
@@ -664,7 +670,7 @@ namespace EQClassic.Shared.Zone
             int count = reader.GetUShort();
             var spells = new List<SpellView>(count);
             for (int n = 0; n < count; n++)
-                spells.Add(new SpellView(reader.GetInt(), reader.GetString(), reader.GetByte(), reader.GetInt(), reader.GetInt(), reader.GetBool(), reader.GetUShort()));
+                spells.Add(new SpellView(reader.GetInt(), reader.GetString(), reader.GetByte(), reader.GetInt(), reader.GetInt(), reader.GetBool(), reader.GetUShort(), reader.GetUShort()));
             int gems = reader.GetByte();
             var list = new List<int>(gems);
             for (int n = 0; n < gems; n++)
