@@ -15,6 +15,23 @@ public sealed record NpcTemplate(int Id, string Name, int Race, int Gender, int 
 
     /// <summary>Engaged NPCs run: animation = runspeed * 7 (NPC::CheckMyWalkingStatus), 2.3 units per step.</summary>
     public float RunUnitsPerSecond => RunSpeed * 7f * 2.3f;
+
+    /// <summary>Melee statistics (npc_types_without columns); tests without them get level-based defaults.</summary>
+    public NpcCombatStats Combat { get; init; } = NpcCombatStats.Default(Level);
+}
+
+/// <summary>
+/// The npc_types_without columns melee combat reads (NPC::NPC, Mob::Combat*): class, hit points,
+/// min/max damage, AC, ATK, accuracy, avoidance bonus, attack speed (percent: delay = 2 s × (100 +
+/// speed) / 100, negative is faster) and STR.
+/// </summary>
+public sealed record NpcCombatStats(int Class, int Hp, int MinDamage, int MaxDamage, int AC = 0, int Atk = 0, int Accuracy = 0,
+    int Avoidance = 0, int AttackSpeed = 0, int Str = 75)
+{
+    public static NpcCombatStats Default(int level) => new(1, Math.Max(1, level * 10 + 6), 1, Math.Max(2, level * 2 + 2));
+
+    /// <summary>Seconds between swings (Mob::Mob: 2000 ms × (100 + attack_speed) / 100).</summary>
+    public float DelaySeconds => Math.Max(0.2f, 2f * (100 + AttackSpeed) / 100f);
 }
 
 /// <summary>A spawn2 row: a place, its spawn group's candidates (spawnentry, chance) and its waypoint grid.</summary>
@@ -67,6 +84,8 @@ public sealed class InMemoryZoneDataSource : IZoneDataSource
 /// <summary>Loads a zone the way the legacy zone does (spawn2 + spawnentry + npc_types_without, grid + grid_entries).</summary>
 public sealed class MySqlZoneDataSource : IZoneDataSource
 {
+    private static int Int(MySqlDataReader r, int i) => r.IsDBNull(i) ? 0 : Convert.ToInt32(r.GetValue(i));
+
     private readonly string _connectionString;
     private readonly string _p;
 
@@ -98,7 +117,8 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
         {
             cmd.CommandText = $"""
                 SELECT s.id, s.x, s.y, s.z, s.heading, s.pathgrid, n.id, n.name, n.race, n.gender, n.level, n.size, e.chance,
-                       s.respawntime, s.variance, n.runspeed, n.bodytype, n.npc_faction_id
+                       s.respawntime, s.variance, n.runspeed, n.bodytype, n.npc_faction_id,
+                       n.class, n.hp, n.mindmg, n.maxdmg, n.AC, n.ATK, n.Accuracy, n.avoidance, n.attack_speed, n.STR
                 FROM `{_p}spawn2` s
                 JOIN `{_p}spawnentry` e ON e.spawngroupID = s.spawngroupID
                 JOIN `{_p}npc_types_without` n ON n.id = e.npcID
@@ -119,7 +139,11 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
                     Convert.ToInt32(r.GetValue(10)), size > 0 ? size : 6f,
                     RunSpeed: runspeed > 0 ? runspeed : 1.25f,
                     Undead: Convert.ToInt32(r.GetValue(16)) == 3, // BT_Undead
-                    PrimaryFaction: Convert.ToInt32(r.GetValue(17)));
+                    PrimaryFaction: Convert.ToInt32(r.GetValue(17)))
+                {
+                    Combat = new NpcCombatStats(Int(r, 18), Math.Max(1, Int(r, 19)), Int(r, 20), Int(r, 21), Int(r, 22), Int(r, 23),
+                        Int(r, 24), Int(r, 25), Int(r, 26), Int(r, 27)),
+                };
                 spawn.Candidates.Add((npc, Convert.ToInt32(r.GetValue(12))));
             }
         }

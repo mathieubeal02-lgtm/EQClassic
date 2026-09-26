@@ -5,7 +5,9 @@ using EQClassic.Shared.World;
 namespace EQClassic.Server.Zone;
 
 /// <summary>What World tells the zone about an arriving character (legacy: World and zone both read the profile).</summary>
-public sealed record ZoneTicket(string CharacterName, string Zone, int WorldAccountId, int Race, int Gender, int Level, Vec3 Position);
+/// <param name="Profile">The character's profile as World read it (class, stats, skills, items, HP for combat); null in some tests.</param>
+public sealed record ZoneTicket(string CharacterName, string Zone, int WorldAccountId, int Race, int Gender, int Level, Vec3 Position,
+    EQClassic.Server.Characters.PlayerProfile? Profile = null);
 
 /// <summary>World-to-zone hand-off: a single-use key per character, valid for a short time.</summary>
 public sealed class ZoneKeys

@@ -19,6 +19,23 @@ public sealed record PlayerProfile(
     private const int GenderOffset = 54, DeityOffset = 55, RaceOffset = 56, ClassOffset = 58, LevelOffset = 60;
     private const int YOffset = 2408, XOffset = 2412, ZOffset = 2416, HeadingOffset = 2420;
     private const int ZoneOffset = 2424, ZoneLength = 15;
+    public const int CurHpOffset = 120;
+    private const int StrOffset = 123, StaOffset = 124, DexOffset = 126, AgiOffset = 128;
+    private const int InventoryOffset = 168, InventorySlots = 30;
+    private const int SkillsOffset = 2508, SkillCount = 74;
+
+    // Combat fields (zone server). Empty arrays when the profile is too short to hold them.
+    public int CurHp { get; init; }
+    public int Str { get; init; }
+    public int Sta { get; init; }
+    public int Dex { get; init; }
+    public int Agi { get; init; }
+    /// <summary>Item ids by slot (Trilogy slots: 0-21 worn, 13 primary, 14 secondary, 22-29 general).</summary>
+    public IReadOnlyList<int> Inventory { get; init; } = Array.Empty<int>();
+    /// <summary>Skill values by skill id; 254 (not trained yet) and 255 (cannot learn) read as 0.</summary>
+    public IReadOnlyList<int> Skills { get; init; } = Array.Empty<int>();
+
+    public int Skill(int id) => id < Skills.Count ? Skills[id] : 0;
 
     private static readonly Encoding Latin1 = Encoding.Latin1;
 
@@ -38,7 +55,26 @@ public sealed record PlayerProfile(
             Y: BinaryPrimitives.ReadSingleLittleEndian(profile[YOffset..]),
             Z: BinaryPrimitives.ReadSingleLittleEndian(profile[ZOffset..]),
             Heading: BinaryPrimitives.ReadSingleLittleEndian(profile[HeadingOffset..]),
-            Zone: CString(profile.Slice(ZoneOffset, ZoneLength)));
+            Zone: CString(profile.Slice(ZoneOffset, ZoneLength)))
+        {
+            CurHp = BinaryPrimitives.ReadInt16LittleEndian(profile[CurHpOffset..]),
+            Str = profile[StrOffset],
+            Sta = profile[StaOffset],
+            Dex = profile[DexOffset],
+            Agi = profile[AgiOffset],
+            Inventory = ReadInventory(profile),
+            Skills = profile.Length >= SkillsOffset + SkillCount
+                ? profile.Slice(SkillsOffset, SkillCount).ToArray().Select(b => b >= 254 ? 0 : (int)b).ToArray()
+                : Array.Empty<int>(),
+        };
+    }
+
+    private static int[] ReadInventory(ReadOnlySpan<byte> profile)
+    {
+        var slots = new int[InventorySlots];
+        for (int i = 0; i < InventorySlots; i++)
+            slots[i] = BinaryPrimitives.ReadUInt16LittleEndian(profile[(InventoryOffset + 2 * i)..]) is var id && id != 0xFFFF ? id : 0; // 0xFFFF: empty
+        return slots;
     }
 
     /// <summary>For the client's creation packet, which is the profile without its checksum.</summary>

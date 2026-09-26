@@ -259,4 +259,59 @@ public static class CombatFormulas
             damage++;
         return damage;
     }
+
+    // ---- hit points and bare hands -------------------------------------------------------------
+
+    /// <summary>A player's base hit points (Client::CalcBaseHP): 5 + m·level + m·level·STA/300, m by class and level.</summary>
+    public static int ClientBaseHp(int level, int playerClass, int sta)
+    {
+        int m = playerClass switch
+        {
+            Warrior => level < 20 ? 22 : level < 30 ? 23 : level < 40 ? 25 : level < 53 ? 27 : level < 57 ? 28 : 30,
+            Druid or Cleric or Shaman => 15,
+            Monk or Bard or Rogue or Beastlord => level < 51 ? 18 : level < 58 ? 19 : 20,
+            Ranger => level < 58 ? 20 : 21,
+            Magician or Wizard or Necromancer or Enchanter => 12,
+            _ => level < 35 ? 21 : level < 45 ? 22 : level < 51 ? 23 : level < 56 ? 24 : level < 60 ? 25 : 26, // paladin, SK, others
+        };
+        return 5 + m * level + m * level * sta / 300;
+    }
+
+    private static readonly int[] MonkFistDamage =
+    [
+        99, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7,
+        8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11,
+        12, 12, 12, 12, 12, 13, 13, 13, 13, 13, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+        15, 15, 16, 16, 17, 18,
+    ];
+
+    private static readonly int[] MonkFistDelayHuman =
+    [
+        99, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36,
+        36, 36, 36, 36, 36, 35, 35, 35, 35, 35, 34, 34, 34, 34, 34, 33, 33, 33, 33, 33,
+        32, 32, 32, 32, 32, 31, 31, 31, 31, 31, 30, 30, 30, 29, 29, 29, 28, 28, 28, 27,
+        27, 26, 26, 25, 25, 25,
+    ];
+
+    private static readonly int[] MonkFistDelayOthers =
+    [
+        99, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36,
+        36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 35, 35, 35, 35, 35, 34, 34, 34, 34, 34,
+        33, 33, 33, 33, 33, 32, 32, 32, 32, 32, 31, 31, 31, 30, 30, 30, 29, 29, 29, 28,
+        28, 27, 27, 26, 26, 26,
+    ];
+
+    /// <summary>
+    /// Bare-hand damage and delay (tenths of a second): 2/36, monks by level; the monk delay table
+    /// is the human one for humans, the (Iksar) other one for every other race (Mob::GetMonkHandToHand*).
+    /// </summary>
+    public static (int Damage, int Delay) Fists(int level, int playerClass, int race)
+    {
+        if (playerClass != Monk)
+            return (2, 36);
+        level = Math.Max(level, 1);
+        if (level > 65)
+            return (19, race == 1 ? 24 : 25);
+        return (MonkFistDamage[level], race == 1 ? MonkFistDelayHuman[level] : MonkFistDelayOthers[level]);
+    }
 }

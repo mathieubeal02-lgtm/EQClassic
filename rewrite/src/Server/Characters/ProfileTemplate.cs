@@ -31,6 +31,7 @@ public static class ProfileTemplate
     public static void SetLevel(byte[] p, int level) => p[60] = (byte)level;
     public static void SetFace(byte[] p, int face) => p[72] = (byte)face;
     public static void SetZone(byte[] p, string zone) => WriteString(p, 2424, 15, zone);
+    public static void SetCurHp(byte[] p, int hp) => BinaryPrimitives.WriteInt16LittleEndian(p.AsSpan(PlayerProfile.CurHpOffset), (short)Math.Clamp(hp, 0, short.MaxValue));
 
     public static void SetStats(byte[] p, int str, int sta, int cha, int dex, int @int, int agi, int wis)
     {

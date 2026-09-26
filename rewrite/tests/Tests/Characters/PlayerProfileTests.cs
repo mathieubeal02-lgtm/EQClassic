@@ -41,6 +41,11 @@ public class PlayerProfileTests
         Assert.Equal(9, p.Race);   // troll
         Assert.Equal(10, p.Class); // shaman
         Assert.Equal("", p.Name);
+        // Combat fields: a level 1 troll shaman with 20 HP, troll stats, nothing equipped yet.
+        Assert.Equal((20, 108, 119, 75, 83), (p.CurHp, p.Str, p.Sta, p.Dex, p.Agi));
+        Assert.Equal(30, p.Inventory.Count);
+        Assert.All(p.Inventory, id => Assert.Equal(0, id)); // 0xFFFF slots read as empty
+        Assert.Equal(74, p.Skills.Count);
     }
 
     private static byte[] ReadIncludeBytes(string path) =>

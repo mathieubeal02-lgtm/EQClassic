@@ -17,7 +17,8 @@ public interface ICharacterStore
     /// Writes the zone and position into the character's profile (the fields the legacy zone saves
     /// on camp and zoning), so both server generations see where the character is.
     /// </summary>
-    void SavePosition(string name, string zone, float x, float y, float z);
+    /// <param name="hp">Current hit points to save too (cur_hp), or null to keep them.</param>
+    void SavePosition(string name, string zone, float x, float y, float z, int? hp = null);
 }
 
 public static class CharacterStoreExtensions
@@ -43,17 +44,19 @@ public sealed class InMemoryCharacterStore : ICharacterStore
         return true;
     }
 
-    public void SavePosition(string name, string zone, float x, float y, float z)
+    public void SavePosition(string name, string zone, float x, float y, float z, int? hp = null)
     {
         int i = _characters.FindIndex(c => string.Equals(c.Profile.Name, name, StringComparison.OrdinalIgnoreCase));
         if (i < 0)
             return;
         var c = _characters[i];
-        _characters[i] = c with { Profile = c.Profile with { Zone = zone, X = x, Y = y, Z = z } };
+        _characters[i] = c with { Profile = c.Profile with { Zone = zone, X = x, Y = y, Z = z, CurHp = hp ?? c.Profile.CurHp } };
         if (Profiles.TryGetValue(name, out var raw))
         {
             ProfileTemplate.SetZone(raw, zone);
             ProfileTemplate.SetPosition(raw, x, y, z);
+            if (hp is int h)
+                ProfileTemplate.SetCurHp(raw, h);
         }
     }
 
@@ -98,7 +101,7 @@ public sealed class MySqlCharacterStore : ICharacterStore
         return result;
     }
 
-    public void SavePosition(string name, string zone, float x, float y, float z)
+    public void SavePosition(string name, string zone, float x, float y, float z, int? hp = null)
     {
         using var connection = new MySqlConnection(_connectionString);
         connection.Open();
@@ -115,6 +118,8 @@ public sealed class MySqlCharacterStore : ICharacterStore
             return;
         ProfileTemplate.SetZone(profile, zone);
         ProfileTemplate.SetPosition(profile, x, y, z);
+        if (hp is int h)
+            ProfileTemplate.SetCurHp(profile, h);
         using (var update = connection.CreateCommand())
         {
             update.Transaction = tx;

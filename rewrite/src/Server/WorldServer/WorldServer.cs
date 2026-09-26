@@ -140,7 +140,7 @@ public sealed class WorldServer : IDisposable
         var p = character.Profile;
         if (Zones is null)
             return new EnterWorldResponse(true, "", p.Zone, p.X, p.Y, p.Z);
-        var key = Zones.Keys.Issue(new ZoneTicket(p.Name, p.Zone, session.WorldAccountId, p.Race, p.Gender, p.Level, new Vec3(p.X, p.Y, p.Z)));
+        var key = Zones.Keys.Issue(new ZoneTicket(p.Name, p.Zone, session.WorldAccountId, p.Race, p.Gender, p.Level, new Vec3(p.X, p.Y, p.Z), p));
         return new EnterWorldResponse(true, "", p.Zone, p.X, p.Y, p.Z, Zones.Address, Zones.Port, key);
     }
 
