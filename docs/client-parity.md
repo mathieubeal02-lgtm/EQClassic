@@ -46,7 +46,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 
 | Feature | Trilogy client | Status | Priority |
 |---|---|---|---|
-| Chat window | Say, shout, OOC, tells, group, guild, emotes, channels, scrolling | Partial: Enter to type; say, shout, OOC, auction, tells (across zones), group, emotes; last 12 lines on screen. No guild channel, no scrolling back | 1 |
+| Chat window | Say, shout, OOC, tells, group, guild, emotes, channels, scrolling | Partial: Enter to type; say, shout, OOC, auction, tells (across zones), group, emotes; 12 lines on screen in the channel colours (tells purple, group blue, shout red, OOC and auction green), 500 kept: the wheel over the chat or Page Up/Down while typing scrolls back, the arrows recall typed lines. No guild channel | 2 |
 | Slash commands | /who, /loc, /sit, /camp, /con, /target... | Partial: /say /shout /ooc /auction /tell /em /who /loc /sit /stand /camp /con /target /cast and the abilities | 1 |
 | Player window | HP, mana, stamina, experience bars | Partial: HP, mana and experience bars, level; no stamina yet | 1 |
 | Target window | Name, health, consider colour | Written (name in con colour, health bar), to check in Unity | 1 |

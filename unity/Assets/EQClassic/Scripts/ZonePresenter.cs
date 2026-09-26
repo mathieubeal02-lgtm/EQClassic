@@ -58,6 +58,8 @@ namespace EQClassic.Unity
 
         /// <summary>False while the chat line is open: the keys type text instead of moving.</summary>
         public bool InputEnabled { get; set; } = true;
+        /// <summary>False while the pointer is over the chat window: the wheel scrolls the chat, not the camera.</summary>
+        public bool ZoomEnabled { get; set; } = true;
 
         /// <summary>The zone the server put us in has no imported assets in this client.</summary>
         public string MissingZone { get; private set; }
@@ -345,7 +347,8 @@ namespace EQClassic.Unity
         {
             if (Input.GetKeyDown(KeyCode.F9))
                 _rig.CycleView();
-            _rig.Zoom(Input.mouseScrollDelta.y);
+            if (ZoomEnabled)
+                _rig.Zoom(Input.mouseScrollDelta.y);
             if (Input.GetKey(KeyCode.PageUp))
                 _rig.Look(60f * Time.deltaTime);
             if (Input.GetKey(KeyCode.PageDown))

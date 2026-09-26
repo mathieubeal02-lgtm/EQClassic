@@ -23,7 +23,7 @@ namespace EQClassic.Unity
         private string _newName = "";
         private CharacterBuilder _builder;
         private bool _creating;
-        private readonly System.Collections.Generic.List<string> _messages = new System.Collections.Generic.List<string>();
+        private readonly ChatLog _chat = new ChatLog();
         private bool _chatOpen;
         private bool _inventoryOpen;
         private bool _bookOpen;
@@ -50,6 +50,7 @@ namespace EQClassic.Unity
         private string _chatLine = "";
         private int _chatClosedFrame = -1;
         private const int ChatLines = 12;
+        private const float ChatWidth = 800f;
 
         private void Awake()
         {
@@ -88,6 +89,11 @@ namespace EQClassic.Unity
             if (_client.State == GameState.InZone)
             {
                 _presenter.InputEnabled = !_chatOpen;
+                var pointer = Input.mousePosition; // from the bottom left
+                bool overChat = pointer.x < ChatWidth + 10 && pointer.y < 36 + 20 * ChatLines;
+                _presenter.ZoomEnabled = !overChat;
+                if (overChat && Input.mouseScrollDelta.y != 0f)
+                    _chat.ScrollBy(Input.mouseScrollDelta.y > 0f ? 3 : -3, ChatLines);
                 if (!_chatOpen && Time.frameCount != _chatClosedFrame
                     && (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) || Input.GetKeyDown(KeyCode.Slash)))
                 {
@@ -137,9 +143,7 @@ namespace EQClassic.Unity
 
         private void AddMessage(string text)
         {
-            _messages.Add(text);
-            if (_messages.Count > 100)
-                _messages.RemoveAt(0);
+            _chat.Add(text);
         }
 
         /// <summary>The creation screen: race, gender, class, deity, city among the server's combinations, points, name.</summary>
@@ -561,13 +565,37 @@ namespace EQClassic.Unity
             _ => Color.white,
         };
 
-        /// <summary>The chat window: the latest lines, and the input line while it is open.</summary>
+        /// <summary>The Trilogy client's chat colours.</summary>
+        private static Color ChatColour(ChatKind kind)
+        {
+            switch (kind)
+            {
+                case ChatKind.Tell: return new Color(0.9f, 0.4f, 0.9f);
+                case ChatKind.Group: return new Color(0.4f, 0.8f, 1f);
+                case ChatKind.Shout: return new Color(1f, 0.35f, 0.35f);
+                case ChatKind.OutOfCharacter:
+                case ChatKind.Auction: return new Color(0.4f, 1f, 0.4f);
+                default: return Color.white;
+            }
+        }
+
+        /// <summary>
+        /// The chat window: the latest lines in their channel's colour (wheel over it, or Page Up/Down
+        /// while typing, scrolls back), and the input line while it is open (arrows recall what was typed).
+        /// </summary>
         private void DrawChat()
         {
-            int shown = System.Math.Min(ChatLines, _messages.Count);
+            var lines = _chat.Visible(ChatLines);
             float bottom = Screen.height - 36;
-            for (int i = 0; i < shown; i++)
-                GUI.Label(new Rect(10, bottom - 20 * (shown - i), 800, 20), _messages[_messages.Count - shown + i]);
+            var colour = GUI.color;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                GUI.color = ChatColour(ChatLog.Kind(lines[i]));
+                GUI.Label(new Rect(10, bottom - 20 * (lines.Count - i), ChatWidth, 20), lines[i]);
+            }
+            GUI.color = colour;
+            if (_chat.Scroll > 0)
+                GUI.Label(new Rect(ChatWidth - 250, bottom - 20 * (ChatLines + 1), 260, 20), $"(back {_chat.Scroll} lines, Page Down)");
             if (!_chatOpen)
                 return;
             GUI.SetNextControlName("chat");
@@ -578,8 +606,20 @@ namespace EQClassic.Unity
                 return;
             if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter)
             {
+                _chat.Typed(_chatLine);
+                _chat.ScrollToBottom();
                 _client.ExecuteChat(_chatLine);
                 CloseChat(e);
+            }
+            else if (e.keyCode == KeyCode.UpArrow || e.keyCode == KeyCode.DownArrow)
+            {
+                _chatLine = e.keyCode == KeyCode.UpArrow ? _chat.Previous() : _chat.Next();
+                e.Use();
+            }
+            else if (e.keyCode == KeyCode.PageUp || e.keyCode == KeyCode.PageDown)
+            {
+                _chat.ScrollBy(e.keyCode == KeyCode.PageUp ? ChatLines - 1 : 1 - ChatLines, ChatLines);
+                e.Use();
             }
             else if (e.keyCode == KeyCode.Escape)
             {
