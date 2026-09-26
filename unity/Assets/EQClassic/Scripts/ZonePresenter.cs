@@ -323,43 +323,43 @@ namespace EQClassic.Unity
         private static readonly bool DebugModels = System.Environment.GetEnvironmentVariable("EQC_DEBUG_MODELS") == "1";
 
         /// <summary>
-        /// The model's armour and helmet. A helmet the model has no mesh for makes Lantern's variant
-        /// handlers hide the bare head (or, on one-mesh models like the Qeynos guards, the whole body):
-        /// when meshes went missing, the armour is set again without the helmet.
+        /// The model's armour and helmet. Lantern's variant handlers give the materials (the armour's
+        /// look), but their mesh choice fails on these models: they hide the last main mesh as the bare
+        /// head (on the guards and the playable races it is the body) and take the robe for a helmet. The
+        /// meshes are chosen here as EverQuest does: the body, or the robe (&lt;code&gt;01) for textures
+        /// 10 to 16, and one head: &lt;code&gt;he0N for helmet N when the model has it, else the bare &lt;code&gt;he00.
         /// </summary>
-        private static void ApplyVariant(GameObject model, int texture, int helm)
+        private static void ApplyVariant(GameObject model, string code, int texture, int helm)
         {
-            if (texture == 0 && helm == 0)
-                return;
-            int before = model.GetComponentsInChildren<SkinnedMeshRenderer>(false).Length;
-            void Set(int h)
+            if (texture != 0 || helm != 0)
             {
                 var npc = model.GetComponentInChildren<Lantern.EQ.Equipment.NonPlayableVariantHandler>();
                 if (npc != null)
-                    npc.SetCurrentActiveVariant(texture, h);
+                    npc.SetCurrentActiveVariant(texture, helm);
                 var armour = model.GetComponentInChildren<Lantern.EQ.Equipment.Equipment2dHandler>();
                 if (armour != null)
-                    armour.SetArmorSetActive(texture, h);
+                    armour.SetArmorSetActive(texture, helm);
             }
-            Set(helm);
-            if (helm != 0)
-                KeepOnlyMainMesh(model);
-            if (helm != 0 && model.GetComponentsInChildren<SkinnedMeshRenderer>(false).Length < before)
-                Set(0);
+            ChooseMeshes(model, code, texture, helm);
         }
 
-        private static readonly System.Reflection.FieldInfo MainMeshes =
-            typeof(Lantern.EQ.Equipment.VariantHandler).GetField("_mainMeshes", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-        /// <summary>
-        /// For a helmet, Lantern hides the last main mesh as the bare head; on models whose only main
-        /// mesh is the whole body (the Qeynos guards) that left the helmet floating alone: keep it shown.
-        /// </summary>
-        private static void KeepOnlyMainMesh(GameObject model)
+        private static void ChooseMeshes(GameObject model, string code, int texture, int helm)
         {
-            var handler = model.GetComponentInChildren<Lantern.EQ.Equipment.NonPlayableVariantHandler>();
-            if (handler != null && MainMeshes?.GetValue(handler) is List<GameObject> meshes && meshes.Count == 1 && meshes[0] != null)
-                meshes[0].SetActive(true);
+            code = code.ToLowerInvariant();
+            var renderers = model.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            bool robe = texture >= 10 && texture <= 16 && System.Linq.Enumerable.Any(renderers, r => r.gameObject.name.ToLowerInvariant() == code + "01");
+            bool hasHelm = System.Linq.Enumerable.Any(renderers, r => r.gameObject.name.ToLowerInvariant() == code + "he" + helm.ToString("00"));
+            string head = code + "he" + (hasHelm ? helm : 0).ToString("00");
+            foreach (var r in renderers)
+            {
+                string name = r.gameObject.name.ToLowerInvariant();
+                if (name == code)
+                    r.gameObject.SetActive(!robe);
+                else if (name == code + "01")
+                    r.gameObject.SetActive(robe);
+                else if (name.StartsWith(code + "he") && name.Length == code.Length + 4)
+                    r.gameObject.SetActive(name == head);
+            }
         }
 
         private void AddEntity(ZoneView.EntityView entity)
@@ -382,7 +382,7 @@ namespace EQClassic.Unity
                 model.transform.localScale = model.transform.localScale * (Scale * ModelCodes.Scale(entity.Spawn.Race, entity.Spawn.Size));
                 model.transform.localPosition = new Vector3(0f, FeetOffset(model), 0f);
                 // The armour and helmet the server gives (NPC texture / helmtexture, a player's chest and head material).
-                ApplyVariant(model, entity.Spawn.Texture, entity.Spawn.Helm);
+                ApplyVariant(model, entity.ModelCode, entity.Spawn.Texture, entity.Spawn.Helm);
                 Sharpen(model);
                 if (DebugModels)
                 {
