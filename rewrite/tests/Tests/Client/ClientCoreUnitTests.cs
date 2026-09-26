@@ -168,6 +168,14 @@ public class ClientCoreUnitTests
     }
 
     [Fact]
+    public void Sidestepping_right_goes_to_the_screen_right()
+    {
+        var player = new LocalPlayer(1, new Vec3(0, 0, 0), heading: 0); // facing +Y
+        player.Move(forward: 0, strafe: 1, turn: 0, seconds: 1);
+        Assert.True(player.Position.X < 0, $"{player.Position}"); // +X is west, on the left of a player facing north
+    }
+
+    [Fact]
     public void The_body_keeps_its_radius_from_walls()
     {
         string[] wallAt60 = ["v,0,0,60", "v,100,0,60", "v,100,50,60", "v,0,50,60", "i,0,4,5,6", "i,0,4,6,7"];

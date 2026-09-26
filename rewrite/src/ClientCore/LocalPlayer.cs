@@ -176,7 +176,9 @@ namespace EQClassic.ClientCore
                 return;
             float rad = Heading * (float)Math.PI / 180f;
             float fx = (float)Math.Sin(rad), fy = (float)Math.Cos(rad);   // heading 0 → +Y
-            float sx = fy, sy = -fx;                                      // right of the heading
+            // Right of the heading as it looks on screen: EverQuest's world is drawn mirrored (+X to the
+            // west), so the player's right is (−fy, fx), not (fy, −fx).
+            float sx = -fy, sy = fx;
             float length = Math.Min(1f, (float)Math.Sqrt(forward * forward + strafe * strafe));
             float norm = length / (float)Math.Sqrt(forward * forward + strafe * strafe);
             float speed = (Walking ? WalkSpeed : RunSpeed) * SpeedFactor * (Swimming ? SwimSpeedFactor : 1f);
