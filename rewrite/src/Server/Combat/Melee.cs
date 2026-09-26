@@ -13,6 +13,9 @@ namespace EQClassic.Server.Combat;
 public sealed record Combatant(bool IsPlayer, int Level, int Class, int MaxHp, int Offense, int ToHit, int Avoidance, int Mitigation,
     int DamageBonus, int BaseDamage, float DelaySeconds)
 {
+    /// <summary>The skill the main hand uses (skill-ups).</summary>
+    public int WeaponSkill { get; init; } = SkillCaps.HandToHand;
+
     /// <summary>An NPC: skills at their class caps, damage from its DB min/max hit (NPC::Attack).</summary>
     public static Combatant ForNpc(NpcTemplate npc, Spells.StatBonuses? bonuses = null)
     {
@@ -66,7 +69,7 @@ public sealed record Combatant(bool IsPlayer, int Level, int Class, int MaxHp, i
             Mitigation: ClientMitigation(p.Level, p.Class, p.Race, itemAC, b.AC, defense, p.Agi, 0),
             DamageBonus: ClientDamageBonus(p.Level, p.Class, twoHanded, delay),
             BaseDamage: damage,
-            DelaySeconds: WithAttackSpeed(delay / 10f, b));
+            DelaySeconds: WithAttackSpeed(delay / 10f, b)) { WeaponSkill = weaponSkillId };
     }
 }
 

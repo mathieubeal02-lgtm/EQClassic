@@ -88,6 +88,14 @@ public static class ProfileTemplate
         }
     }
 
+    /// <summary>skills[74] at 2508; an untrained (254) or unlearnable (255) skill still at 0 keeps its marker.</summary>
+    public static void SetSkills(byte[] p, IReadOnlyList<int> skills)
+    {
+        for (int i = 0; i < Math.Min(skills.Count, 74); i++)
+            if (skills[i] > 0 || p[2508 + i] < 254)
+                p[2508 + i] = (byte)Math.Clamp(skills[i], 0, 252);
+    }
+
     public static void SetStats(byte[] p, int str, int sta, int cha, int dex, int @int, int agi, int wis)
     {
         p[123] = (byte)str; p[124] = (byte)sta; p[125] = (byte)cha; p[126] = (byte)dex;

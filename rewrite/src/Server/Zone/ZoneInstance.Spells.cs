@@ -38,6 +38,8 @@ public sealed partial class ZoneInstance
         public int Gem { get; }
         internal Vec3 From { get; }
         internal double EndsAt { get; }
+        /// <summary>Hit while casting and not interrupted.</summary>
+        internal bool Channeled { get; set; }
     }
 
     /// <summary>A buff as the profile keeps it (SpellBuff_Struct): spell, caster level, tics left.</summary>
@@ -212,7 +214,7 @@ public sealed partial class ZoneInstance
             SetSitting(playerId, false);
         int spellLevel = spell.LevelFor(caster.Fighter.Class) ?? caster.Level;
         var magic = caster.Magic;
-        int chance = SpellRules.FizzleChance(spellLevel, spell.BaseDifficulty, magic?.Skill(spell.Skill) ?? 0, caster.Level, magic?.Wis ?? 75, magic?.Int ?? 75);
+        int chance = SpellRules.FizzleChance(spellLevel, spell.BaseDifficulty, SkillOf(caster, spell.Skill), caster.Level, magic?.Wis ?? 75, magic?.Int ?? 75);
         if (SpellRules.Fizzles(chance, _random))
         {
             SetMana(caster, caster.Mana - spell.Mana); // the legacy zone takes the whole cost
@@ -288,9 +290,11 @@ public sealed partial class ZoneInstance
     {
         if (player.Cast is null)
             return;
-        int chance = 30 + (player.Magic?.Skill(SpellRules.Channeling) ?? 0) / 4;
+        int chance = 30 + SkillOf(player, SpellRules.Channeling) / 4;
         if (_random.NextDouble() * 100 > chance)
             Interrupt(player);
+        else
+            player.Cast.Channeled = true; // "You regain your concentration" at the end, and a channeling skill-up
     }
 
     /// <summary>SpellFinished: range, the zone's rules, mana, then the spell on each of its targets.</summary>
@@ -312,6 +316,14 @@ public sealed partial class ZoneInstance
             return;
         }
         SetMana(caster, caster.Mana - spell.Mana); // a refusal by the zone's rules spends it too (InterruptSpell(false, true))
+        if (cast.Channeled)
+        {
+            _events.Add(new Told(caster.Id, "You regain your concentration and continue your casting!"));
+            CheckAddSkill(caster, SpellRules.Channeling);
+        }
+        // The legacy zone never raised the casting skills (only channeling and meditate); EQMacEmu does,
+        // on each cast that is not a fizzle: without it a caster's fizzle rate never improved.
+        CheckAddSkill(caster, spell.Skill);
         if (ZoneRefusal(caster, target, spell) is { } refusal)
         {
             _events.Add(new Told(caster.Id, refusal));
@@ -634,7 +646,10 @@ public sealed partial class ZoneInstance
     {
         if (player.MaxMana <= 0 || player.Mana >= player.MaxMana)
             return;
-        SetMana(player, player.Mana + SpellRules.ManaRegen(player.Level, player.Sitting, player.Magic?.Skill(SpellRules.Meditate) ?? 0, player.MaxMana));
+        int meditate = SkillOf(player, SpellRules.Meditate);
+        SetMana(player, player.Mana + SpellRules.ManaRegen(player.Level, player.Sitting, meditate, player.MaxMana));
+        if (player.Sitting && meditate > 0)
+            CheckAddSkill(player, SpellRules.Meditate); // DoManaRegen
     }
 
     /// <summary>After a level change (Client::SetLevel): a new pool (CalcMaxMana), filled.</summary>

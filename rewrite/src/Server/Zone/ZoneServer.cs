@@ -280,15 +280,18 @@ public sealed class ZoneServer : IDisposable
         }
         var profile = ticket.Profile;
         var inventory = profile is null ? null : ZoneInstance.PlayerInventory.From(profile.Inventory, profile.Charges, profile.Coins);
+        // One skills array for the zone's skill-ups and the fighter builder below.
+        var skills = profile is null ? null : Enumerable.Range(0, EQClassic.Server.Combat.SkillCaps.SkillCount).Select(profile.Skill).ToArray();
         var progress = profile is null ? null : new ZoneInstance.PlayerProgress(profile.Exp, profile.BindZone,
             new Vec3(profile.BindX, profile.BindY, profile.BindZ),
             // The fighter reads the inventory as it is when rebuilt (level up, equipment change).
-            (level, bonuses) => EQClassic.Server.Combat.Combatant.ForPlayer(profile with { Level = level, Inventory = inventory!.Items.ToArray() }, Items, bonuses),
+            (level, bonuses) => EQClassic.Server.Combat.Combatant.ForPlayer(profile with { Level = level, Inventory = inventory!.Items.ToArray(), Skills = skills! }, Items, bonuses),
             inventory,
-            new ZoneInstance.PlayerMagic(profile.Wis, profile.Int, profile.Skills, profile.SpellBook, profile.SpellGemIds, profile.Mana,
+            new ZoneInstance.PlayerMagic(profile.Wis, profile.Int, skills!, profile.SpellBook, profile.SpellGemIds, profile.Mana,
                 profile.Buffs.Select(b => new ZoneInstance.SavedBuff(b.SpellId, b.CasterLevel, b.Tics)).ToList()))
             {
                 Deity = profile.Deity,
+                Skills = skills,
                 Factions = FactionValues?.Load(ticket.CharacterName),
             };
         var entity = instance.AddPlayer(ticket.CharacterName, ticket.Race, ticket.Gender, profile?.Level ?? ticket.Level, ticket.Position,
@@ -569,6 +572,7 @@ public sealed class ZoneServer : IDisposable
                 Mana = now.Mana, SpellBook = now.Book, SpellGemIds = now.Gems.ToArray(),
                 Buffs = ZoneInstance.SaveBuffs(now).Select(b => (b.SpellId, b.CasterLevel, b.TicsLeft)).ToArray(),
                 BindZone = now.BindZone, BindX = now.Bind.X, BindY = now.Bind.Y, BindZ = now.Bind.Z,
+                Skills = now.Skills.ToArray(),
             }
             : player.Ticket.Profile;
         var ticket = player.Ticket with { Zone = crossed.Line.TargetZone, Position = d, Level = now?.Level ?? player.Ticket.Level, Profile = profile };
@@ -596,6 +600,8 @@ public sealed class ZoneServer : IDisposable
             player.Ticket.Profile is null ? null : state?.Exp, player.Ticket.Profile is null ? null : state?.Level);
         if (player.Ticket.Profile is not null && state?.Inventory is { } inventory)
             Characters?.SaveInventory(player.Ticket.CharacterName, inventory.Items, inventory.Charges, inventory.Coins);
+        if (player.Ticket.Profile is not null && state is not null)
+            Characters?.SaveSkills(player.Ticket.CharacterName, state.Skills);
         if (player.Ticket.Profile is not null && state is not null)
             Characters?.SaveSpells(player.Ticket.CharacterName, state.Book, state.Gems, state.Mana,
                 ZoneInstance.SaveBuffs(state).Select(b => (b.SpellId, b.CasterLevel, b.TicsLeft)).ToList());

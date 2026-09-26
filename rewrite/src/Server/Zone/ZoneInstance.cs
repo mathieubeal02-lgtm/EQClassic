@@ -109,6 +109,8 @@ public sealed partial class ZoneInstance
         internal readonly Dictionary<int, int> FactionValues = new();
         public int FactionValue(int factionId) => FactionValues.GetValueOrDefault(factionId);
         internal void SetFactionValue(int factionId, int value) => FactionValues[factionId] = value;
+        /// <summary>Players: skill values by skill id (the fighter builder reads the same array).</summary>
+        public int[] Skills { get; internal set; } = new int[SkillCaps.SkillCount];
         /// <summary>Players: the merchant whose window is open, and its goods.</summary>
         public int? MerchantId { get; internal set; }
         internal IReadOnlyList<int> MerchantGoods = Array.Empty<int>();
@@ -248,6 +250,7 @@ public sealed partial class ZoneInstance
         player.Fighter = fighter ?? progress?.FighterAt?.Invoke(level, StatBonuses.None) ?? DefaultPlayer(level);
         player.Hp = hp is int h && h > 0 && h <= player.Fighter.MaxHp ? h : player.Fighter.MaxHp;
         player.EntryPosition = position;
+        player.Skills = progress?.Skills ?? (progress?.Magic?.Skills is { Count: > 0 } s ? s.ToArray() : new int[SkillCaps.SkillCount]);
         player.BindZone = progress?.BindZone ?? "";
         player.Deity = progress?.Deity ?? FactionRules.AgnosticDeity;
         foreach (var (id, value) in progress?.Factions ?? new Dictionary<int, int>())
@@ -263,6 +266,8 @@ public sealed partial class ZoneInstance
         PlayerMagic? Magic = null)
     {
         public int Deity { get; init; } = FactionRules.AgnosticDeity;
+        /// <summary>The character's skills; skill-ups change this array, which <see cref="FighterAt"/> may read.</summary>
+        public int[]? Skills { get; init; }
         /// <summary>faction_values of the character.</summary>
         public IReadOnlyDictionary<int, int>? Factions { get; init; }
     }
@@ -764,6 +769,14 @@ public sealed partial class ZoneInstance
         if (result.Hit)
             defender.Hp -= result.Damage;
         _events.Add(new Swung(attacker.Id, defender.Id, result.Hit ? result.Damage : 0, defender.HpPercent));
+        if (attacker.IsPlayer)
+        {
+            // Client::GetWeaponSkill: every swing may raise the weapon's skill and offense.
+            CheckAddSkill(attacker, attacker.Fighter.WeaponSkill, -10);
+            CheckAddSkill(attacker, SkillCaps.Offense, -10);
+        }
+        if (defender.IsPlayer && result.Hit && result.Damage > 0)
+            CheckAddSkill(defender, SkillCaps.Defense, -10); // Client::Damage: melee damage only
         AfterHarm(attacker, defender, result.Hit ? result.Damage : 0);
     }
 

@@ -23,6 +23,9 @@ public interface ICharacterStore
     /// <summary>The 30 inventory slots (item ids and charges) and the money, into the profile.</summary>
     void SaveInventory(string name, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins);
 
+    /// <summary>Skill values after skill-ups.</summary>
+    void SaveSkills(string name, IReadOnlyList<int> skills);
+
     /// <summary>Where death and gate send the character (bind_point_zone and bind_location slot 0).</summary>
     void SaveBind(string name, string zone, float x, float y, float z);
 
@@ -99,6 +102,17 @@ public sealed class InMemoryCharacterStore : ICharacterStore
         _characters[i] = c with { Profile = c.Profile with { SpellBook = book.ToArray(), SpellGemIds = gems.ToArray(), Mana = mana, Buffs = buffs.ToArray() } };
         if (Profiles.TryGetValue(name, out var raw))
             WriteSpells(raw, book, gems, mana, buffs);
+    }
+
+    public void SaveSkills(string name, IReadOnlyList<int> skills)
+    {
+        int i = _characters.FindIndex(c => string.Equals(c.Profile.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (i < 0)
+            return;
+        var c = _characters[i];
+        _characters[i] = c with { Profile = c.Profile with { Skills = skills.ToArray() } };
+        if (Profiles.TryGetValue(name, out var raw))
+            ProfileTemplate.SetSkills(raw, skills);
     }
 
     public void SaveBind(string name, string zone, float x, float y, float z)
@@ -206,6 +220,9 @@ public sealed class MySqlCharacterStore : ICharacterStore
 
     public void SaveBind(string name, string zone, float x, float y, float z) =>
         Update(name, profile => ProfileTemplate.SetBind(profile, zone, x, y, z));
+
+    public void SaveSkills(string name, IReadOnlyList<int> skills) =>
+        Update(name, profile => ProfileTemplate.SetSkills(profile, skills));
 
     public void SaveSpells(string name, IReadOnlyList<int> book, IReadOnlyList<int> gems, int mana, IReadOnlyList<(int SpellId, int CasterLevel, int Tics)> buffs) =>
         Update(name, profile => InMemoryCharacterStore.WriteSpells(profile, book, gems, mana, buffs));
