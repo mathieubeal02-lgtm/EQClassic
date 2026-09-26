@@ -885,7 +885,7 @@ public sealed partial class ZoneInstance
                 PetStep(e, seconds);
                 continue;
             }
-            if (e.Fleeing)
+            if (e.Fleeing || e.Bonuses.Feared)
             {
                 FleeStep(e, seconds);
                 continue;
@@ -961,7 +961,7 @@ public sealed partial class ZoneInstance
     {
         foreach (var e in _entities.Values.ToList())
         {
-            if (!_entities.ContainsKey(e.Id) || Incapacitated(e) || !e.IsPlayer && (e.Cast is not null || e.Fleeing)) // slain earlier in this tick, stunned, mesmerized, casting, fleeing
+            if (!_entities.ContainsKey(e.Id) || Incapacitated(e) || !e.IsPlayer && (e.Cast is not null || e.Fleeing || e.Bonuses.Feared)) // slain earlier in this tick, stunned, mesmerized, casting, fleeing
                 continue;
             int? targetId = e.IsPlayer ? (e.AutoAttack ? e.PlayerTargetId : null) : e.TargetId;
             if (targetId is not int tid)
@@ -1001,6 +1001,8 @@ public sealed partial class ZoneInstance
         var result = Melee.Swing(attacker.Fighter, defender.Fighter, _random, defender.Sitting);
         attacker.LastCombatTime = defender.LastCombatTime = _time;
         if (result.Hit)
+            result = result with { Damage = Absorb(defender, result.Damage) };
+        if (result.Hit)
             defender.Hp -= result.Damage;
         _events.Add(new Swung(attacker.Id, defender.Id, result.Hit ? result.Damage : 0, defender.HpPercent));
         if (attacker.IsPlayer)
@@ -1012,6 +1014,8 @@ public sealed partial class ZoneInstance
         if (defender.IsPlayer && result.Hit && result.Damage > 0)
             CheckAddSkill(defender, SkillCaps.Defense, -10); // Client::Damage: melee damage only
         AfterHarm(attacker, defender, result.Hit ? result.Damage : 0);
+        if (result.Hit && _entities.ContainsKey(attacker.Id) && _entities.ContainsKey(defender.Id) && !defender.IsCorpse)
+            DamageShield(defender, attacker);
     }
 
     /// <summary>
@@ -1178,7 +1182,8 @@ public sealed partial class ZoneInstance
         {
             if (!p.IsPlayer || p.Hidden || p.Bonuses.Invisible || p.Bonuses.InvisibleToUndead && npc.Npc!.Undead)
                 continue;
-            var r2 = AggroRules.RadiusSquared(Factions.Standing(p, npc.Npc!), p.Level, npc.Level, p.Sitting, npc.Npc!.Undead);
+            float range = Math.Max(0f, AggroRules.BaseRange - npc.Bonuses.FrenzyRadius * npc.Bonuses.FrenzyRadius); // lulled: NPC::CheckMyAgroStatus
+            var r2 = AggroRules.RadiusSquared(Factions.Standing(p, npc.Npc!), p.Level, npc.Level, p.Sitting, npc.Npc!.Undead, range);
             float d2 = Distance2(p.Position, npc.Position);
             if (r2 is null || d2 > r2 || d2 >= bestD2)
                 continue;

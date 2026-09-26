@@ -69,6 +69,92 @@ public class SpellEffectTests
 
     private static ZoneInstance.Entity Npc(ZoneInstance zone, int index = 0) => zone.Entities.Where(e => !e.IsPlayer).OrderBy(e => e.Id).ElementAt(index);
 
+    private const int ShieldOfThistles = 256, RuneI = 481, CancelMagic = 48, Lull = 208, Fear = 229, EvacuateNorth = 602, Yaulp = 210;
+
+    /// <summary>Casts until the spell takes hold (NPCs resist some).</summary>
+    private static void CastUntil(ZoneInstance zone, ZoneInstance.Entity player, int spellId, Func<bool> landed)
+    {
+        for (int i = 0; i < 30 && !landed(); i++)
+            Cast(zone, player, spellId);
+        Assert.True(landed());
+    }
+
+    [Fact]
+    public void Thorns_hurt_whoever_hits_the_shielded()
+    {
+        var (zone, player) = Setup(factions: new Kos(), npcs: (new Vec3(5, 0, 0), Orc()));
+        var orc = Npc(zone);
+        zone.SetTarget(player.Id, player.Id);
+        Cast(zone, player, ShieldOfThistles);
+        Assert.True(player.Bonuses.DamageShield >= 3); // base 3, growing with the caster's level
+        var events = Run(zone, 20f);
+        int hits = events.OfType<ZoneInstance.Swung>().Count(s => s.AttackerId == orc.Id && s.Damage > 0);
+        Assert.True(hits > 0);
+        Assert.True(orc.Hp < orc.Fighter.MaxHp); // the player never swung
+        Assert.Contains(new ZoneInstance.Told(player.Id, "an orc is pierced by thorns!"), events);
+    }
+
+    [Fact]
+    public void A_rune_takes_the_blows_until_it_is_used_up()
+    {
+        var (zone, player) = Setup(factions: new Kos(), npcs: (new Vec3(5, 0, 0), Orc(level: 20)));
+        zone.SetTarget(player.Id, player.Id);
+        Cast(zone, player, RuneI);
+        Assert.Equal(27, player.Buffs.Single().RuneLeft);
+        int hp = player.Hp;
+        var events = new List<ZoneInstance.ZoneEvent>();
+        while (player.Buffs.Count > 0)
+        {
+            events.AddRange(Run(zone, 1f));
+            if (player.Buffs.Count > 0)
+                Assert.True(player.Hp >= hp); // nothing gets through while the rune holds (regeneration may add)
+        }
+        Assert.Contains(new ZoneInstance.BuffFaded(player.Id, RuneI), events);
+    }
+
+    [Fact]
+    public void Cancel_magic_takes_a_buff_off()
+    {
+        var (zone, player) = Setup();
+        zone.SetTarget(player.Id, player.Id);
+        Cast(zone, player, SpiritOfWolf);
+        Assert.Single(player.Buffs);
+        Cast(zone, player, CancelMagic);
+        Assert.Empty(player.Buffs);
+    }
+
+    [Fact]
+    public void A_lulled_npc_lets_players_pass_and_a_feared_one_runs()
+    {
+        var (zone, player) = Setup(factions: new Kos(), npcs: [(new Vec3(40, 0, 0), Orc()), (new Vec3(-40, 0, 0), Orc())]);
+        var calm = Npc(zone);
+        zone.SetTarget(player.Id, calm.Id);
+        CastUntil(zone, player, Lull, () => calm.Bonuses.FrenzyRadius == 15);
+        calm.TargetId = null; // a resisted cast angered it
+        Assert.Null(zone.MovePlayer(player.Id, new Vec3(30, 0, 0), 90));
+        Run(zone, 3f);
+        Assert.Null(calm.TargetId); // aggro range 145 − 15² ≤ 0
+
+        var scared = Npc(zone, 1);
+        zone.SetTarget(player.Id, scared.Id);
+        CastUntil(zone, player, Fear, () => scared.Bonuses.Feared);
+        var events = Run(zone, 3f);
+        Assert.DoesNotContain(events, e => e is ZoneInstance.Swung s && s.AttackerId == scared.Id);
+        Assert.True(Math.Abs(scared.Position.X - (-40)) > 1 || Math.Abs(scared.Position.Y) > 1); // on the run
+    }
+
+    [Fact]
+    public void Evacuate_and_yaulp()
+    {
+        var (zone, player) = Setup();
+        zone.SetTarget(player.Id, player.Id);
+        player.Fatigue = 50;
+        Cast(zone, player, Yaulp);
+        Assert.True(player.Fatigue < 50);
+        var events = Cast(zone, player, EvacuateNorth);
+        Assert.Contains(events, e => e is ZoneInstance.CrossedZoneLine c && c.Line.TargetZone == "northkarana");
+    }
+
     [Fact]
     public void A_rooted_npc_does_not_chase()
     {

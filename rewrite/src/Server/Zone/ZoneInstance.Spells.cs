@@ -76,6 +76,8 @@ public sealed partial class ZoneInstance
         BuffRules.DiseaseCounter, BuffRules.PoisonCounter, BuffRules.CurseCounter, // what cures count down: nothing to do until cures exist
         SpellEffect.Invisibility, SpellEffect.InvisVsUndead, SpellEffect.Stun, SpellEffect.BindAffinity, SpellEffect.Gate, SpellEffect.Mez,
         SpellEffect.SummonItem, SpellEffect.Levitate, SpellEffect.Teleport, SpellEffect.Root, WipeHateList, SummonPetEffect, NecPetEffect,
+        SpellEffect.DamageShield, SpellEffect.Rune, SpellEffect.Stamina, SpellEffect.CancelMagic, SpellEffect.Fear,
+        SpellEffect.Lull, SpellEffect.FrenzyRadius, SpellEffect.Harmony, SpellEffect.Succor,
     ];
 
     private const int WipeHateList = 63, SummonPetEffect = 33, NecPetEffect = 71;
@@ -384,12 +386,81 @@ public sealed partial class ZoneInstance
         return false;
     }
 
-    private const int Harmony = 86;
+    private const int Harmony = SpellEffect.Harmony;
+
+    /// <summary>Spell::IsUtilitySpell: calming and dispelling; landed, they anger no one (resisted, they do).</summary>
+    private static bool IsUtility(Spell spell) => spell.Effect.Any(e => e is SpellEffect.CancelMagic or WipeHateList or SpellEffect.Lull
+        or SpellEffect.FrenzyRadius or SpellEffect.Harmony);
+
+    /// <summary>Client::Damage / NPC::Damage: runes absorb damage first, fading when used up.</summary>
+    private int Absorb(Entity e, int damage)
+    {
+        if (damage <= 0)
+            return damage;
+        var used = new List<Buff>();
+        foreach (var buff in e.BuffList.Where(b => b.RuneLeft > 0))
+        {
+            if (damage > buff.RuneLeft)
+            {
+                damage -= buff.RuneLeft;
+                buff.RuneLeft = 0;
+                used.Add(buff);
+            }
+            else
+            {
+                buff.RuneLeft -= damage;
+                damage = 0;
+                break;
+            }
+        }
+        RemoveBuffs(e, used);
+        return damage;
+    }
+
+    /// <summary>Mob::DamageShield: after a melee hit, the shield hurts the attacker (a reverse one heals them).</summary>
+    private void DamageShield(Entity defender, Entity attacker)
+    {
+        var b = defender.Bonuses;
+        if (b.ReverseDamageShield > 0)
+        {
+            attacker.Hp = Math.Min(attacker.Fighter.MaxHp, attacker.Hp + b.ReverseDamageShield);
+            if (attacker.IsPlayer)
+            {
+                _events.Add(new Told(attacker.Id, $"You are healed for {b.ReverseDamageShield} points of damage!"));
+                _events.Add(new HealthChanged(attacker.Id, attacker.Hp, attacker.Fighter.MaxHp));
+            }
+            return;
+        }
+        if (b.DamageShield <= 0)
+            return;
+        string? what = b.DamageShieldType switch { 1 => "pierced by thorns", 2 => "burned", 3 => "tormented", _ => null };
+        if (what is not null)
+        {
+            if (attacker.IsPlayer)
+                _events.Add(new Told(attacker.Id, $"YOU are {what}!"));
+            string name = DisplayName(attacker.Name);
+            foreach (var p in _entities.Values.Where(p => p.IsPlayer && p != attacker && Distance2(p.Position, attacker.Position) <= 200f * 200f))
+                _events.Add(new Told(p.Id, $"{name} is {what}!"));
+        }
+        int damage = Absorb(attacker, b.DamageShield);
+        attacker.Hp -= damage;
+        AfterHarm(defender, attacker, damage);
+    }
+
+    /// <summary>SE_CancelMagic: the first buff of a caster no stronger than the dispeller's level + base, without poison or disease counters, fades.</summary>
+    private void CancelMagic(Entity caster, Entity target, int power)
+    {
+        var buff = target.BuffList.FirstOrDefault(b => b.CasterLevel <= caster.Level + power
+            && !b.Spell.Effect.Contains((byte)BuffRules.DiseaseCounter) && !b.Spell.Effect.Contains((byte)BuffRules.PoisonCounter));
+        if (buff is not null)
+            RemoveBuffs(target, [buff]);
+    }
 
     /// <summary>SpellOnTarget + SpellEffect: resist, buff, then the instant effects.</summary>
     private CastOutcome SpellOnTarget(Entity caster, Entity target, Spell spell)
     {
-        bool hostile = !spell.Beneficial && target != caster;
+        // Calming and dispelling an NPC are resisted like harm (spells.cpp: IsDetrimentalSpell() || IsUtilitySpell()).
+        bool hostile = (!spell.Beneficial || IsUtility(spell) && !target.IsPlayer) && target != caster;
         if (hostile)
             caster.LastCombatTime = target.LastCombatTime = _time;
         int? resist = !hostile ? null : target.Npc is { } npc ? NpcResist(target, npc, spell.ResistType)
@@ -412,7 +483,7 @@ public sealed partial class ZoneInstance
         if (!_entities.ContainsKey(target.Id))
             return CastOutcome.Finished;
         _events.Add(new SpellLanded(caster.Id, target.Id, spell.Id, target.Hp - before));
-        if (hostile)
+        if (hostile && (before != target.Hp || !IsUtility(spell)))
             AfterHarm(caster, target, before - target.Hp);
         else if (target.IsPlayer && target.Hp != before)
             _events.Add(new HealthChanged(target.Id, target.Hp, target.Fighter.MaxHp));
@@ -473,8 +544,25 @@ public sealed partial class ZoneInstance
                 case SpellEffect.SummonItem when target.IsPlayer:
                     SummonItem(target, spell.Base[i], Math.Clamp(v, 1, 20));
                     break;
+                case SpellEffect.Succor when target.IsPlayer:
+                    // Evacuate: to the spell's zone and place, or this zone's safe point.
+                    if (spell.TeleportZone.Length > 0)
+                        Teleport(target, spell.TeleportZone, new Vec3(spell.Base[1], spell.Base[0], spell.Base[2]), "teleport");
+                    else if (Info is { } info)
+                        Teleport(target, ShortName, new Vec3(info.SafeX, info.SafeY, info.SafeZ), "teleport");
+                    return;
+                case SpellEffect.CancelMagic:
+                    CancelMagic(caster, target, spell.Base[i]);
+                    break;
+                case SpellEffect.Stamina when target.IsPlayer:
+                    // The legacy zone left endurance to the client: here it takes fatigue away (or adds it).
+                    target.Fatigue = Math.Clamp(target.Fatigue - Math.Abs(v) * (spell.Beneficial ? 1 : -1), 0, 100);
+                    _events.Add(new StaminaChanged(target.Id));
+                    break;
             }
         }
+        if (change < 0 && target != caster)
+            change = -Absorb(target, -change);
         target.Hp = Math.Min(target.Fighter.MaxHp, target.Hp + change);
     }
 
@@ -601,7 +689,7 @@ public sealed partial class ZoneInstance
             {
                 var dot = e.BuffList.FirstOrDefault(x => !x.Spell.Beneficial && x.Spell.Effect.Contains((byte)SpellEffect.CurrentHp));
                 var caster = dot is null ? null : _entities.GetValueOrDefault(dot.CasterId);
-                int damage = Math.Min(-b.HpPerTic, Math.Max(e.Hp, 0) + 1);
+                int damage = Absorb(e, Math.Min(-b.HpPerTic, Math.Max(e.Hp, 0) + 1));
                 e.Hp -= damage;
                 if (caster is not null && caster != e)
                 {
