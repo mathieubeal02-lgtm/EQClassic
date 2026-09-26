@@ -61,6 +61,20 @@ namespace EQClassic.Unity
             }
         }
 
+        /// <summary>The chat's colours on the parchment of the classic frame: dark inks.</summary>
+        private static Color InkColour(ChatKind kind)
+        {
+            switch (kind)
+            {
+                case ChatKind.Tell: return new Color(0.45f, 0f, 0.45f);
+                case ChatKind.Group: return new Color(0f, 0.2f, 0.55f);
+                case ChatKind.Shout: return new Color(0.6f, 0f, 0f);
+                case ChatKind.OutOfCharacter:
+                case ChatKind.Auction: return new Color(0f, 0.38f, 0f);
+                default: return new Color(0.12f, 0.08f, 0.04f);
+            }
+        }
+
         private static int Number(string text) => int.TryParse(text, out int n) && n > 0 ? n : 0;
 
         private static readonly string[] SlotNames =
@@ -335,24 +349,29 @@ namespace EQClassic.Unity
         /// while typing scroll back), and the input line while it is open (arrows recall what was typed).
         /// <paramref name="screen"/> is where it is on the screen, for the wheel.
         /// </summary>
-        private void ChatPanel(Rect r, Rect screen)
+        private void ChatPanel(Rect r, Rect screen, bool parchment = false)
         {
             _chatScreenRect = screen;
             float input = _chatOpen ? 26f : 0f;
             _chatLinesShown = Mathf.Max(1, (int)((r.height - input) / 18f));
             var lines = _chat.Visible(_chatLinesShown);
             float bottom = r.yMax - input;
-            float textWidth = r.width - 26;
+            float textWidth = parchment ? r.width : r.width - 26;
             var colour = GUI.color;
             for (int i = 0; i < lines.Count; i++)
             {
-                GUI.color = ChatColour(ChatLog.Kind(lines[i]));
-                GUI.Label(new Rect(r.x, bottom - 18 * (lines.Count - i), textWidth, 20), lines[i]);
+                var kind = ChatLog.Kind(lines[i]);
+                GUI.color = parchment ? InkColour(kind) : ChatColour(kind);
+                var at = new Rect(r.x, bottom - 18 * (lines.Count - i), textWidth, 20);
+                if (parchment)
+                    GUI.Label(at, lines[i], _parchment);
+                else
+                    GUI.Label(at, lines[i]);
             }
             GUI.color = colour;
-            if (GUI.Button(new Rect(r.xMax - 22, r.y, 22, 22), "^"))
+            if (!parchment && GUI.Button(new Rect(r.xMax - 22, r.y, 22, 22), "^"))
                 _chat.ScrollBy(_chatLinesShown - 1, _chatLinesShown);
-            if (GUI.Button(new Rect(r.xMax - 22, bottom - 22, 22, 22), "v"))
+            if (!parchment && GUI.Button(new Rect(r.xMax - 22, bottom - 22, 22, 22), "v"))
                 _chat.ScrollBy(1 - _chatLinesShown, _chatLinesShown);
             if (_chat.Scroll > 0)
                 GUI.Label(new Rect(r.xMax - 250, r.y, 220, 20), $"(back {_chat.Scroll} lines)");

@@ -112,6 +112,8 @@ namespace EQClassic.ClientCore
                     }
                     int o = (y * width + x) * 4;
                     bool magenta = r > 200 && g < 60 && b > 200;
+                    if (magenta)
+                        r = g = b = 0; // no pink fringe where the scaled art blends into the transparent parts
                     rgba[o] = r; rgba[o + 1] = g; rgba[o + 2] = b; rgba[o + 3] = magenta ? (byte)0 : (byte)255;
                 }
             }

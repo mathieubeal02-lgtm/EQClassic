@@ -106,6 +106,11 @@ namespace EQClassic.Unity
 
         private void DrawClassic()
         {
+            if (Skin is { } skin)
+            {
+                DrawClassicArt(skin); // the Trilogy client's own frame
+                return;
+            }
             float W = Screen.width, H = Screen.height;
             float side = Mathf.Clamp(W * 0.15f, 190f, 300f);
             _presenter.Viewport = new Rect(side / W, 0f, 1f - 2f * side / W, 1f);

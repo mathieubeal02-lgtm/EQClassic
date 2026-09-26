@@ -270,9 +270,19 @@ namespace UnityEngine
 
     public class Texture : Object { }
 
+    public enum TextureFormat { RGBA32 = 4 }
+    public enum FilterMode { Point, Bilinear, Trilinear }
+    public enum TextureWrapMode { Repeat, Clamp }
+
     public sealed class Texture2D : Texture
     {
         public Texture2D(int width, int height) { }
+        public Texture2D(int width, int height, TextureFormat format, bool mipChain) { }
+        public void LoadRawTextureData(byte[] data) { }
+        public FilterMode filterMode { get; set; }
+        public TextureWrapMode wrapMode { get; set; }
+        public int width => 0;
+        public int height => 0;
         public void SetPixel(int x, int y, Color color) { }
         public void Apply() { }
     }
@@ -316,6 +326,8 @@ namespace UnityEngine
         public static float Clamp(float value, float min, float max) => value;
         public static float Max(float a, float b) => a;
         public static float Min(float a, float b) => a;
+        public static int RoundToInt(float f) => 0;
+        public static int Clamp(int value, int min, int max) => value;
         public static int Min(int a, int b) => a;
         public static int Max(int a, int b) => a;
     }
@@ -338,11 +350,20 @@ namespace UnityEngine
         public GUIStyle(GUIStyle other) { }
         public TextAnchor alignment { get; set; }
         public int fontSize { get; set; }
+        public GUIStyleState normal { get; set; } = new GUIStyleState();
+        public GUIStyleState hover { get; set; } = new GUIStyleState();
+        public GUIStyleState active { get; set; } = new GUIStyleState();
         public FontStyle fontStyle { get; set; }
         public bool wordWrap { get; set; }
     }
 
     public enum FontStyle { Normal, Bold, Italic, BoldAndItalic }
+
+    public class GUIStyleState
+    {
+        public Texture2D background { get; set; }
+        public Color textColor { get; set; }
+    }
 
     public class GUISkin : Object
     {
@@ -355,6 +376,7 @@ namespace UnityEngine
     public static class GUI
     {
         public static void DrawTexture(Rect position, Texture image) { }
+        public static void DrawTextureWithTexCoords(Rect position, Texture image, Rect texCoords) { }
         public static void SetNextControlName(string name) { }
         public static void FocusControl(string name) { }
         public static string TextField(Rect position, string text) => text;

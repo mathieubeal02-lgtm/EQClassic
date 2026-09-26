@@ -66,8 +66,9 @@ namespace EQClassic.Unity.Editor
                     mesh.WriteLantern(writer);
                 }
             }
-            // The client's music (XMI) and sounds (WAV), as LanternExtractor exported them (tools/lantern/extract.sh <client> sounds music).
-            foreach (var folder in new[] { "music", "sounds" })
+            // The client's music (XMI) and sounds (WAV), as LanternExtractor exported them (tools/lantern/extract.sh <client> sounds music),
+            // and its interface art (bmpwad*.s3d, copied by tools/unity/setup-client.sh).
+            foreach (var folder in new[] { "music", "sounds", "ui" })
             {
                 var from = Path.Combine(ClientPaths.Exports, folder);
                 if (!Directory.Exists(from))

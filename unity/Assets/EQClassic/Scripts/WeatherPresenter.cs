@@ -50,7 +50,9 @@ namespace EQClassic.Unity
             shape.shapeType = ParticleSystemShapeType.Box;
             shape.scale = new Vector3(40f, 40f, 1f);
             var renderer = go.GetComponent<ParticleSystemRenderer>();
-            var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+            // The URP particle shader is not in every build (it is found only when something references it):
+            // without a material the particles draw magenta, so fall back on Sprites/Default, always included.
+            var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Sprites/Default");
             if (renderer != null && shader != null)
             {
                 renderer.material = new Material(shader);

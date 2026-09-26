@@ -18,6 +18,13 @@ if ! git -C "$REPO/externals/LanternUnityTools" lfs pull; then
   exit 1
 fi
 mkdir -p "$OUT"
+# The Trilogy client's interface art (the classic frame, buttons, spell gems, icons): its bmpwad*.s3d
+# archives, read by the client at run time. EQC_CLIENT: the client install (default ~/eq-client).
+CLIENT=${EQC_CLIENT:-$HOME/eq-client}
+if ls "$CLIENT"/bmpwad*.s3d >/dev/null 2>&1; then
+  mkdir -p "$REPO/build/lantern-work/Exports/ui"
+  cp "$CLIENT"/bmpwad*.s3d "$REPO/build/lantern-work/Exports/ui/"
+fi
 rsync -a --delete --exclude Library --exclude Temp --exclude Logs --exclude obj \
   --exclude Assets/EQClassic --exclude Assets/Plugins/EQClassic --exclude Assets/EQAssets \
   --exclude 'Assets/Content/AssetBundleContent/*' \
