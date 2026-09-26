@@ -4,7 +4,7 @@ using EQClassic.Shared.Zone;
 namespace EQClassic.ClientCore
 {
     /// <summary>What a line typed in the chat box asks for.</summary>
-    public enum ChatAction { None, Send, Who, Location, Sit, Stand, Camp, Consider, Target, Cast, Ability, Invite, Follow, Decline, Disband, Unknown }
+    public enum ChatAction { None, Send, Who, Location, Sit, Stand, Camp, Consider, Target, Cast, Ability, Invite, Follow, Decline, Disband, Help, Unknown }
 
     public readonly struct ParsedChat
     {
@@ -61,6 +61,7 @@ namespace EQClassic.ClientCore
                 case "con": case "consider": return new ParsedChat(ChatAction.Consider);
                 case "target": case "tar": return new ParsedChat(ChatAction.Target, target: rest);
                 case "cast": return new ParsedChat(ChatAction.Cast, target: rest);
+                case "help": case "h": return new ParsedChat(ChatAction.Help);
                 case "gsay": case "g": return Said(ChatChannel.Group, rest);
                 case "invite": case "inv": return new ParsedChat(ChatAction.Invite, target: rest);
                 case "follow": return new ParsedChat(ChatAction.Follow);
@@ -90,6 +91,16 @@ namespace EQClassic.ClientCore
                 default: return mine ? $"You say, '{m.Text}'" : $"{m.From} says, '{m.Text}'";
             }
         }
+
+        /// <summary>/help: the commands this client knows.</summary>
+        public static readonly string[] HelpLines =
+        {
+            "Chat: /say /shout /ooc /auction /tell <name> /em /gsay (/g); Enter to type.",
+            "Info: /who /loc /con /target <name> /help",
+            "Actions: /sit /stand /camp /cast <1-8> /kick /bash /taunt /mend /hide /sneak /forage",
+            "Groups: /invite [name] /follow /decline /disband",
+            "Keys: I inventory, B spell book, K skills, 1-8 spells, Tab target, F attack, C consider, L loot, U use (doors, merchants), X sit, Space jump or swim up, Ctrl swim down, F9 view",
+        };
 
         /// <summary>/loc: the Trilogy client prints Y, X, Z.</summary>
         public static string Location(EQClassic.Shared.World.Vec3 p) =>

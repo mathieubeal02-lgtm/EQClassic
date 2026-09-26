@@ -124,6 +124,10 @@ namespace EQClassic.ClientCore
                     _campFrom = Player.Position;
                     MessageReceived?.Invoke("It will take you about 30 seconds to prepare your camp.");
                     break;
+                case ChatAction.Help:
+                    foreach (var help in Chat.HelpLines)
+                        MessageReceived?.Invoke(help);
+                    break;
                 case ChatAction.Invite:
                     string invitee = parsed.Target.Length > 0 ? parsed.Target
                         : TargetId is int t && Zone.Get(t) is { Spawn: { IsPlayer: true } } targeted ? targeted.Spawn.Name : "";

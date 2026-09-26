@@ -84,4 +84,8 @@ public class CharacterBuilderTests
         Assert.Null(EQClassic.Shared.Characters.CreationRules.CheckStats(request.Race, request.Class, request.Stats));
         Assert.Equal(new EQClassic.Shared.Characters.CharacterStats(108, 119, 45, 75, 52, 83, 95), request.Stats);
     }
+
+    [Fact]
+    public void Help_lists_the_commands() =>
+        Assert.Equal(ChatAction.Help, Chat.Parse("/help").Action);
 }
