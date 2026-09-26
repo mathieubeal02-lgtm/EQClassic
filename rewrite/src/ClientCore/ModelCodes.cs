@@ -31,6 +31,23 @@ namespace EQClassic.ClientCore
         private static readonly Dictionary<int, (string Male, string Female)> GenderedOthers = new Dictionary<int, (string, string)>
         {
             [71] = ("qcm", "qcf"),
+            // City citizens and guards, and ghosts of playable races, drawn with their race's models.
+            [44] = ("hum", "huf"),  // Freeport guards
+            [55] = ("hum", "huf"),  // beggars
+            [67] = ("hum", "huf"),  // Highpass citizens
+            [77] = ("dam", "daf"),  // Neriak citizens
+            [78] = ("erm", "erf"),  // Erudin citizens
+            [81] = ("hom", "hof"),  // Rivervale citizens
+            [90] = ("bam", "baf"),  // Halas citizens
+            [92] = ("trm", "trf"),  // Grobb citizens
+            [93] = ("ogm", "ogf"),  // Oggok citizens
+            [94] = ("dwm", "dwf"),  // Kaladim citizens
+            [106] = ("him", "hif"), // Felwithe guards
+            [112] = ("elm", "elf"), // Kelethin guards
+            [117] = ("dwm", "dwf"), // dwarf ghosts
+            [118] = ("erm", "erf"), // Erudite ghosts
+            [139] = ("ikm", "ikf"), // Iksar citizens
+            [183] = ("dwm", "dwf"), // Coldain
         };
 
         // Codes present in this project's Lantern exports (Qeynos, Permafrost and the global_chr
@@ -58,6 +75,32 @@ namespace EQClassic.ClientCore
             [68] = "ten",  // icy terrors (Tentacle)
             [70] = "zom",
             [75] = "ele",  // elementals
+            [15] = "bri",  // brownies
+            [48] = "kob",  // kobolds
+            [26] = "frg",  // frogloks
+            [27] = "frg",
+            [28] = "fun",  // fungusmen
+            [33] = "zom",  // ghouls
+            [58] = "sol",  // Solusek Ro
+            [62] = "tun",  // Tunare
+            [66] = "ral",  // Rallos Zek
+            [72] = "boat",
+            [82] = "sca",  // scarecrows
+            [85] = "spe",  // spectres
+            [88] = "gnm",  // clockwork gnomes
+            [95] = "caz",  // Cazic Thule
+            [120] = "woe", // wolf elementals
+            [123] = "inn", // Innoruuk
+            [126] = "dji", // djinn
+            [127] = "ivm", // invisible men
+            [137] = "gob", // Kunark goblins
+            [140] = "gia", // forest giants
+            [141] = "boat",
+            [151] = "tri", // the Tribunal
+            [155] = "ske", // sarnak skeletons
+            [161] = "ske", // Iksar skeletons
+            [188] = "gia", // frost giants
+            [189] = "gia", // storm giants
         };
 
         public static string For(int race, int gender)
