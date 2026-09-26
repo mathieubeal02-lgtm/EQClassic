@@ -62,16 +62,10 @@ namespace EQClassic.Unity.Editor
         /// <summary>The skies (the "sky" export in Assets/EQAssets/sky) → Content/AssetBundleContent/Sky/Sky.prefab.</summary>
         public static void ImportSky() => Invariant(() =>
         {
-            var importer = ScriptableObject.CreateInstance<SkyImporter>();
-            try
-            {
-                Call(importer, "ImportSky"); // its closing dialog goes through HeadlessDialog (EQC_HEADLESS)
-                Debug.Log("EQClassicBatch: sky imported");
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(importer);
-            }
+            // A shown window: the importer starts by closing it, which fails on one never opened.
+            var importer = EditorWindow.GetWindow<SkyImporter>();
+            Call(importer, "ImportSky"); // its closing dialog goes through HeadlessDialog (EQC_HEADLESS)
+            Debug.Log("EQClassicBatch: sky imported");
         });
 
         private static void Invariant(Action import)

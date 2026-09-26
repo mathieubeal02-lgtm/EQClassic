@@ -2,15 +2,14 @@ using EQClassic.ClientCore;
 using EQClassic.Shared.Zone;
 using Lantern.EQ.Environment;
 using UnityEngine;
-using UnityEngine.Rendering.Universal;
 
 namespace EQClassic.Unity
 {
     /// <summary>
-    /// The sky and the day: LanternUnityTools' sky prefab (EQClassic > Import: --sky) drawn by its own
-    /// camera under the world (URP camera stack: the sky camera is the base, the main camera an
-    /// overlay, so the zone's fog and clip distance do not touch the sky), turned with Norrath's clock;
-    /// and the day/night ambient light of the Lantern shaders (_DayNightColor).
+    /// The sky and the day: LanternUnityTools' sky prefab (tools/unity/import-zones.sh --sky), a small
+    /// dome that follows the camera and is drawn first without writing depth (its shader's Background
+    /// queue, no fog), so the zone draws over it whatever its clip distance; turned with Norrath's
+    /// clock; and the day/night ambient light of the Lantern shaders (_DayNightColor).
     /// </summary>
     public sealed class SkyPresenter
     {
@@ -18,7 +17,6 @@ namespace EQClassic.Unity
         private static readonly Color Night = new Color(0.35f, 0.35f, 0.5f);
 
         private SkyController _sky;
-        private Camera _skyCamera;
 
         /// <summary>Sets the sky for a zone: the zone header's sky type selects one of Lantern's five skies.</summary>
         public void Enter(Camera main, ZoneInfo info, System.Func<string, GameObject> loadPrefab)
@@ -35,28 +33,14 @@ namespace EQClassic.Unity
                 Object.DontDestroyOnLoad(go);
                 _sky = go.GetComponent<SkyController>();
                 _sky.SetSecondsPerDay((float)(EQClassic.Shared.World.EqClock.SecondsPerHour * 24));
-                CreateSkyCamera(main);
             }
-            _sky.SetActiveCameraTransform(_skyCamera.transform, true);
+            main.cullingMask |= LayerMask.GetMask("Sky", "IgnoreTarget"); // SkyLayer moves its objects to IgnoreTarget
+            main.nearClipPlane = 0.05f; // the dome is about a unit wide: the default 0.3 near plane cuts it away
+            _sky.SetActiveCameraTransform(main.transform, true);
             _sky.SetEnabledSky(info.Sky + 1); // Lantern's group 0 is "no sky"
         }
 
-        private void CreateSkyCamera(Camera main)
-        {
-            var go = new GameObject("EQClassic sky camera");
-            Object.DontDestroyOnLoad(go);
-            _skyCamera = go.AddComponent<Camera>();
-            _skyCamera.cullingMask = LayerMask.GetMask("Sky", "IgnoreTarget"); // SkyLayer moves its objects to IgnoreTarget
-            _skyCamera.farClipPlane = 10000f;
-            _skyCamera.clearFlags = CameraClearFlags.SolidColor;
-            main.cullingMask &= ~LayerMask.GetMask("Sky", "IgnoreTarget");
-            var skyData = _skyCamera.GetUniversalAdditionalCameraData();
-            var mainData = main.GetUniversalAdditionalCameraData();
-            mainData.renderType = CameraRenderType.Overlay;
-            skyData.cameraStack.Add(main);
-        }
-
-        /// <summary>Every frame: the sky follows the main camera's rotation and turns with the clock; ambient light by the hour.</summary>
+        /// <summary>Every frame: the sky follows the camera and turns with the clock; ambient light by the hour.</summary>
         public void Update(Camera main, GameClient client, float deltaTime)
         {
             float daylight = 1f;
@@ -67,11 +51,8 @@ namespace EQClassic.Unity
                 fraction = clock.DayFraction(client.Now);
             }
             Shader.SetGlobalColor(DayNightColor, Color.Lerp(Night, Color.white, daylight));
-            if (_sky == null || _skyCamera == null || main == null)
+            if (_sky == null || main == null)
                 return;
-            _skyCamera.transform.SetPositionAndRotation(main.transform.position, main.transform.rotation);
-            _skyCamera.fieldOfView = main.fieldOfView;
-            _skyCamera.backgroundColor = main.backgroundColor;
             _sky.UpdateSkyPosition();
             _sky.UpdateTime(fraction);
             _sky.UpdateTimeLate(deltaTime, fraction);

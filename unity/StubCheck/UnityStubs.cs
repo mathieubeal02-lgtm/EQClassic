@@ -30,6 +30,8 @@ namespace UnityEngine
         public T GetComponent<T>() => default;
         public static GameObject CreatePrimitive(PrimitiveType type) => null;
         public T[] GetComponentsInChildren<T>() => System.Array.Empty<T>();
+        public T[] GetComponentsInChildren<T>(bool includeInactive) => System.Array.Empty<T>();
+        public int layer { get; set; }
         public T GetComponentInChildren<T>() => default;
     }
 
@@ -125,6 +127,7 @@ namespace UnityEngine
     public struct LayerMask
     {
         public static int GetMask(params string[] layerNames) => 0;
+        public static int NameToLayer(string layerName) => 0;
     }
 
     public static class Shader
@@ -138,6 +141,7 @@ namespace UnityEngine
         public int cullingMask { get; set; }
         public float fieldOfView { get; set; }
         public float farClipPlane { get; set; }
+        public float nearClipPlane { get; set; }
         public CameraClearFlags clearFlags { get; set; }
         public Color backgroundColor { get; set; }
         public Vector3 WorldToScreenPoint(Vector3 position) => default;

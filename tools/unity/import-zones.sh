@@ -1,13 +1,14 @@
 #!/bin/bash
 # Import Lantern exports into the Unity client project, a few at a time:
 #
-#   tools/unity/import-zones.sh [--characters] <zone|all> [zone...]
+#   tools/unity/import-zones.sh [--characters] [--sky] <zone|all> [zone...]
 #
 # For each batch the zones' exports (build/lantern-work/Exports/<zone>) are copied into
 # Assets/EQAssets, the LanternUnityTools importers run in Unity (EQClassicBatch), and the copies are
 # removed: the imported prefabs, meshes and textures stay in Assets/Content/AssetBundleContent.
 # Keeping every export under Assets makes Unity scan 125,000 files before doing anything.
-# --characters also imports the character models (the "characters" export).
+# --characters also imports the character models (the "characters" export), --sky the skies
+# (the "sky" export: tools/lantern/extract.sh <client> sky).
 # Needs the Unity setup of docs/unity-client.md (UNITY, LD_LIBRARY_PATH for the compat libraries).
 set -euo pipefail
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
@@ -19,9 +20,15 @@ LOGS=$REPO/build/unity-import-logs
 mkdir -p "$LOGS"
 
 characters=0
-if [ "${1:-}" = "--characters" ]; then characters=1; shift; fi
+sky=0
+while [ "${1:-}" = "--characters" ] || [ "${1:-}" = "--sky" ]; do
+  [ "$1" = "--characters" ] && characters=1
+  [ "$1" = "--sky" ] && sky=1
+  shift
+done
+export EQC_HEADLESS=1
 if [ "${1:-}" = "all" ]; then
-  mapfile -t zones < <(ls "$EXPORTS" | grep -v '^characters$')
+  mapfile -t zones < <(ls "$EXPORTS" | grep -vE '^(characters|sky)$')
 else
   zones=("$@")
 fi
@@ -30,7 +37,7 @@ run_unity() { # <method> <log> [zones]
   rm -f "$PROJECT/Temp/UnityLockfile"
   (ulimit -n 4096; EQC_ZONES="${3:-}" "$UNITY" -projectPath "$PROJECT" -executeMethod "EQClassic.Unity.Editor.EQClassicBatch.$1" \
      -quit -logFile "$2" >/dev/null 2>&1) || true # Unity 2021 on Linux often segfaults while quitting, after the work is saved
-  grep -E 'EQClassicBatch: |threw exception' "$2" || true
+  grep -E 'EQClassicBatch: |threw exception|Import: ' "$2" || true
 }
 
 mkdir -p "$PROJECT/Assets/EQAssets"
@@ -38,6 +45,12 @@ if [ $characters -eq 1 ]; then
   rsync -a "$EXPORTS/characters/" "$PROJECT/Assets/EQAssets/characters/"
   run_unity ImportCharacters "$LOGS/characters.log"
   rm -rf "$PROJECT/Assets/EQAssets/characters" "$PROJECT/Assets/EQAssets/characters.meta"
+fi
+
+if [ $sky -eq 1 ]; then
+  rsync -a "$EXPORTS/sky/" "$PROJECT/Assets/EQAssets/sky/"
+  run_unity ImportSky "$LOGS/sky.log"
+  rm -rf "$PROJECT/Assets/EQAssets/sky" "$PROJECT/Assets/EQAssets/sky.meta"
 fi
 
 for ((i = 0; i < ${#zones[@]}; i += BATCH)); do
