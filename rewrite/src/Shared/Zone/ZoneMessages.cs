@@ -931,4 +931,66 @@ namespace EQClassic.Shared.Zone
         public void WriteFields(NetDataWriter writer) => writer.Put((byte)Weather);
         public static ZoneWeather ReadFields(NetDataReader reader) => new ZoneWeather(reader.GetByte());
     }
+
+    public enum TradeAction : byte { Request = 0, Offer = 1, Coins = 2, Accept = 3, Cancel = 4 }
+
+    /// <summary>
+    /// Client to zone server: trade with a player (Arg: their entity id), put up or take back the item
+    /// of an inventory slot (Arg: the slot), set the money offered, accept, cancel.
+    /// </summary>
+    public sealed record TradeCommand(TradeAction Action, int Arg = 0, int Platinum = 0, int Gold = 0, int Silver = 0, int Copper = 0) : IMessage
+    {
+        public MessageType Type => MessageType.TradeCommand;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put((byte)Action);
+            writer.Put(Arg);
+            writer.Put(Platinum);
+            writer.Put(Gold);
+            writer.Put(Silver);
+            writer.Put(Copper);
+        }
+
+        public static TradeCommand ReadFields(NetDataReader reader) =>
+            new TradeCommand((TradeAction)reader.GetByte(), reader.GetInt(), reader.GetInt(), reader.GetInt(), reader.GetInt(), reader.GetInt());
+    }
+
+    /// <summary>One side of a trade window: the items, the money in copper, whether it accepted.</summary>
+    public sealed record TradeOffer(IReadOnlyList<ItemView> Items, IReadOnlyList<int> Slots, int Copper, bool Accepted);
+
+    /// <summary>Zone server to a player: the trade window (theirs and their partner's side); an empty partner closes it.</summary>
+    public sealed record TradeWindow(string Partner, TradeOffer Mine, TradeOffer Theirs) : IMessage
+    {
+        public MessageType Type => MessageType.TradeWindow;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(Partner);
+            Write(writer, Mine);
+            Write(writer, Theirs);
+        }
+
+        private static void Write(NetDataWriter writer, TradeOffer o)
+        {
+            ItemViews.Write(writer, o.Items);
+            writer.Put((byte)o.Slots.Count);
+            foreach (int s in o.Slots)
+                writer.Put((ushort)s);
+            writer.Put(o.Copper);
+            writer.Put(o.Accepted);
+        }
+
+        private static TradeOffer Read(NetDataReader reader)
+        {
+            var items = ItemViews.Read(reader);
+            int count = reader.GetByte();
+            var slots = new List<int>(count);
+            for (int i = 0; i < count; i++)
+                slots.Add(reader.GetUShort());
+            return new TradeOffer(items, slots, reader.GetInt(), reader.GetBool());
+        }
+
+        public static TradeWindow ReadFields(NetDataReader reader) => new TradeWindow(reader.GetString(), Read(reader), Read(reader));
+    }
 }

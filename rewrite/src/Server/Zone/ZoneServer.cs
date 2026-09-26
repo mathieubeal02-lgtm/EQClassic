@@ -230,6 +230,19 @@ public sealed class ZoneServer : IDisposable
                 Group(peer, grouper, group);
                 break;
 
+            case TradeCommand trade when _players.TryGetValue(peer, out var trader):
+                var ti = trader.Instance;
+                switch (trade.Action)
+                {
+                    case TradeAction.Request: ti.RequestTrade(trader.EntityId, trade.Arg); break;
+                    case TradeAction.Offer: ti.OfferItem(trader.EntityId, trade.Arg); break;
+                    case TradeAction.Coins: ti.OfferCoins(trader.EntityId, new Coins(trade.Platinum, trade.Gold, trade.Silver, trade.Copper)); break;
+                    case TradeAction.Accept: ti.AcceptTrade(trader.EntityId); break;
+                    case TradeAction.Cancel: ti.CancelTrade(trader.EntityId); break;
+                }
+                Broadcast(ti, ti.DrainEvents());
+                break;
+
             case UseAbility ability when _players.TryGetValue(peer, out var user):
                 user.Instance.UseAbility(user.EntityId, ability.Skill);
                 Broadcast(user.Instance, user.Instance.DrainEvents());
@@ -410,6 +423,9 @@ public sealed class ZoneServer : IDisposable
                     break;
                 case ZoneInstance.SkillsChanged changedSkills when PeerOf(instance, changedSkills.PlayerId) is { } skilledPeer && instance.Get(changedSkills.PlayerId) is { } skilled:
                     Send(skilledPeer, SkillsOf(skilled), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.TradeChanged traded when PeerOf(instance, traded.PlayerId) is { } tradePeer && instance.Get(traded.PlayerId) is { } tradingPlayer:
+                    Send(tradePeer, TradeWindowOf(instance, tradingPlayer), DeliveryMethod.ReliableOrdered);
                     break;
                 case ZoneInstance.WeatherChanged weather:
                     SendToZone(instance, new ZoneWeather(weather.Weather));
@@ -616,6 +632,16 @@ public sealed class ZoneServer : IDisposable
             if (player.EntityId == landed.CasterId && landed.Amount < 0 && landed.TargetId != landed.CasterId)
                 Send(peer, new ZoneMessage($"{targetName} was hit by non-melee for {-landed.Amount} points of damage."), DeliveryMethod.ReliableOrdered);
         }
+    }
+
+    private TradeWindow TradeWindowOf(ZoneInstance instance, ZoneInstance.Entity p)
+    {
+        var none = new TradeOffer(Array.Empty<ItemView>(), Array.Empty<int>(), 0, false);
+        if (p.Trade is not { } mine || instance.Get(mine.PartnerId) is not { Trade: { } theirs } partner)
+            return new TradeWindow("", none, none);
+        TradeOffer Offer(ZoneInstance.Entity who, ZoneInstance.TradeSide side) => new(
+            side.Slots.Select(s => View(who.Inventory!.ItemAt(s), who.Inventory.ChargesAt(s))).ToList(), side.Slots, (int)side.Coins.TotalCopper, side.Accepted);
+        return new TradeWindow(partner.Name, Offer(p, mine), Offer(partner, theirs));
     }
 
     private static PlayerSkills SkillsOf(ZoneInstance.Entity p) =>

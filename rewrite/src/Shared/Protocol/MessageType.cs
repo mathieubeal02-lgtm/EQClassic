@@ -72,4 +72,6 @@ public enum MessageType : byte
     GroupCommand = 64,
     GroupUpdate = 65,
     ZoneWeather = 66,
+    TradeCommand = 67,
+    TradeWindow = 68,
 }

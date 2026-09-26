@@ -125,6 +125,8 @@ public sealed partial class ZoneInstance
         public bool Hidden { get; internal set; }
         internal Vec3 HiddenAt;
         public bool Sneaking { get; internal set; }
+        /// <summary>Players: their side of a trade in progress, or null.</summary>
+        public TradeSide? Trade { get; internal set; }
         /// <summary>Players: the merchant whose window is open, and its goods.</summary>
         public int? MerchantId { get; internal set; }
         internal IReadOnlyList<int> MerchantGoods = Array.Empty<int>();
@@ -428,6 +430,7 @@ public sealed partial class ZoneInstance
     {
         if (!_entities.TryGetValue(id, out var e) || !e.IsPlayer)
             return false;
+        CancelTrade(id);
         _entities.Remove(id);
         foreach (var npc in _entities.Values.Where(n => n.TargetId == id))
             Disengage(npc);
@@ -640,6 +643,12 @@ public sealed partial class ZoneInstance
         if (!_entities.TryGetValue(playerId, out var player) || player.Inventory is not { } inventory
             || !ValidSlot(inventory, from) || !ValidSlot(inventory, to) || from == to || inventory.ItemAt(from) == 0)
             return;
+        if (player.Trade is { } trade && (trade.Slots.Contains(from) || trade.Slots.Contains(to)))
+        {
+            _events.Add(new Told(playerId, "You cannot move an item you are trading."));
+            _events.Add(new InventoryChanged(playerId));
+            return;
+        }
         int moving = inventory.ItemAt(from), swapped = inventory.ItemAt(to);
         string? refusal = CanWear(player, moving, to) ?? CanWear(player, swapped, from)
             ?? CanBag(inventory, moving, to) ?? CanBag(inventory, swapped, from);
@@ -836,6 +845,7 @@ public sealed partial class ZoneInstance
         NpcCasting();
         Emergencies();
         AdvanceWeather();
+        CheckTrades();
         if (_time >= _nextRegen)
             TickBuffs(); // before the regeneration below moves _nextRegen: same 6 s tic
         Regenerate();
@@ -1018,6 +1028,7 @@ public sealed partial class ZoneInstance
         player.PlayerTargetId = null;
         player.Sitting = false;
         player.Cast = null;
+        CancelTrade(player.Id);
         if (player.BuffList.Count > 0)
         {
             player.BuffList.Clear(); // death takes every buff away

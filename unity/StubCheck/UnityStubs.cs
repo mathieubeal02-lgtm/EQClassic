@@ -355,6 +355,8 @@ namespace UnityEngine
         public static int Toolbar(int selected, string[] texts) => selected;
         public static void BeginHorizontal() { }
         public static void EndHorizontal() { }
+        public static void BeginVertical() { }
+        public static void EndVertical() { }
     }
 }
 

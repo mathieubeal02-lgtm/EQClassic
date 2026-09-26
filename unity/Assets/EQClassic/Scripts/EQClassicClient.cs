@@ -269,6 +269,9 @@ namespace EQClassic.Unity
             if (_client.Merchant != null && item.ItemId != 0
                 && GUILayout.Button("Sell " + MerchantRules.Coins(MerchantRules.SellPrice(item.Price)), GUILayout.Width(90)))
                 _client.Sell(slot);
+            if (_client.Trade is { } trading && item.ItemId != 0
+                && GUILayout.Button(trading.Mine.Slots.Contains(slot) ? "Take back" : "Offer", GUILayout.Width(80)))
+                _client.OfferItem(slot);
             bool clicked = GUILayout.Button($"{where}: {what}");
             GUILayout.EndHorizontal();
             if (!clicked)
@@ -398,6 +401,47 @@ namespace EQClassic.Unity
         }
 
         private Vector2 _merchantScroll;
+        private string _tradePlatinum = "0", _tradeGold = "0", _tradeSilver = "0", _tradeCopper = "0";
+
+        /// <summary>The trade window (/trade on a targeted player): both offers, money, Accept and Cancel; items are offered from the inventory.</summary>
+        private void DrawTrade(TradeWindow trade)
+        {
+            GUILayout.BeginArea(new Rect(Screen.width / 2 - 260, 80, 520, 360), GUI.skin.box);
+            GUILayout.Label($"Trading with {trade.Partner} - offer items from the inventory (I)");
+            GUILayout.BeginHorizontal();
+            GUILayout.BeginVertical();
+            GUILayout.Label(trade.Mine.Accepted ? "You (accepted)" : "You");
+            foreach (var item in trade.Mine.Items)
+                GUILayout.Label(item.Name);
+            GUILayout.Label(MerchantRules.Coins(trade.Mine.Copper));
+            GUILayout.EndVertical();
+            GUILayout.BeginVertical();
+            GUILayout.Label(trade.Theirs.Accepted ? $"{trade.Partner} (accepted)" : trade.Partner);
+            foreach (var item in trade.Theirs.Items)
+                GUILayout.Label(item.Name);
+            GUILayout.Label(MerchantRules.Coins(trade.Theirs.Copper));
+            GUILayout.EndVertical();
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Money p/g/s/c", GUILayout.Width(100));
+            _tradePlatinum = GUILayout.TextField(_tradePlatinum);
+            _tradeGold = GUILayout.TextField(_tradeGold);
+            _tradeSilver = GUILayout.TextField(_tradeSilver);
+            _tradeCopper = GUILayout.TextField(_tradeCopper);
+            if (GUILayout.Button("Offer money", GUILayout.Width(100)))
+                _client.OfferCoins(Number(_tradePlatinum), Number(_tradeGold), Number(_tradeSilver), Number(_tradeCopper));
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Accept"))
+                _client.AcceptTrade();
+            if (GUILayout.Button("Cancel"))
+                _client.CancelTrade();
+            GUILayout.EndHorizontal();
+            GUILayout.EndArea();
+            _inventoryOpen = true;
+        }
+
+        private static int Number(string text) => int.TryParse(text, out int n) && n > 0 ? n : 0;
 
         /// <summary>The spell book (B): every scribed spell by level; a gem button memorises it there.</summary>
         private void DrawBook()
@@ -532,6 +576,8 @@ namespace EQClassic.Unity
                     DrawBook();
                 if (_client.Merchant is { } merchant)
                     DrawMerchant(merchant);
+                if (_client.Trade is { } trade)
+                    DrawTrade(trade);
                 return;
             }
 

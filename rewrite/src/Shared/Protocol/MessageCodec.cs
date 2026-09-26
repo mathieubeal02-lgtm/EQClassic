@@ -98,6 +98,8 @@ public static class MessageCodec
                 MessageType.GroupCommand => GroupCommand.ReadFields(reader),
                 MessageType.GroupUpdate => GroupUpdate.ReadFields(reader),
                 MessageType.ZoneWeather => ZoneWeather.ReadFields(reader),
+                MessageType.TradeCommand => TradeCommand.ReadFields(reader),
+                MessageType.TradeWindow => TradeWindow.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

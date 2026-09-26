@@ -124,6 +124,12 @@ namespace EQClassic.ClientCore
                     _campFrom = Player.Position;
                     MessageReceived?.Invoke("It will take you about 30 seconds to prepare your camp.");
                     break;
+                case ChatAction.Trade:
+                    if (TargetId is int tradeWith && Zone.Get(tradeWith) is { Spawn: { IsPlayer: true } })
+                        _connection?.Send(new TradeCommand(TradeAction.Request, tradeWith));
+                    else
+                        MessageReceived?.Invoke("Target a player to trade with.");
+                    break;
                 case ChatAction.Help:
                     foreach (var help in Chat.HelpLines)
                         MessageReceived?.Invoke(help);
@@ -350,6 +356,15 @@ namespace EQClassic.ClientCore
             return null;
         }
 
+        /// <summary>The trade window, or null.</summary>
+        public TradeWindow? Trade { get; private set; }
+
+        public void OfferItem(int slot) => _connection?.Send(new TradeCommand(TradeAction.Offer, slot));
+        public void OfferCoins(int platinum, int gold, int silver, int copper) =>
+            _connection?.Send(new TradeCommand(TradeAction.Coins, 0, platinum, gold, silver, copper));
+        public void AcceptTrade() => _connection?.Send(new TradeCommand(TradeAction.Accept));
+        public void CancelTrade() => _connection?.Send(new TradeCommand(TradeAction.Cancel));
+
         /// <summary>The zone's weather: 0 clear, 1 rain, 2 snow.</summary>
         public int Weather { get; private set; }
 
@@ -572,6 +587,9 @@ namespace EQClassic.ClientCore
                 case PlayerExperience experience:
                     Experience = experience;
                     break;
+                case TradeWindow trade:
+                    Trade = trade.Partner.Length == 0 ? null : trade;
+                    break;
                 case ZoneWeather weather:
                     Weather = weather.Weather;
                     break;
@@ -617,6 +635,7 @@ namespace EQClassic.ClientCore
                     break;
                 case ZoneChange change:
                     LootingCorpse = null;
+                    Trade = null;
                     Merchant = null;
                     Casting = null;
                     ZoneInfo = null;
