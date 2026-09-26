@@ -27,7 +27,7 @@ public sealed partial class ZoneInstance
 
     private Entity AddPlayerCorpse(StoredCorpse stored, bool announce)
     {
-        var body = Add(stored.Owner + "'s_corpse", false, stored.Race, stored.Gender, stored.Level, 6f, stored.Position, stored.Heading);
+        var body = Add(stored.Owner + "'s_corpse", false, stored.Race, stored.Gender, stored.Level, RaceSizes.Default(stored.Race), stored.Position, stored.Heading);
         body.Corpse = new CorpseData
         {
             Items = stored.Items.Select(i => new LootDrop(i.ItemId, i.Charges, i.Slot)).ToList(),

@@ -4,6 +4,19 @@ using MySqlConnector;
 namespace EQClassic.Server.Zone;
 
 /// <summary>An NPC type as the zone needs it (legacy npc_types_without, the table the C++ zone reads).</summary>
+/// <summary>Mob::GetDefaultSize: a playable race's usual size (an NPC with size 0, and every player, has it).</summary>
+public static class RaceSizes
+{
+    public static float Default(int race) => race switch
+    {
+        11 or 12 => 3f,             // halfling, gnome
+        8 => 4f,                    // dwarf
+        4 or 6 or 7 => 5f,          // wood elf, dark elf, half elf
+        9 => 8f, 10 => 9f, 2 => 7f, // troll, ogre, barbarian
+        _ => 6f,                    // human, erudite, high elf, iksar, and the rest
+    };
+}
+
 public sealed record NpcTemplate(int Id, string Name, int Race, int Gender, int Level, float Size, float WalkSpeed = NpcTemplate.DefaultWalkSpeed,
     float RunSpeed = 1.25f, bool Undead = false, int PrimaryFaction = 0)
 {
@@ -135,7 +148,7 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
     {
         float size = Convert.ToSingle(r.GetValue(o + 5));
         float runspeed = Convert.ToSingle(r.GetValue(o + 6));
-        return new NpcTemplate(r.GetInt32(o), r.GetString(o + 1), Int(r, o + 2), Int(r, o + 3), Int(r, o + 4), size > 0 ? size : 6f,
+        return new NpcTemplate(r.GetInt32(o), r.GetString(o + 1), Int(r, o + 2), Int(r, o + 3), Int(r, o + 4), size > 0 ? size : RaceSizes.Default(Int(r, o + 2)),
             RunSpeed: runspeed > 0 ? runspeed : 1.25f,
             Undead: Int(r, o + 7) == 3, // BT_Undead
             PrimaryFaction: Int(r, o + 8))

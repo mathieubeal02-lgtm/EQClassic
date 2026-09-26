@@ -379,7 +379,7 @@ public sealed partial class ZoneInstance
         PlayerProgress? progress = null)
     {
         position = SafeEntry(position);
-        var player = Add(name, true, race, gender, level, 6f, position, heading);
+        var player = Add(name, true, race, gender, level, RaceSizes.Default(race), position, heading);
         player.LastMoveTime = _time;
         player.Progress = progress;
         player.Exp = progress?.Exp ?? 0;

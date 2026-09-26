@@ -73,7 +73,7 @@ namespace EQClassic.ClientCore
         // Default sizes of the playable races (the size a spawn of that race has when nothing changes it).
         private static readonly Dictionary<int, float> DefaultSizes = new Dictionary<int, float>
         {
-            [1] = 6f, [2] = 7f, [3] = 6f, [4] = 5f, [5] = 6f, [6] = 5f, [7] = 5.5f, [8] = 4f, [9] = 8f, [10] = 9f,
+            [1] = 6f, [2] = 7f, [3] = 6f, [4] = 5f, [5] = 6f, [6] = 5f, [7] = 5f, [8] = 4f, [9] = 8f, [10] = 9f,
             [11] = 3.5f, [12] = 3f, [128] = 6f, [71] = 6f,
         };
 
