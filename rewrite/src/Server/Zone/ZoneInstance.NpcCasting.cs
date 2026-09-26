@@ -74,7 +74,6 @@ public sealed partial class ZoneInstance
         npc.SpellCredit = 0;
         npc.NextOffense = _time + OffenseCastSeconds;
         npc.NextDefense = _time + DefenseCastSeconds;
-        npc.NextRescue = _time + RescueSeconds;
         npc.NextCredit = _time + CreditSeconds;
     }
 
@@ -96,12 +95,6 @@ public sealed partial class ZoneInstance
             }
             if (npc.TargetId is not int targetId || npc.Cast is not null || Incapacitated(npc) || !_entities.TryGetValue(targetId, out var victim))
                 continue;
-            if (_time >= npc.NextRescue)
-            {
-                npc.NextRescue += RescueSeconds;
-                if (Rescue(npc, victim, set))
-                    continue;
-            }
             if (_time >= npc.NextDefense)
             {
                 npc.NextDefense += DefenseCastSeconds;
@@ -116,11 +109,10 @@ public sealed partial class ZoneInstance
         }
     }
 
-    /// <summary>NPC::Damage's rescue: below its flee ratio and losing, a heal on itself (the legacy gate did nothing for NPCs).</summary>
+    /// <summary>NPC::Damage's rescue, once losing badly (see <see cref="Emergencies"/>): a heal on itself (the legacy gate did nothing for NPCs).</summary>
     private bool Rescue(Entity npc, Entity foe, NpcSpellSet set)
     {
-        int fleeRatio = Math.Clamp(20 - (npc.Level - foe.Level) * 2, 1, 20);
-        if (npc.HpPercent > fleeRatio || (float)foe.HpPercent / Math.Max(1, npc.HpPercent) <= FleeRatio || set.Heal < 0)
+        if (set.Heal < 0)
             return false;
         int left = SpellCredits(npc) - npc.SpellCredit;
         int chance = left <= 0 ? 700 : left * 1000 / SpellCredits(npc) + 700;

@@ -110,10 +110,14 @@ public sealed partial class ZoneInstance
         public int FactionValue(int factionId) => FactionValues.GetValueOrDefault(factionId);
         internal void SetFactionValue(int factionId, int value) => FactionValues[factionId] = value;
         /// <summary>NPC casters: their spells (npc_spells), spell credits spent, and when they next consider casting.</summary>
+        /// <summary>NPCs: running away at low health, where to, and when the next emergency check is.</summary>
+        public bool Fleeing { get; internal set; }
+        internal Vec3? FleeTo;
+        internal double NextEmergency;
         internal NpcSpellSet? SpellSet;
         internal bool SpellSetChecked;
         internal int SpellCredit;
-        internal double NextOffense, NextDefense, NextRescue, NextCredit;
+        internal double NextOffense, NextDefense, NextCredit;
         /// <summary>Players: skill values by skill id (the fighter builder reads the same array).</summary>
         public int[] Skills { get; internal set; } = new int[SkillCaps.SkillCount];
         /// <summary>Players: when each ability can be used again; hidden (and where), sneaking.</summary>
@@ -703,6 +707,11 @@ public sealed partial class ZoneInstance
         {
             if (e.IsPlayer || e.IsCorpse || Incapacitated(e))
                 continue;
+            if (e.Fleeing)
+            {
+                FleeStep(e, seconds);
+                continue;
+            }
             if (e.TargetId is int targetId)
             {
                 Chase(e, targetId, seconds);
@@ -739,6 +748,7 @@ public sealed partial class ZoneInstance
         AdvanceCasting();
         Fight(seconds);
         NpcCasting();
+        Emergencies();
         if (_time >= _nextRegen)
             TickBuffs(); // before the regeneration below moves _nextRegen: same 6 s tic
         Regenerate();
@@ -760,7 +770,7 @@ public sealed partial class ZoneInstance
     {
         foreach (var e in _entities.Values.ToList())
         {
-            if (!_entities.ContainsKey(e.Id) || Incapacitated(e) || !e.IsPlayer && e.Cast is not null) // slain earlier in this tick, stunned, mesmerized, casting
+            if (!_entities.ContainsKey(e.Id) || Incapacitated(e) || !e.IsPlayer && (e.Cast is not null || e.Fleeing)) // slain earlier in this tick, stunned, mesmerized, casting, fleeing
                 continue;
             int? targetId = e.IsPlayer ? (e.AutoAttack ? e.PlayerTargetId : null) : e.TargetId;
             if (targetId is not int tid)
@@ -944,14 +954,19 @@ public sealed partial class ZoneInstance
         if (_time < _nextRegen)
             return;
         _nextRegen += RegenSeconds;
-        foreach (var p in _entities.Values.Where(e => e.IsPlayer).ToList())
+        foreach (var e in _entities.Values.Where(e => !e.IsCorpse).ToList())
         {
-            RegenerateMana(p);
-            if (p.Hp >= p.Fighter.MaxHp || _time - p.LastCombatTime < RegenSeconds)
+            if (e.IsPlayer)
+                RegenerateMana(e);
+            if (e.Hp >= e.Fighter.MaxHp || e.Hp <= 0)
                 continue;
-            int amount = Math.Max(1, p.Level / 10) * (p.Sitting ? 2 : 1);
-            p.Hp = Math.Min(p.Fighter.MaxHp, p.Hp + amount);
-            _events.Add(new HealthChanged(p.Id, p.Hp, p.Fighter.MaxHp));
+            // Mob::DoHPRegen: every tic, in combat or not; an NPC's hp_regen_rate when it is higher.
+            int amount = CombatFormulas.LevelRegen(e.Level, e.Race, e.Sitting);
+            if (e.Npc is { } npc)
+                amount = Math.Max(amount, npc.RegenRate);
+            e.Hp = Math.Min(e.Fighter.MaxHp, e.Hp + amount);
+            if (e.IsPlayer)
+                _events.Add(new HealthChanged(e.Id, e.Hp, e.Fighter.MaxHp));
         }
     }
 
@@ -1003,6 +1018,8 @@ public sealed partial class ZoneInstance
     private void Disengage(Entity npc)
     {
         npc.TargetId = null;
+        npc.Fleeing = false;
+        npc.FleeTo = null;
         npc.SpellCredit = 0; // NPC::CheckMyLosStatus / leash: a fresh start
         // Back to the grid from where the chase ended (the legacy NPC walks home, then resumes).
         if (npc.Grid is not null)

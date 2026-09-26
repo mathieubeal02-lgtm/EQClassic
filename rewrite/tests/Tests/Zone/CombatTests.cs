@@ -103,15 +103,17 @@ public class CombatTests
     }
 
     [Fact]
-    public void Players_regenerate_out_of_combat_faster_sitting()
+    public void Players_regenerate_every_tic_faster_sitting_and_trolls_faster()
     {
         var zone = new ZoneInstance(new ZoneData("qeynos2", [], new Dictionary<int, Grid>()));
         var player = zone.AddPlayer("Qbot", 9, 0, 20, new Vec3(0, 0, 0), hp: 10);
         Run(zone, 6.1f);
-        Assert.Equal(12, player.Hp); // level 20: 2 per tic
+        Assert.Equal(12, player.Hp); // a level 20 troll standing: 2 per tic
         player.Sitting = true;
         Run(zone, 6f);
-        Assert.Equal(16, player.Hp);
-        Assert.Contains(zone.DrainEvents(), e => e is ZoneInstance.HealthChanged h && h.Hp == 16);
+        Assert.Equal(18, player.Hp); // sitting: 6
+        Assert.Contains(zone.DrainEvents(), e => e is ZoneInstance.HealthChanged h && h.Hp == 18);
+        Assert.Equal(1, CombatFormulas.LevelRegen(10, 1, false)); // a human
+        Assert.Equal(7, CombatFormulas.LevelRegen(60, 1, true));
     }
 }

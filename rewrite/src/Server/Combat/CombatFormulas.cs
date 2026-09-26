@@ -263,6 +263,25 @@ public static class CombatFormulas
     // ---- hit points and bare hands -------------------------------------------------------------
 
     /// <summary>A player's base hit points (Client::CalcBaseHP): 5 + m·level + m·level·STA/300, m by class and level.</summary>
+    /// <summary>
+    /// Mob::GetLevelRegen: hit points per tic by level bracket, sitting or standing, trolls and iksar
+    /// regenerating faster. The bracket bounds (REGEN_LEVEL_FIRST..FIFTH) are not in the legacy
+    /// headers; 19, 49, 50, 55 and 59 are assumed.
+    /// </summary>
+    public static int LevelRegen(int level, int race, bool sitting)
+    {
+        int bracket = level <= 19 ? 0 : level <= 49 ? 1 : level <= 50 ? 2 : level <= 55 ? 3 : level <= 59 ? 4 : 5;
+        bool fast = race is 9 or 128; // troll, iksar
+        int[] row = (fast, sitting) switch
+        {
+            (true, true) => [4, 6, 8, 12, 16, 18],
+            (true, false) => [2, 2, 2, 6, 10, 12],
+            (false, true) => [2, 3, 4, 5, 6, 7],
+            _ => [1, 1, 1, 2, 3, 4],
+        };
+        return row[bracket];
+    }
+
     public static int ClientBaseHp(int level, int playerClass, int sta)
     {
         int m = playerClass switch

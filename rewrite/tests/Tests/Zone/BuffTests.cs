@@ -119,14 +119,17 @@ public class BuffTests
     [Fact]
     public void Damage_over_time_hurts_every_tic_and_the_caster_gets_the_credit()
     {
-        var (zone, player, rat) = Setup(CombatFormulas.Necromancer, DiseaseCloud);
+        const int TaintedBreath = 277;
+        var (zone, player, rat) = Setup(CombatFormulas.Shaman, TaintedBreath);
         zone.SetTarget(player.Id, rat.Id);
         CastAndWait(zone, player, 0);
-        Assert.Single(rat.Buffs); // disease, level 5 against 20: resisted 3% of the time, not with this seed
-        Assert.Equal(100 - 5 - 1, rat.Hp); // the instant 5 and the instant tic of the damage over time
+        Assert.Single(rat.Buffs); // poison, level 5 against 20: resisted 3% of the time, not with this seed
+        var spell = S(TaintedBreath);                     // poison counter, -10 at once, -8 per tic
+        int once = spell.Value(1, 20), perTic = spell.Value(2, 20);
+        Assert.Equal(100 + once + perTic, rat.Hp);       // SpellEffect: the damage over time lands at once too
         Assert.Equal(player.Id, rat.TargetId);
         Run(zone, 12.1f);
-        Assert.Equal(100 - 5 - 1 - 2, rat.Hp);
+        Assert.Equal(100 + once + perTic + 2 * (perTic + 1), rat.Hp); // two tics, less the rat's own regeneration (1 per tic)
     }
 
     [Fact]

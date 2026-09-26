@@ -23,6 +23,8 @@ public sealed record NpcTemplate(int Id, string Name, int Race, int Gender, int 
     public int LoottableId { get; init; }
     /// <summary>Merchants: their merchantlist (npc_types_without.merchant_id; 0: none).</summary>
     public int MerchantId { get; init; }
+    /// <summary>Hit points per tic (hp_regen_rate), when above the level's regeneration.</summary>
+    public int RegenRate { get; init; }
 }
 
 /// <summary>
@@ -141,7 +143,7 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
                 SELECT s.id, s.x, s.y, s.z, s.heading, s.pathgrid, n.id, n.name, n.race, n.gender, n.level, n.size, e.chance,
                        s.respawntime, s.variance, n.runspeed, n.bodytype, n.npc_faction_id,
                        n.class, n.hp, n.mindmg, n.maxdmg, n.AC, n.ATK, n.Accuracy, n.avoidance, n.attack_speed, n.STR, n.loottable_id,
-                       n.MR, n.CR, n.DR, n.FR, n.PR, n.merchant_id
+                       n.MR, n.CR, n.DR, n.FR, n.PR, n.merchant_id, n.hp_regen_rate
                 FROM `{_p}spawn2` s
                 JOIN `{_p}spawnentry` e ON e.spawngroupID = s.spawngroupID
                 JOIN `{_p}npc_types_without` n ON n.id = e.npcID
@@ -171,6 +173,7 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
                     },
                     LoottableId = Int(r, 28),
                     MerchantId = Int(r, 34),
+                    RegenRate = Int(r, 35),
                 };
                 spawn.Candidates.Add((npc, Convert.ToInt32(r.GetValue(12))));
             }
