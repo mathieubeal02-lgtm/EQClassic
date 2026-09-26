@@ -11,7 +11,7 @@ namespace EQClassic.Unity
     /// frame and draws the out-of-zone screens with IMGUI (login, server select, character select).
     /// In zone, <see cref="ZonePresenter"/> draws the world.
     /// </summary>
-    public sealed class EQClassicClient : MonoBehaviour
+    public sealed partial class EQClassicClient : MonoBehaviour
     {
         private GameClient _client;
         private ZonePresenter _presenter;
@@ -25,32 +25,10 @@ namespace EQClassic.Unity
         private bool _creating;
         private readonly ChatLog _chat = new ChatLog();
         private bool _chatOpen;
-        private bool _inventoryOpen;
-        private bool _bookOpen;
-        private bool _skillsOpen;
         private Vector2 _skillsScroll;
-        private static readonly string[] SkillNames =
-        {
-            "1H Blunt", "1H Slashing", "2H Blunt", "2H Slashing", "Abjuration", "Alteration", "Apply Poison", "Archery", "Backstab", "Bind Wound",
-            "Bash", "Block", "Brass Instruments", "Channeling", "Conjuration", "Defense", "Disarm", "Disarm Traps", "Divination", "Dodge",
-            "Double Attack", "Dragon Punch", "Dual Wield", "Eagle Strike", "Evocation", "Feign Death", "Flying Kick", "Forage", "Hand to Hand", "Hide",
-            "Kick", "Meditate", "Mend", "Offense", "Parry", "Pick Lock", "Piercing", "Riposte", "Round Kick", "Safe Fall",
-            "Sense Heading", "Singing", "Sneak", "Specialize Abjure", "Specialize Alteration", "Specialize Conjuration", "Specialize Divination", "Specialize Evocation", "Pick Pockets", "Stringed Instruments",
-            "Swimming", "Throwing", "Tiger Claw", "Tracking", "Wind Instruments", "Fishing", "Make Poison", "Tinkering", "Research", "Alchemy",
-            "Baking", "Tailoring", "Sense Traps", "Blacksmithing", "Fletching", "Brewing", "Alcohol Tolerance", "Begging", "Jewelry Making", "Pottery",
-            "Percussion Instruments", "Intimidation", "Berserking", "Taunt",
-        };
-        private Vector2 _bookScroll;
-
-        private static readonly string[] SlotNames =
-        {
-            "Charm", "Ear", "Head", "Face", "Ear", "Neck", "Shoulders", "Arms", "Back", "Wrist", "Wrist", "Range", "Hands",
-            "Primary", "Secondary", "Finger", "Finger", "Chest", "Legs", "Feet", "Waist", "Ammo",
-        };
         private string _chatLine = "";
         private int _chatClosedFrame = -1;
-        private const int ChatLines = 12;
-        private const float ChatWidth = 800f;
+        private int _chatOpenedFrame = -1;
 
         private void Awake()
         {
@@ -60,6 +38,7 @@ namespace EQClassic.Unity
             _user = PlayerPrefs.GetString("eqc.user", "");
             ApplyCommandLine(System.Environment.GetCommandLineArgs());
             _presenter = gameObject.AddComponent<ZonePresenter>();
+            _layout = HudLayout.Load(PlayerPrefs.GetString("eqc.layout", ""), Screen.width, Screen.height);
         }
 
         /// <summary>
@@ -89,19 +68,30 @@ namespace EQClassic.Unity
             if (_client.State == GameState.InZone)
             {
                 _presenter.InputEnabled = !_chatOpen;
-                var pointer = Input.mousePosition; // from the bottom left
-                bool overChat = pointer.x < ChatWidth + 10 && pointer.y < 36 + 20 * ChatLines;
+                var pointer = Input.mousePosition; // from the bottom left; the chat's rectangle is from the top left
+                bool overChat = _chatScreenRect.Contains(new Vector2(pointer.x, Screen.height - pointer.y));
                 _presenter.ZoomEnabled = !overChat;
                 if (overChat && Input.mouseScrollDelta.y != 0f)
-                    _chat.ScrollBy(Input.mouseScrollDelta.y > 0f ? 3 : -3, ChatLines);
+                    _chat.ScrollBy(Input.mouseScrollDelta.y > 0f ? 3 : -3, _chatLinesShown);
+                SaveLayoutWhenChanged();
                 if (!_chatOpen && Time.frameCount != _chatClosedFrame
                     && (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) || Input.GetKeyDown(KeyCode.Slash)))
                 {
                     _chatOpen = true;
+                    _chatOpenedFrame = Time.frameCount;
                     _chatLine = Input.GetKeyDown(KeyCode.Slash) ? "/" : "";
                 }
                 if (_chatOpen)
                 {
+                    // Enter sends, Escape closes. Read here rather than from the text field's events: on
+                    // Windows the focused IMGUI text field swallows Return and Escape, so the chat never sent.
+                    if (Time.frameCount != _chatOpenedFrame)
+                    {
+                        if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
+                            SubmitChat();
+                        else if (Input.GetKeyDown(KeyCode.Escape))
+                            CloseChat();
+                    }
                     _presenter.Present(_client, Time.deltaTime);
                     return; // typing: no game keys
                 }
@@ -122,11 +112,13 @@ namespace EQClassic.Unity
                 if (Input.GetKeyDown(KeyCode.L))
                     _client.Loot();
                 if (Input.GetKeyDown(KeyCode.I))
-                    _inventoryOpen = !_inventoryOpen;
+                    ToggleWindow(HudLayout.Inventory);
                 if (Input.GetKeyDown(KeyCode.B))
-                    _bookOpen = !_bookOpen;
+                    ToggleWindow(HudLayout.Book);
                 if (Input.GetKeyDown(KeyCode.K))
-                    _skillsOpen = !_skillsOpen;
+                    ToggleWindow(HudLayout.Skills);
+                if (Input.GetKeyDown(KeyCode.F12))
+                    SwitchLayout();
                 for (int gem = 0; gem < GameClient.GemCount; gem++)
                     if (Input.GetKeyDown(KeyCode.Alpha1 + gem))
                         _client.Cast(gem);
@@ -138,6 +130,7 @@ namespace EQClassic.Unity
 
         private void OnDestroy()
         {
+            SaveLayout();
             _client?.Dispose();
         }
 
@@ -199,493 +192,12 @@ namespace EQClassic.Unity
             GUILayout.EndHorizontal();
         }
 
-        /// <summary>The loot window: what is left on the corpse, one Take button each, and Done.</summary>
-        private void DrawLoot(int corpse)
-        {
-            GUILayout.BeginArea(new Rect(Screen.width - 320, 90, 300, 320), GUI.skin.box);
-            GUILayout.Label(_client.Zone?.Get(corpse)?.DisplayName ?? "Corpse");
-            var items = _client.LootItems;
-            if (items.Count == 0)
-                GUILayout.Label("(nothing left)");
-            for (int i = 0; i < items.Count; i++)
-            {
-                GUILayout.BeginHorizontal();
-                GUILayout.Label(items[i].Charges > 1 ? $"{items[i].Name} ({items[i].Charges})" : items[i].Name);
-                if (GUILayout.Button("Take"))
-                    _client.TakeLoot(i);
-                GUILayout.EndHorizontal();
-            }
-            if (GUILayout.Button("Done"))
-                _client.EndLoot();
-            GUILayout.EndArea();
-        }
-
-        private int? _heldSlot;
-
-        /// <summary>
-        /// The inventory window (I): every worn slot and the eight general slots, money. Click an item to
-        /// pick it up, then the slot to put it in (the server checks it fits, and swaps).
-        /// </summary>
-        private void DrawInventory()
-        {
-            var inventory = _client.Inventory;
-            GUILayout.BeginArea(new Rect(Screen.width - 640, 60, 300, Screen.height - 120), GUI.skin.box);
-            GUILayout.Label(_heldSlot is int held && inventory != null ? $"Inventory - holding {HeldName(inventory, held)}" : "Inventory");
-            if (inventory == null)
-            {
-                GUILayout.Label("(not received yet)");
-                GUILayout.EndArea();
-                return;
-            }
-            _inventoryScroll = GUILayout.BeginScrollView(_inventoryScroll);
-            for (int slot = 0; slot < inventory.Slots.Count; slot++)
-            {
-                var item = inventory.Slots[slot];
-                string where = slot < SlotNames.Length ? SlotNames[slot] : $"General {slot - SlotNames.Length + 1}";
-                DrawInventoryRow(slot, where, item);
-                // A bag in a general slot: its cells below it (slots 250 + bag × 10 + cell).
-                for (int cell = 0; slot >= SlotNames.Length && cell < item.BagSlots && cell < PlayerInventory.BagCells; cell++)
-                {
-                    int bagSlot = PlayerInventory.BagSlotBase + (slot - SlotNames.Length) * PlayerInventory.BagCells + cell;
-                    DrawInventoryRow(bagSlot, $"    {cell + 1}", ItemIn(inventory, bagSlot));
-                }
-            }
-            GUILayout.EndScrollView();
-            GUILayout.Label($"{inventory.Platinum} pp  {inventory.Gold} gp  {inventory.Silver} sp  {inventory.Copper} cp");
-            GUILayout.EndArea();
-        }
-
-        private Vector2 _inventoryScroll;
-
-        private Vector2 _bankScroll;
-        private string _bankP = "0", _bankG = "0", _bankS = "0", _bankC = "0";
-
-        /// <summary>
-        /// The bank (U on a banker): its 8 slots and the bags in them, picked up and put down like the
-        /// inventory's (the inventory opens beside it), and money in or out.
-        /// </summary>
-        private void DrawBank(BankContents bank)
-        {
-            _inventoryOpen = true;
-            GUILayout.BeginArea(new Rect(Screen.width - 330, 60, 320, Screen.height - 120), GUI.skin.box);
-            GUILayout.Label("Bank");
-            _bankScroll = GUILayout.BeginScrollView(_bankScroll);
-            for (int i = 0; i < bank.Slots.Count; i++)
-            {
-                var item = bank.Slots[i];
-                DrawInventoryRow(BankContents.BankBase + i, $"Bank {i + 1}", item);
-                for (int cell = 0; cell < item.BagSlots && cell < PlayerInventory.BagCells; cell++)
-                {
-                    int index = i * PlayerInventory.BagCells + cell;
-                    DrawInventoryRow(BankContents.BankBagBase + index, $"    {cell + 1}", index < bank.Bags.Count ? bank.Bags[index] : new ItemView(0, "", 0));
-                }
-            }
-            GUILayout.EndScrollView();
-            GUILayout.Label($"In the bank: {bank.Platinum}p {bank.Gold}g {bank.Silver}s {bank.Copper}c");
-            GUILayout.BeginHorizontal();
-            _bankP = GUILayout.TextField(_bankP);
-            _bankG = GUILayout.TextField(_bankG);
-            _bankS = GUILayout.TextField(_bankS);
-            _bankC = GUILayout.TextField(_bankC);
-            GUILayout.EndHorizontal();
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Deposit"))
-                _client.BankMoney(Number(_bankP), Number(_bankG), Number(_bankS), Number(_bankC), 0, 0, 0, 0);
-            if (GUILayout.Button("Withdraw"))
-                _client.BankMoney(0, 0, 0, 0, Number(_bankP), Number(_bankG), Number(_bankS), Number(_bankC));
-            if (GUILayout.Button("Done"))
-            {
-                _client.CloseBank();
-                _inventoryOpen = false;
-            }
-            GUILayout.EndHorizontal();
-            GUILayout.EndArea();
-        }
-
-        /// <summary>The name of the item picked up, which may be in the bank.</summary>
-        private string HeldName(PlayerInventory inventory, int slot)
-        {
-            if (_client.Bank is { } bank && slot >= BankContents.BankBase)
-            {
-                if (slot < BankContents.BankBase + bank.Slots.Count)
-                    return bank.Slots[slot - BankContents.BankBase].Name;
-                int cell = slot - BankContents.BankBagBase;
-                return cell >= 0 && cell < bank.Bags.Count ? bank.Bags[cell].Name : "";
-            }
-            return ItemIn(inventory, slot).Name;
-        }
-
-        private static ItemView ItemIn(PlayerInventory inventory, int slot)
-        {
-            if (slot < inventory.Slots.Count)
-                return inventory.Slots[slot];
-            int cell = slot - PlayerInventory.BagSlotBase;
-            return cell >= 0 && cell < inventory.BagCellsOrEmpty.Count ? inventory.BagCellsOrEmpty[cell] : new ItemView(0, "", 0);
-        }
-
-        /// <summary>One inventory line: Scribe and Sell when they apply; a click picks the item up, another puts it down.</summary>
-        private void DrawInventoryRow(int slot, string where, ItemView item)
-        {
-            string what = item.ItemId == 0 ? "-" : item.Charges > 1 ? $"{item.Name} ({item.Charges})" : item.Name;
-            GUILayout.BeginHorizontal();
-            if (item.Name.StartsWith("Spell: ") && GUILayout.Button("Scribe", GUILayout.Width(60)))
-                _client.Scribe(slot);
-            if ((item.ItemType == 14 || item.ItemType == 15) && GUILayout.Button(item.ItemType == 14 ? "Eat" : "Drink", GUILayout.Width(60)))
-                _client.Consume(slot);
-            if (_client.Merchant != null && item.ItemId != 0
-                && GUILayout.Button("Sell " + MerchantRules.Coins(MerchantRules.SellPrice(item.Price)), GUILayout.Width(90)))
-                _client.Sell(slot);
-            if (_client.Trade is { } trading && item.ItemId != 0
-                && GUILayout.Button(trading.Mine.Slots.Contains(slot) ? "Take back" : "Offer", GUILayout.Width(80)))
-                _client.OfferItem(slot);
-            bool clicked = GUILayout.Button($"{where}: {what}");
-            GUILayout.EndHorizontal();
-            if (!clicked)
-                return;
-            if (_heldSlot is int from)
-            {
-                if (from != slot)
-                    _client.MoveItem(from, slot);
-                _heldSlot = null;
-            }
-            else if (item.ItemId != 0)
-            {
-                _heldSlot = slot;
-            }
-        }
-
-        /// <summary>
-        /// The spell gems (keys 1-8, or click): the memorised spells with their mana cost, dimmed while
-        /// casting or short of mana.
-        /// </summary>
-        private void DrawGems()
-        {
-            if (_client.SpellBook == null || _client.MaxMana <= 0 && _client.SpellBook.Spells.Count == 0)
-                return;
-            for (int gem = 0; gem < GameClient.GemCount; gem++)
-            {
-                var spell = _client.GemSpell(gem);
-                var colour = GUI.color;
-                if (spell != null && (spell.Mana > _client.Mana || _client.Casting != null))
-                    GUI.color = new Color(1f, 1f, 1f, 0.5f);
-                if (GUI.Button(new Rect(10, 100 + 26 * gem, 190, 22), spell == null ? $"{gem + 1}  -" : $"{gem + 1}  {spell.Name} ({spell.Mana})") && spell != null)
-                    _client.Cast(gem);
-                GUI.color = colour;
-            }
-        }
-
-        /// <summary>The group window: the members (leader first, in yellow), their health when they are in this zone.</summary>
-        private void DrawGroup()
-        {
-            if (_client.Group is not { } group)
-                return;
-            float y = 100 + 26 * GameClient.GemCount + 10;
-            GUI.Label(new Rect(10, y, 200, 20), "Group");
-            foreach (var name in group.Members)
-            {
-                y += 18;
-                var here = _client.Zone?.Entities.FirstOrDefault(e => e.Spawn.IsPlayer && e.Spawn.Name == name);
-                var colour = GUI.color;
-                if (name == group.Leader)
-                    GUI.color = Color.yellow;
-                GUI.Label(new Rect(10, y, 200, 20), here != null ? $"{name}  {here.HpPercent}%" : name);
-                GUI.color = colour;
-            }
-        }
-
-        /// <summary>The ability buttons (kick, bash, taunt...), above the chat.</summary>
-        private void DrawAbilities()
-        {
-            if (_client.Skills == null)
-                return;
-            float x = 10;
-            foreach (int skill in _client.Skills.Abilities)
-            {
-                if (GUI.Button(new Rect(x, Screen.height - 300, 80, 22), SkillNames[skill]))
-                    _client.UseAbility(skill);
-                x += 84;
-            }
-        }
-
-        /// <summary>The skills window (K): every skill the character has, with its value.</summary>
-        private void DrawSkills()
-        {
-            // On the right, where the merchant's window goes: the inventory stays visible beside it.
-            GUILayout.BeginArea(new Rect(Screen.width - 330, 60, 320, Screen.height - 200), GUI.skin.box);
-            GUILayout.Label("Skills");
-            _skillsScroll = GUILayout.BeginScrollView(_skillsScroll);
-            var values = _client.Skills?.Values;
-            for (int i = 0; values != null && i < values.Count && i < SkillNames.Length; i++)
-                if (values[i] > 0)
-                    GUILayout.Label($"{SkillNames[i]}: {values[i]}");
-            GUILayout.EndScrollView();
-            if (GUILayout.Button("Close"))
-                _skillsOpen = false;
-            GUILayout.EndArea();
-        }
-
-        /// <summary>The buff window: each spell lasting on you with the time left (a tic is 6 s), detrimental ones in red.</summary>
-        private void DrawBuffs()
-        {
-            if (_client.Buffs == null || _client.Buffs.Buffs.Count == 0)
-                return;
-            float y = 30;
-            foreach (var buff in _client.Buffs.Buffs)
-            {
-                int seconds = buff.TicsLeft * 6;
-                string left = buff.TicsLeft >= 32767 ? "" : $"  {seconds / 60}:{seconds % 60:00}";
-                var colour = GUI.color;
-                GUI.color = buff.Beneficial ? Color.white : new Color(1f, 0.5f, 0.5f);
-                GUI.Label(new Rect(Screen.width - 260, y, 250, 20), buff.Name + left);
-                GUI.color = colour;
-                y += 18;
-            }
-        }
-
-        /// <summary>A merchant's window (U on a merchant): the goods at 2.5 times their value; the inventory shows Sell buttons.</summary>
-        private void DrawMerchant(MerchantGoods merchant)
-        {
-            GUILayout.BeginArea(new Rect(Screen.width - 330, 60, 320, Screen.height - 120), GUI.skin.box);
-            string name = _client.Zone?.Get(merchant.NpcId)?.DisplayName ?? "Merchant";
-            GUILayout.Label($"{name} - click to buy (sell from the inventory, I)");
-            _merchantScroll = GUILayout.BeginScrollView(_merchantScroll);
-            for (int i = 0; i < merchant.Items.Count; i++)
-            {
-                var item = merchant.Items[i];
-                if (GUILayout.Button($"{item.Name}  {MerchantRules.Coins(MerchantRules.BuyPrice(item.Price))}"))
-                    _client.Buy(i);
-            }
-            GUILayout.EndScrollView();
-            if (_client.Inventory is { } money)
-                GUILayout.Label($"You have {money.Platinum}p {money.Gold}g {money.Silver}s {money.Copper}c");
-            if (GUILayout.Button("Done"))
-            {
-                _client.CloseMerchant();
-                _inventoryOpen = false;
-            }
-            GUILayout.EndArea();
-            _inventoryOpen = true;
-        }
-
-        private Vector2 _merchantScroll;
-        private string _tradePlatinum = "0", _tradeGold = "0", _tradeSilver = "0", _tradeCopper = "0";
-
-        /// <summary>The trade window (/trade on a targeted player): both offers, money, Accept and Cancel; items are offered from the inventory.</summary>
-        private void DrawTrade(TradeWindow trade)
-        {
-            GUILayout.BeginArea(new Rect(Screen.width / 2 - 260, 80, 520, 360), GUI.skin.box);
-            GUILayout.Label($"Trading with {trade.Partner} - offer items from the inventory (I)");
-            GUILayout.BeginHorizontal();
-            GUILayout.BeginVertical();
-            GUILayout.Label(trade.Mine.Accepted ? "You (accepted)" : "You");
-            foreach (var item in trade.Mine.Items)
-                GUILayout.Label(item.Name);
-            GUILayout.Label(MerchantRules.Coins(trade.Mine.Copper));
-            GUILayout.EndVertical();
-            GUILayout.BeginVertical();
-            GUILayout.Label(trade.Theirs.Accepted ? $"{trade.Partner} (accepted)" : trade.Partner);
-            foreach (var item in trade.Theirs.Items)
-                GUILayout.Label(item.Name);
-            GUILayout.Label(MerchantRules.Coins(trade.Theirs.Copper));
-            GUILayout.EndVertical();
-            GUILayout.EndHorizontal();
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Money p/g/s/c", GUILayout.Width(100));
-            _tradePlatinum = GUILayout.TextField(_tradePlatinum);
-            _tradeGold = GUILayout.TextField(_tradeGold);
-            _tradeSilver = GUILayout.TextField(_tradeSilver);
-            _tradeCopper = GUILayout.TextField(_tradeCopper);
-            if (GUILayout.Button("Offer money", GUILayout.Width(100)))
-                _client.OfferCoins(Number(_tradePlatinum), Number(_tradeGold), Number(_tradeSilver), Number(_tradeCopper));
-            GUILayout.EndHorizontal();
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Accept"))
-                _client.AcceptTrade();
-            if (GUILayout.Button("Cancel"))
-                _client.CancelTrade();
-            GUILayout.EndHorizontal();
-            GUILayout.EndArea();
-            _inventoryOpen = true;
-        }
-
-        private static int Number(string text) => int.TryParse(text, out int n) && n > 0 ? n : 0;
-
-        /// <summary>The spell book (B): every scribed spell by level; a gem button memorises it there.</summary>
-        private void DrawBook()
-        {
-            GUILayout.BeginArea(new Rect(Screen.width / 2 - 260, 80, 520, Screen.height - 200), GUI.skin.box);
-            GUILayout.Label("Spell book - click a gem number to memorize");
-            var book = _client.SpellBook;
-            if (book == null || book.Spells.Count == 0)
-                GUILayout.Label(book == null ? "(not received yet)" : "No spells scribed. Scribe a scroll from the inventory (I).");
-            else
-            {
-                _bookScroll = GUILayout.BeginScrollView(_bookScroll);
-                foreach (var spell in book.Spells)
-                {
-                    GUILayout.BeginHorizontal();
-                    GUILayout.Label($"{spell.Level,2}  {spell.Name}  - {spell.Mana} mana, {spell.CastMs / 1000f:0.#} s", GUILayout.Width(300));
-                    for (int gem = 0; gem < GameClient.GemCount; gem++)
-                        if (GUILayout.Button((gem + 1).ToString(), GUILayout.Width(22)))
-                            _client.Memorize(gem, spell.SpellId);
-                    GUILayout.EndHorizontal();
-                }
-                GUILayout.EndScrollView();
-            }
-            if (GUILayout.Button("Close"))
-                _bookOpen = false;
-            GUILayout.EndArea();
-        }
-
-        private static Texture2D _white;
-
-        /// <summary>A filled bar (hit points) with a label over it.</summary>
-        private static void DrawBar(Rect area, float fraction, Color fill, string label)
-        {
-            if (_white == null)
-            {
-                _white = new Texture2D(1, 1);
-                _white.SetPixel(0, 0, Color.white);
-                _white.Apply();
-            }
-            var colour = GUI.color;
-            GUI.color = new Color(0f, 0f, 0f, 0.6f);
-            GUI.DrawTexture(area, _white);
-            GUI.color = fill;
-            GUI.DrawTexture(new Rect(area.x, area.y, area.width * Mathf.Clamp(fraction, 0f, 1f), area.height), _white);
-            GUI.color = colour;
-            GUI.Label(new Rect(area.x + 4, area.y - 3, area.width, area.height + 6), label);
-        }
-
-        /// <summary>Consider colours as the Trilogy client shows them (white until considered).</summary>
-        public static Color ConColour(ConColor? con) => con switch
-        {
-            ConColor.Green => Color.green,
-            ConColor.Blue => new Color(0.4f, 0.6f, 1f),
-            ConColor.Yellow => Color.yellow,
-            ConColor.Red => Color.red,
-            _ => Color.white,
-        };
-
-        /// <summary>The Trilogy client's chat colours.</summary>
-        private static Color ChatColour(ChatKind kind)
-        {
-            switch (kind)
-            {
-                case ChatKind.Tell: return new Color(0.9f, 0.4f, 0.9f);
-                case ChatKind.Group: return new Color(0.4f, 0.8f, 1f);
-                case ChatKind.Shout: return new Color(1f, 0.35f, 0.35f);
-                case ChatKind.OutOfCharacter:
-                case ChatKind.Auction: return new Color(0.4f, 1f, 0.4f);
-                default: return Color.white;
-            }
-        }
-
-        /// <summary>
-        /// The chat window: the latest lines in their channel's colour (wheel over it, or Page Up/Down
-        /// while typing, scrolls back), and the input line while it is open (arrows recall what was typed).
-        /// </summary>
-        private void DrawChat()
-        {
-            var lines = _chat.Visible(ChatLines);
-            float bottom = Screen.height - 36;
-            var colour = GUI.color;
-            for (int i = 0; i < lines.Count; i++)
-            {
-                GUI.color = ChatColour(ChatLog.Kind(lines[i]));
-                GUI.Label(new Rect(10, bottom - 20 * (lines.Count - i), ChatWidth, 20), lines[i]);
-            }
-            GUI.color = colour;
-            if (_chat.Scroll > 0)
-                GUI.Label(new Rect(ChatWidth - 250, bottom - 20 * (ChatLines + 1), 260, 20), $"(back {_chat.Scroll} lines, Page Down)");
-            if (!_chatOpen)
-                return;
-            GUI.SetNextControlName("chat");
-            _chatLine = GUI.TextField(new Rect(10, Screen.height - 30, 700, 22), _chatLine);
-            GUI.FocusControl("chat");
-            var e = Event.current;
-            if (e.type != EventType.KeyDown)
-                return;
-            if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter)
-            {
-                _chat.Typed(_chatLine);
-                _chat.ScrollToBottom();
-                _client.ExecuteChat(_chatLine);
-                CloseChat(e);
-            }
-            else if (e.keyCode == KeyCode.UpArrow || e.keyCode == KeyCode.DownArrow)
-            {
-                _chatLine = e.keyCode == KeyCode.UpArrow ? _chat.Previous() : _chat.Next();
-                e.Use();
-            }
-            else if (e.keyCode == KeyCode.PageUp || e.keyCode == KeyCode.PageDown)
-            {
-                _chat.ScrollBy(e.keyCode == KeyCode.PageUp ? ChatLines - 1 : 1 - ChatLines, ChatLines);
-                e.Use();
-            }
-            else if (e.keyCode == KeyCode.Escape)
-            {
-                CloseChat(e);
-            }
-        }
-
-        private void CloseChat(Event e)
-        {
-            _chatOpen = false;
-            _chatLine = "";
-            _chatClosedFrame = Time.frameCount;
-            e.Use();
-        }
-
         private void OnGUI()
         {
             var state = _client?.State ?? GameState.Disconnected;
             if (state == GameState.InZone)
             {
-                GUI.Label(new Rect(10, 10, 1200, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  {_client.Keys.Help}, R autorun, Shift walk, Space jump, X sit, right mouse look, wheel zoom, F9 view, U door/merchant, Tab target, T face, C consider, F attack, L loot, I inventory, B spell book, K skills, 1-8 cast");
-                if (_presenter.MissingZone != null)
-                    GUI.Box(new Rect(Screen.width / 2 - 300, 80, 600, 44),
-                        $"The zone '{_presenter.MissingZone}' is not installed in this client (not imported from Lantern).\nYou are there for the server, but nothing can be drawn.");
-                DrawBar(new Rect(10, 34, 220, 16), _client.MaxHp > 0 ? (float)_client.Hp / _client.MaxHp : 0f, new Color(0.8f, 0.1f, 0.1f),
-                    $"{_client.Hp} / {_client.MaxHp}" + (_client.AutoAttacking ? "  attacking" : "") + (_client.Sitting ? "  sitting" : ""));
-                if (_client.MaxMana > 0)
-                    DrawBar(new Rect(10, 52, 220, 12), (float)_client.Mana / _client.MaxMana, new Color(0.2f, 0.3f, 0.9f), $"{_client.Mana} / {_client.MaxMana}");
-                if (_client.Stamina is { } stamina)
-                    DrawBar(new Rect(10, 65, 220, 6), (100 - stamina.Fatigue) / 100f, new Color(0.9f, 0.6f, 0.1f), "");
-                if (_client.Experience is { } xp)
-                    DrawBar(new Rect(10, 72, 220, 8), xp.Fraction, new Color(0.9f, 0.8f, 0.2f), "");
-                if (_client.Experience is { } lvl)
-                    GUI.Label(new Rect(10, 80, 320, 20), $"Level {lvl.Level}  {(int)(lvl.Fraction * 100)}%"
-                        + (_client.Stamina is { Hunger: 0 } ? "  hungry" : "") + (_client.Stamina is { Thirst: 0 } ? "  thirsty" : ""));
-                if (_client.Casting is { } casting)
-                    DrawBar(new Rect(Screen.width / 2 - 150, Screen.height - 320, 300, 16), _client.CastProgress, new Color(0.7f, 0.3f, 0.9f), casting.SpellName);
-                DrawGems();
-                DrawBuffs();
-                DrawAbilities();
-                DrawGroup();
-                if (_skillsOpen)
-                    DrawSkills();
-                if (_client.TargetId is int target && _client.Zone?.Get(target) is { } t)
-                {
-                    var colour = GUI.color;
-                    GUI.color = ConColour(t.Con);
-                    GUI.Label(new Rect(250, 30, 300, 20), t.DisplayName);
-                    GUI.color = colour;
-                    DrawBar(new Rect(250, 50, 220, 12), t.HpPercent / 100f, new Color(0.8f, 0.1f, 0.1f), t.HpPercent + "%");
-                }
-                DrawChat();
-                if (_client.LootingCorpse is int corpse)
-                    DrawLoot(corpse);
-                if (_inventoryOpen)
-                    DrawInventory();
-                if (_bookOpen)
-                    DrawBook();
-                if (_client.Merchant is { } merchant)
-                    DrawMerchant(merchant);
-                if (_client.Trade is { } trade)
-                    DrawTrade(trade);
-                if (_client.Bank is { } bank)
-                    DrawBank(bank);
+                DrawHud();
                 return;
             }
 
@@ -770,7 +282,11 @@ namespace EQClassic.Unity
             _client = new GameClient(string.IsNullOrWhiteSpace(_fingerprint) ? null : _fingerprint.Trim());
             _client.Keys = KeyBindings.Parse(PlayerPrefs.GetString("eqc.keys", "azerty")) ?? KeyBindings.Azerty;
             _client.KeysChanged += keys => PlayerPrefs.SetString("eqc.keys", keys.Layout.ToString().ToLowerInvariant());
-            _client.ZoneEntered += zone => _presenter.Enter(zone);
+            _client.ZoneEntered += zone =>
+            {
+                _presenter.Enter(zone);
+                LoadHotbar();
+            };
             _client.CombatReceived += _presenter.OnCombat;
             _client.SpellCastReceived += _presenter.OnSpellCast;
             _client.ZoneInfoReceived += _presenter.ApplyZoneInfo;

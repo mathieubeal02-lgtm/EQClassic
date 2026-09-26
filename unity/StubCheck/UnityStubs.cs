@@ -69,6 +69,7 @@ namespace UnityEngine
     public struct Vector2
     {
         public float x, y;
+        public Vector2(float x, float y) { this.x = x; this.y = y; }
     }
 
     public struct Vector3
@@ -98,6 +99,9 @@ namespace UnityEngine
         public float y => 0;
         public float width => 0;
         public float height => 0;
+        public bool Contains(Vector2 point) => false;
+        public float xMax => 0;
+        public float yMax => 0;
     }
 
     public enum PrimitiveType { Sphere, Capsule, Cylinder, Cube, Plane, Quad }
@@ -105,7 +109,7 @@ namespace UnityEngine
     public enum KeyCode
     {
         Tab = 9, Escape = 27, Space = 32, Q = 113, C = 99, E = 101, F = 102, H = 104, I = 105, L = 108, R = 114, T = 116, U = 117, X = 120, Numlock = 300, RightShift = 303, LeftShift = 304,
-        Home = 278, PageUp = 280, PageDown = 281, F9 = 290, Return = 13, KeypadEnter = 271, Slash = 47,
+        Home = 278, PageUp = 280, PageDown = 281, F9 = 290, F10 = 291, F11 = 292, F12 = 293, Return = 13, KeypadEnter = 271, Slash = 47,
         LeftControl = 306, K = 107, B = 98, Alpha1 = 49, Alpha2 = 50, Alpha3 = 51, Alpha4 = 52, Alpha5 = 53, Alpha6 = 54, Alpha7 = 55, Alpha8 = 56, UpArrow = 273, DownArrow = 274, RightArrow = 275, LeftArrow = 276, W = 119, A = 97, S = 115, D = 100, Z = 122,
     }
     public enum RuntimeInitializeLoadType { AfterSceneLoad, BeforeSceneLoad }
@@ -208,6 +212,7 @@ namespace UnityEngine
         public float nearClipPlane { get; set; }
         public CameraClearFlags clearFlags { get; set; }
         public Color backgroundColor { get; set; }
+        public Rect rect { get; set; }
         public Vector3 WorldToScreenPoint(Vector3 position) => default;
         public static Camera main => null;
     }
@@ -232,7 +237,7 @@ namespace UnityEngine
         public static Color red => default;
     }
 
-    public enum TextAnchor { MiddleCenter = 4 }
+    public enum TextAnchor { UpperLeft = 0, UpperCenter = 1, MiddleLeft = 3, MiddleCenter = 4 }
 
     public static class Input
     {
@@ -252,6 +257,7 @@ namespace UnityEngine
     public static class Time
     {
         public static float time => 0f;
+        public static float unscaledTime => 0f;
         public static float deltaTime => 0;
         public static int frameCount => 0;
     }
@@ -285,13 +291,16 @@ namespace UnityEngine
         public System.Collections.IEnumerator GetEnumerator() => System.Linq.Enumerable.Empty<AnimationState>().GetEnumerator();
     }
 
-    public enum EventType { KeyDown = 4 }
+    public enum EventType { MouseDown = 0, MouseUp = 1, KeyDown = 4, ScrollWheel = 6, Repaint = 7 }
 
     public sealed class Event
     {
         public static Event current => null;
         public EventType type => default;
         public KeyCode keyCode => default;
+        public int button => 0;
+        public Vector2 mousePosition => default;
+        public Vector2 delta => default;
         public void Use() { }
     }
 
@@ -306,6 +315,9 @@ namespace UnityEngine
         public static float MoveTowards(float current, float target, float maxDelta) => target;
         public static float Clamp(float value, float min, float max) => value;
         public static float Max(float a, float b) => a;
+        public static float Min(float a, float b) => a;
+        public static int Min(int a, int b) => a;
+        public static int Max(int a, int b) => a;
     }
 
     public static class Application
@@ -325,11 +337,18 @@ namespace UnityEngine
         public GUIStyle() { }
         public GUIStyle(GUIStyle other) { }
         public TextAnchor alignment { get; set; }
+        public int fontSize { get; set; }
+        public FontStyle fontStyle { get; set; }
+        public bool wordWrap { get; set; }
     }
+
+    public enum FontStyle { Normal, Bold, Italic, BoldAndItalic }
 
     public class GUISkin : Object
     {
         public GUIStyle box => null;
+        public GUIStyle button => null;
+        public GUIStyle window => null;
         public GUIStyle label => null;
     }
 
@@ -345,6 +364,13 @@ namespace UnityEngine
         public static GUISkin skin => null;
         public static void Label(Rect position, string text) { }
         public static bool Button(Rect position, string text) => false;
+        public static bool Button(Rect position, string text, GUIStyle style) => false;
+        public delegate void WindowFunction(int id);
+        public static Rect Window(int id, Rect clientRect, WindowFunction func, string text) => clientRect;
+        public static void DragWindow(Rect position) { }
+        public static void BringWindowToFront(int windowID) { }
+        public static bool enabled { get; set; }
+        public static int depth { get; set; }
     }
 
     public sealed class GUILayoutOption { }
@@ -352,6 +378,9 @@ namespace UnityEngine
     public static class GUILayout
     {
         public static void BeginArea(Rect screenRect, GUIStyle style) { }
+        public static void BeginArea(Rect screenRect) { }
+        public static GUILayoutOption Height(float height) => new GUILayoutOption();
+        public static void FlexibleSpace() { }
         public static void EndArea() { }
         public static void Label(string text, params GUILayoutOption[] options) { }
         public static string TextField(string text) => text;

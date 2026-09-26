@@ -146,6 +146,12 @@ namespace EQClassic.ClientCore
                 case ChatAction.Hail:
                     Hail();
                     break;
+                case ChatAction.Attack:
+                    ToggleAutoAttack();
+                    break;
+                case ChatAction.Loot:
+                    Loot();
+                    break;
                 case ChatAction.Keys:
                     if (KeyBindings.Parse(parsed.Target) is { } keys)
                     {

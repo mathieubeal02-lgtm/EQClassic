@@ -60,6 +60,13 @@ namespace EQClassic.Unity
         public bool InputEnabled { get; set; } = true;
         /// <summary>False while the pointer is over the chat window: the wheel scrolls the chat, not the camera.</summary>
         public bool ZoomEnabled { get; set; } = true;
+        /// <summary>The part of the screen the 3D view takes (the classic interface frames it; the window layout gives it all).</summary>
+        public Rect Viewport { get; set; } = new Rect(0f, 0f, 1f, 1f);
+        /// <summary>WALK in the classic interface: walking without holding Shift.</summary>
+        public bool WalkToggle { get; set; }
+
+        /// <summary>VIEW: first person, behind, overhead (as F9).</summary>
+        public void CycleView() => _rig.CycleView();
 
         /// <summary>The zone the server put us in has no imported assets in this client.</summary>
         public string MissingZone { get; private set; }
@@ -150,7 +157,9 @@ namespace EQClassic.Unity
             float strafe = !InputEnabled ? 0f : (Held(keys.StrafeRight) ? 1f : 0f) - (Held(keys.StrafeLeft) ? 1f : 0f);
             float turn = !InputEnabled ? 0f
                 : (Held(keys.TurnRight) || Input.GetKey(KeyCode.RightArrow) ? 1f : 0f) - (Held(keys.TurnLeft) || Input.GetKey(KeyCode.LeftArrow) ? 1f : 0f);
-            player.Walking = InputEnabled && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
+            player.Walking = WalkToggle || InputEnabled && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
+            if (_camera != null)
+                _camera.rect = Viewport;
             if (_mesh != null)
                 player.Move(forward, strafe, turn, deltaTime, _mesh); // ground, steps and walls
             else
