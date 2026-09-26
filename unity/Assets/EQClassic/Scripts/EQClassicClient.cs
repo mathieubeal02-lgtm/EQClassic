@@ -512,6 +512,14 @@ namespace EQClassic.Unity
                 return;
             }
 
+            if (state == GameState.EnteringZone)
+            {
+                // The Trilogy client's loading screen between zones: black, a short line in the middle.
+                DrawBar(new Rect(0, 0, Screen.width, Screen.height), 1f, Color.black, "");
+                GUI.Label(new Rect(Screen.width / 2 - 100, Screen.height / 2 - 10, 200, 20), "Loading, please wait...");
+                return;
+            }
+
             GUILayout.BeginArea(new Rect(20, 20, 460, Screen.height - 40), GUI.skin.box);
             GUILayout.Label("EQClassic");
             if (_client?.LastError != null)

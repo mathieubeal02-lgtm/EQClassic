@@ -25,7 +25,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Light sources | Torches and lanterns in hand, zone lights | Partial: one light around the player | 3 |
 | Particles | Spell effects | Todo (casting works, no particles yet) | 3 |
 | Name plates | Names above heads, consider colours | Written (con colour after considering, target in brackets), to check in Unity | 1 |
-| Loading screen | Between zones | Todo | 3 |
+| Loading screen | Between zones | Done (black screen, "Loading, please wait...") | — |
 
 ## Camera and movement
 
