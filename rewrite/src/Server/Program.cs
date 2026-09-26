@@ -74,7 +74,7 @@ using var zones = new ZoneServer(zoneKeys, name =>
     var meshPath = lantern is null ? null : Path.Combine(lantern, name, "Zone", "Meshes", name + "_collision.txt");
     var mesh = meshPath is not null && File.Exists(meshPath) ? ZoneCollisionMesh.LoadLanternZone(lantern!, name) : null;
     return new ZoneInstance(data, mesh);
-}) { Log = server.Log, Characters = characters, PublicAddress = worldAddress };
+}) { Log = server.Log, Characters = characters, PublicAddress = worldAddress, Items = db is null ? null : new EQClassic.Server.Combat.MySqlItemSource(db) };
 zones.Start(zonePort);
 
 using var world = new WorldServer(1, worlds, worldAccounts, characters, creationData)

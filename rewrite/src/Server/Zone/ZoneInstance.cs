@@ -1,3 +1,4 @@
+using EQClassic.Server.Combat;
 using EQClassic.Shared.World;
 using EQClassic.Shared.Zone;
 
@@ -21,6 +22,13 @@ public sealed class ZoneInstance
     /// <summary>Farthest a player may be from a door to use it. Not in the legacy handler: a rewrite sanity check.</summary>
     public const float DoorReach = 40f;
     public const string NoKeyMessage = "You do not have the required key in hand to open this door";
+    /// <summary>A player swings at a target this close (melee reach; the legacy client decides by model size).</summary>
+    public const float PlayerReach = 14f;
+    /// <summary>Seconds between regeneration ticks (the legacy 6-second tic).</summary>
+    public const double RegenSeconds = 6;
+    public const string TooFarMessage = "Your target is too far away, get closer!";
+    /// <summary>Reason of the move that brings a slain player back: clients drop their target and stop attacking.</summary>
+    public const string DeathReason = "death";
 
     public sealed class Entity
     {
@@ -50,6 +58,19 @@ public sealed class ZoneInstance
         internal float ScanIn;
         internal bool Moved;
         internal double LastMoveTime;
+        /// <summary>Melee numbers (NPC from its type, player from the profile).</summary>
+        public Combatant Fighter { get; internal set; } = null!;
+        public int Hp { get; internal set; }
+        /// <summary>Players: the entity they target, and whether they auto-attack it.</summary>
+        public int? PlayerTargetId { get; internal set; }
+        public bool AutoAttack { get; internal set; }
+        internal float SwingIn;
+        internal double TooFarToldAt = double.NegativeInfinity;
+        /// <summary>Players: where they entered the zone (death returns them there until binding exists).</summary>
+        internal Vec3 EntryPosition;
+        internal double LastCombatTime = double.NegativeInfinity;
+
+        public int HpPercent => Fighter.MaxHp <= 0 ? 0 : Math.Clamp((int)Math.Ceiling(100.0 * Hp / Fighter.MaxHp), 0, 100);
 
         public EntitySpawn ToSpawn() => new(Id, Name, IsPlayer, Race, Gender, Level, Size, Position.X, Position.Y, Position.Z, Heading);
     }
@@ -61,9 +82,14 @@ public sealed class ZoneInstance
     public sealed record CrossedZoneLine(int PlayerId, ZoneLine Line, Vec3 Destination) : ZoneEvent;
     public sealed record DoorChanged(int DoorId, bool Open) : ZoneEvent;
     /// <summary>A player moved by the server within the zone (teleport door): their client must follow.</summary>
-    public sealed record Teleported(int PlayerId, Vec3 Destination) : ZoneEvent;
+    public sealed record Teleported(int PlayerId, Vec3 Destination, string Reason = "teleport") : ZoneEvent;
     /// <summary>A line of text for one player.</summary>
     public sealed record Told(int PlayerId, string Text) : ZoneEvent;
+    /// <summary>A melee swing: Damage 0 is a miss. DefenderHpPercent after the hit.</summary>
+    public sealed record Swung(int AttackerId, int DefenderId, int Damage, int DefenderHpPercent) : ZoneEvent;
+    /// <summary>A player's hit points changed (hit, regeneration, death).</summary>
+    public sealed record HealthChanged(int PlayerId, int Hp, int MaxHp) : ZoneEvent;
+    public sealed record Slain(int VictimId, string VictimName, int KillerId, string KillerName) : ZoneEvent;
 
     private sealed class DoorSlot
     {
@@ -104,11 +130,46 @@ public sealed class ZoneInstance
         _events.Clear(); // the initial population is the entity list, not news
     }
 
-    public Entity AddPlayer(string name, int race, int gender, int level, Vec3 position, float heading = 0)
+    /// <param name="fighter">Melee numbers from the profile; null gives a plain level-based fighter (tests).</param>
+    /// <param name="hp">Saved hit points; null or out of range gives full health.</param>
+    public Entity AddPlayer(string name, int race, int gender, int level, Vec3 position, float heading = 0, Combatant? fighter = null, int? hp = null)
     {
         var player = Add(name, true, race, gender, level, 6f, position, heading);
         player.LastMoveTime = _time;
+        player.Fighter = fighter ?? DefaultPlayer(level);
+        player.Hp = hp is int h && h > 0 && h <= player.Fighter.MaxHp ? h : player.Fighter.MaxHp;
+        player.EntryPosition = position;
         return player;
+    }
+
+    private static Combatant DefaultPlayer(int level) =>
+        new(true, level, CombatFormulas.Warrior, CombatFormulas.ClientBaseHp(level, CombatFormulas.Warrior, 75),
+            Offense: level * 5 + 5, ToHit: 7 + 2 * (level * 5 + 5), Avoidance: level * 5 + 5, Mitigation: level * 3 + 5,
+            DamageBonus: 0, BaseDamage: 2, DelaySeconds: 3.6f);
+
+    /// <summary>A player targets an entity (null clears the target, and stops auto-attack).</summary>
+    public void SetTarget(int playerId, int? targetId)
+    {
+        if (!_entities.TryGetValue(playerId, out var player) || !player.IsPlayer)
+            return;
+        player.PlayerTargetId = targetId is int t && t != playerId && _entities.ContainsKey(t) ? t : null;
+        if (player.PlayerTargetId is null && player.AutoAttack)
+            SetAutoAttack(playerId, false);
+    }
+
+    /// <summary>Auto-attack on or off (legacy OP_AutoAttack); players do not attack each other yet.</summary>
+    public void SetAutoAttack(int playerId, bool on)
+    {
+        if (!_entities.TryGetValue(playerId, out var player) || !player.IsPlayer || player.AutoAttack == on)
+            return;
+        if (on && (player.PlayerTargetId is not int t || !_entities.TryGetValue(t, out var target) || target.IsPlayer))
+        {
+            _events.Add(new Told(playerId, "You must first select a target for this command!"));
+            return;
+        }
+        player.AutoAttack = on;
+        player.SwingIn = 0; // the first swing goes out as soon as the target is in reach
+        _events.Add(new Told(playerId, on ? "Auto attack is on." : "Auto attack is off."));
     }
 
     public bool RemovePlayer(int id)
@@ -118,6 +179,8 @@ public sealed class ZoneInstance
         _entities.Remove(id);
         foreach (var npc in _entities.Values.Where(n => n.TargetId == id))
             Disengage(npc);
+        foreach (var other in _entities.Values.Where(p => p.PlayerTargetId == id))
+            other.PlayerTargetId = null;
         return true;
     }
 
@@ -299,10 +362,118 @@ public sealed class ZoneInstance
                 e.PauseLeft = Math.Max(e.Grid.Waypoints[waypoint].PauseSeconds, 0);
         }
 
+        Fight(seconds);
+        Regenerate();
+
         var moved = _entities.Values.Where(e => e.Moved).ToList();
         foreach (var e in moved)
             e.Moved = false;
         return moved;
+    }
+
+    private double _nextRegen = RegenSeconds;
+
+    /// <summary>
+    /// Melee for this tick: players auto-attacking their target within <see cref="PlayerReach"/>,
+    /// engaged NPCs within <see cref="MeleeRange"/> of theirs, each at its own weapon delay.
+    /// </summary>
+    private void Fight(float seconds)
+    {
+        foreach (var e in _entities.Values.ToList())
+        {
+            if (!_entities.ContainsKey(e.Id)) // slain earlier in this tick
+                continue;
+            int? targetId = e.IsPlayer ? (e.AutoAttack ? e.PlayerTargetId : null) : e.TargetId;
+            if (targetId is not int tid)
+            {
+                e.SwingIn = Math.Max(0, e.SwingIn - seconds);
+                continue;
+            }
+            if (!_entities.TryGetValue(tid, out var target))
+            {
+                if (e.IsPlayer)
+                    SetTarget(e.Id, null);
+                continue;
+            }
+            e.SwingIn -= seconds;
+            if (e.SwingIn > 0)
+                continue;
+            float reach = e.IsPlayer ? PlayerReach : MeleeRange + 2f;
+            if (Distance2(e.Position, target.Position) > reach * reach)
+            {
+                e.SwingIn = 0;
+                if (e.IsPlayer && _time - e.TooFarToldAt >= e.Fighter.DelaySeconds)
+                {
+                    e.TooFarToldAt = _time;
+                    _events.Add(new Told(e.Id, TooFarMessage));
+                }
+                continue;
+            }
+            e.SwingIn += e.Fighter.DelaySeconds;
+            Swing(e, target);
+        }
+    }
+
+    private void Swing(Entity attacker, Entity defender)
+    {
+        var result = Melee.Swing(attacker.Fighter, defender.Fighter, _random, defender.Sitting);
+        attacker.LastCombatTime = defender.LastCombatTime = _time;
+        if (result.Hit)
+            defender.Hp -= result.Damage;
+        _events.Add(new Swung(attacker.Id, defender.Id, result.Hit ? result.Damage : 0, defender.HpPercent));
+        if (!defender.IsPlayer && defender.TargetId is null)
+        {
+            defender.TargetId = attacker.Id; // hit by a player: it fights back
+            _events.Add(new Engaged(defender.Id, attacker.Id));
+        }
+        if (defender.IsPlayer && result.Hit)
+            _events.Add(new HealthChanged(defender.Id, Math.Max(defender.Hp, 0), defender.Fighter.MaxHp));
+        if (defender.Hp > 0)
+            return;
+        _events.Add(new Slain(defender.Id, defender.Name, attacker.Id, attacker.Name));
+        if (defender.IsPlayer)
+            PlayerDied(defender);
+        else
+            Kill(defender.Id);
+    }
+
+    /// <summary>
+    /// A slain player: every NPC after them lets go, and they come back at full health where they
+    /// entered the zone. (The legacy client returns to its bind point, with a corpse and lost
+    /// experience: not ported yet.)
+    /// </summary>
+    private void PlayerDied(Entity player)
+    {
+        foreach (var npc in _entities.Values.Where(n => n.TargetId == player.Id).ToList())
+            Disengage(npc);
+        player.AutoAttack = false;
+        player.PlayerTargetId = null;
+        player.Sitting = false;
+        player.Hp = player.Fighter.MaxHp;
+        player.Position = player.EntryPosition;
+        player.LastMoveTime = _time;
+        player.Moved = true;
+        _events.Add(new Teleported(player.Id, player.EntryPosition, DeathReason));
+        _events.Add(new HealthChanged(player.Id, player.Hp, player.Fighter.MaxHp));
+    }
+
+    /// <summary>
+    /// Every 6 s, players out of combat for a tic regain hit points: 1 per 10 levels (at least 1),
+    /// twice that sitting. A simplification of Client::CalcHPRegen, without items or race bonuses.
+    /// </summary>
+    private void Regenerate()
+    {
+        if (_time < _nextRegen)
+            return;
+        _nextRegen += RegenSeconds;
+        foreach (var p in _entities.Values)
+        {
+            if (!p.IsPlayer || p.Hp >= p.Fighter.MaxHp || _time - p.LastCombatTime < RegenSeconds)
+                continue;
+            int amount = Math.Max(1, p.Level / 10) * (p.Sitting ? 2 : 1);
+            p.Hp = Math.Min(p.Fighter.MaxHp, p.Hp + amount);
+            _events.Add(new HealthChanged(p.Id, p.Hp, p.Fighter.MaxHp));
+        }
     }
 
     private Entity? FindAggroTarget(Entity npc)
@@ -366,6 +537,8 @@ public sealed class ZoneInstance
         var entity = Add(npc.Name, false, npc.Race, npc.Gender, npc.Level, npc.Size, start, spawn.Heading);
         entity.Npc = npc;
         entity.Spawn = spawn;
+        entity.Fighter = Combatant.ForNpc(npc);
+        entity.Hp = entity.Fighter.MaxHp;
         entity.Speed = npc.WalkUnitsPerSecond;
         entity.ScanIn = (float)_random.NextDouble() * AggroRules.ScanSeconds; // legacy: random first scan
         if (spawn.GridId > 0 && _grids.TryGetValue(spawn.GridId, out var grid) && grid.Waypoints.Count >= 2)

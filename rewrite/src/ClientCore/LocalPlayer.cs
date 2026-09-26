@@ -83,6 +83,16 @@ namespace EQClassic.ClientCore
             _dirty = true;
         }
 
+        /// <summary>Turns to face a point (heading 0 = +Y north, 90 = +X east).</summary>
+        public void Face(Vec3 point)
+        {
+            float dx = point.X - Position.X, dy = point.Y - Position.Y;
+            if (dx * dx + dy * dy < 1e-6f)
+                return;
+            Heading = ((float)(Math.Atan2(dx, dy) * 180.0 / Math.PI) + 360f) % 360f;
+            _dirty = true;
+        }
+
         /// <summary>The move to send now, if any (rate-limited to <see cref="SendRate"/> Hz).</summary>
         public PlayerMove? Due(float seconds)
         {

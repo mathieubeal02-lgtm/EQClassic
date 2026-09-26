@@ -34,7 +34,16 @@ namespace EQClassic.Unity
             public CharacterAnimationController Controller;
             public Vec3 Last;
             public float Speed;
+            /// <summary>The model's attack animation (the first it has of hand to hand, slashes, kick...), if any.</summary>
+            public AnimationType? Attack;
+            public bool CanFlinch;
         }
+
+        private static readonly (string Clip, AnimationType Type)[] AttackClips =
+        {
+            ("c08", AnimationType.CombatHandToHand), ("c05", AnimationType.Combat1HSlash), ("c03", AnimationType.Combat2HSlash),
+            ("c04", AnimationType.Combat2HBlunt), ("c02", AnimationType.CombatPiercing), ("c01", AnimationType.CombatKick),
+        };
         private GameObject _zoneRoot;
         private ZoneCollisionMesh _mesh;
         private Camera _camera;
@@ -153,7 +162,14 @@ namespace EQClassic.Unity
                 if (controller != null)
                 {
                     controller.Initialize(AnimationType.PassiveStand);
-                    _animated[entity.Id] = new Animated { Controller = controller, Last = new Vec3(entity.Spawn.X, entity.Spawn.Y, entity.Spawn.Z) };
+                    AnimationType? attack = null;
+                    foreach (var (clip, type) in AttackClips)
+                        if (controller.HasAnimation(clip)) { attack = type; break; }
+                    _animated[entity.Id] = new Animated
+                    {
+                        Controller = controller, Last = new Vec3(entity.Spawn.X, entity.Spawn.Y, entity.Spawn.Z),
+                        Attack = attack, CanFlinch = controller.HasAnimation("d01"),
+                    };
                 }
             }
             else
@@ -188,6 +204,15 @@ namespace EQClassic.Unity
                     return f;
             }
             return 0.05f;
+        }
+
+        /// <summary>A melee swing: the attacker plays its attack, a defender that was hit flinches.</summary>
+        public void OnCombat(CombatEvent swing)
+        {
+            if (_animated.TryGetValue(swing.AttackerId, out var attacker) && attacker.Attack is AnimationType attack)
+                attacker.Controller.PlayOneShotAnimation(attack);
+            if (swing.Damage > 0 && _animated.TryGetValue(swing.DefenderId, out var defender) && defender.CanFlinch)
+                defender.Controller.PlayOneShotAnimation(AnimationType.Damage1);
         }
 
         /// <summary>

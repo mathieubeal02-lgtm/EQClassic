@@ -93,6 +93,47 @@ public class ClientCoreUnitTests
     }
 
     [Fact]
+    public void Tab_targets_the_nearest_npc_then_cycles_by_distance()
+    {
+        var view = ViewWith(
+            new EntitySpawn(1, "Qbot", true, 9, 0, 1, 6f, 0, 0, 0, 0),
+            new EntitySpawn(2, "a_rat", false, 36, 0, 1, 2f, 10, 0, 0, 0),
+            new EntitySpawn(3, "a_bat", false, 34, 0, 1, 2f, 20, 0, 0, 0),
+            new EntitySpawn(4, "a_far_rat", false, 36, 0, 1, 2f, 500, 0, 0, 0),
+            new EntitySpawn(5, "Qother", true, 9, 0, 1, 6f, 5, 0, 0, 0));
+        var here = new Vec3(0, 0, 0);
+        Assert.Equal(2, view.NextNpc(here, 100)!.Id);
+        Assert.Equal(3, view.NextNpc(here, 100, current: 2)!.Id);
+        Assert.Equal(2, view.NextNpc(here, 100, current: 3)!.Id); // wraps; players and far NPCs are skipped
+        Assert.Null(view.NextNpc(new Vec3(1000, 1000, 0), 100));
+    }
+
+    [Fact]
+    public void Facing_a_point_sets_the_heading()
+    {
+        var player = new LocalPlayer(1, new Vec3(0, 0, 0), heading: 0);
+        player.Face(new Vec3(10, 0, 0));
+        Assert.Equal(90f, player.Heading, precision: 3);   // east
+        player.Face(new Vec3(0, -10, 0));
+        Assert.Equal(180f, player.Heading, precision: 3);  // south
+        player.Face(new Vec3(-10, 10, 0));
+        Assert.Equal(315f, player.Heading, precision: 3);  // north-west
+        Assert.NotNull(player.Due(1));                     // the turn is sent
+    }
+
+    [Fact]
+    public void Combat_lines_read_like_the_trilogy_client()
+    {
+        string? Name(int id) => id switch { 1 => "Qbot", 2 => "a rat", 3 => "Guard Liben", _ => null };
+        Assert.Equal("You hit a rat for 3 points of damage.", CombatText.Describe(new CombatEvent(1, 2, 3, 80), 1, Name));
+        Assert.Equal("You try to hit a rat, but miss!", CombatText.Describe(new CombatEvent(1, 2, 0, 80), 1, Name));
+        Assert.Equal("A rat hits YOU for 1 point of damage.", CombatText.Describe(new CombatEvent(2, 1, 1, 90), 1, Name));
+        Assert.Equal("A rat tries to hit YOU, but misses!", CombatText.Describe(new CombatEvent(2, 1, 0, 90), 1, Name));
+        Assert.Equal("Guard Liben hits a rat for 12 points of damage.", CombatText.Describe(new CombatEvent(3, 2, 12, 0), 1, Name));
+        Assert.Equal("a rat", CombatText.DisplayName("a_rat01"));
+    }
+
+    [Fact]
     public void Server_correction_wins()
     {
         var player = new LocalPlayer(1, new Vec3(0, 0, 0), 0);

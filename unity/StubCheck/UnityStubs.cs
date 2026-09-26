@@ -85,7 +85,7 @@ namespace UnityEngine
 
     public enum PrimitiveType { Sphere, Capsule, Cylinder, Cube, Plane, Quad }
     public enum LightType { Spot, Directional, Point }
-    public enum KeyCode { Q = 113, E = 101, U = 117 }
+    public enum KeyCode { Tab = 9, Escape = 27, Q = 113, E = 101, F = 102, T = 116, U = 117 }
     public enum RuntimeInitializeLoadType { AfterSceneLoad, BeforeSceneLoad }
 
     [System.AttributeUsage(System.AttributeTargets.Method)]
@@ -188,11 +188,17 @@ namespace UnityEditor
 // LanternUnityTools (Assets/Scripts/Lantern/EQ/Animation), the members the client uses.
 namespace Lantern.EQ.Animation
 {
-    public enum AnimationType { LocomotionWalk = 17, LocomotionRun = 18, PassiveStand = 32 }
+    public enum AnimationType
+    {
+        CombatKick = 1, CombatPiercing = 2, Combat2HSlash = 3, Combat2HBlunt = 4, Combat1HSlash = 5, CombatHandToHand = 8,
+        Damage1 = 12, LocomotionWalk = 17, LocomotionRun = 18, PassiveStand = 32,
+    }
 
     public class CharacterAnimationController : UnityEngine.MonoBehaviour
     {
         public void Initialize(AnimationType initialAnimation) { }
         public void SetNewConstantState(AnimationType animationType, int priority, float speed = 1f) { }
+        public void PlayOneShotAnimation(AnimationType animationType, float speed = 1f, int importance = 0, bool canSelfInterrupt = true, AnimationType? newConstantState = null) { }
+        public bool HasAnimation(string animationName) => false;
     }
 }

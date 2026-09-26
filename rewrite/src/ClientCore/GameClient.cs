@@ -45,6 +45,55 @@ namespace EQClassic.ClientCore
 
         /// <summary>Reach of the Use key: the server accepts clicks within 40 units (ZoneInstance.DoorReach).</summary>
         public const float DoorUseReach = 30f;
+        /// <summary>Tab targets the nearest NPC within this distance.</summary>
+        public const float TargetReach = 100f;
+        /// <summary>Reason of the server's move after the player was slain (ZoneInstance.DeathReason).</summary>
+        public const string DeathReason = "death";
+
+        public int? TargetId { get; private set; }
+        public bool AutoAttacking { get; private set; }
+        public int Hp { get; private set; }
+        public int MaxHp { get; private set; }
+        /// <summary>A melee swing near the player (for animations; the text goes to <see cref="MessageReceived"/>).</summary>
+        public event Action<CombatEvent>? CombatReceived;
+
+        /// <summary>
+        /// Tab: targets the nearest NPC, or the next one by distance when the current target is
+        /// near (repeated Tabs cycle). Clears the target when none is near. Returns the new target.
+        /// </summary>
+        public ZoneView.EntityView? TargetNearest()
+        {
+            if (_state != GameState.InZone || Zone == null || Player == null)
+                return null;
+            var target = Zone.NextNpc(Player.Position, TargetReach, TargetId);
+            SetTarget(target?.Id);
+            return target;
+        }
+
+        /// <summary>Turns the player toward the target, if any (T).</summary>
+        public void FaceTarget()
+        {
+            if (TargetId is int id && Zone?.Get(id) is { } target)
+                Player?.Face(target.Latest);
+        }
+
+        public void SetTarget(int? entityId)
+        {
+            TargetId = entityId;
+            if (entityId == null)
+                AutoAttacking = false;
+            _connection?.Send(new EQClassic.Shared.Zone.SetTarget(entityId ?? 0));
+        }
+
+        /// <summary>Auto-attack on or off (the server refuses without a target and says so).</summary>
+        public void ToggleAutoAttack()
+        {
+            if (_state != GameState.InZone)
+                return;
+            bool on = !AutoAttacking;
+            AutoAttacking = on && TargetId != null;
+            _connection?.Send(new AutoAttack(on)); // without a target the server answers "You must first select a target..."
+        }
 
         /// <summary>
         /// Uses the nearest door (the Use key, U in EverQuest). Returns it, or null when none is in
@@ -164,12 +213,22 @@ namespace EQClassic.ClientCore
                     break;
                 case EntityRemoved removed:
                     Zone?.Apply(removed);
+                    if (removed.Id == TargetId)
+                    {
+                        TargetId = null;
+                        AutoAttacking = false;
+                    }
                     break;
                 case EntityPositions positions:
                     Zone?.Apply(positions, Now);
                     break;
                 case MoveCorrection correction:
                     Player?.Apply(correction);
+                    if (correction.Reason == DeathReason)
+                    {
+                        TargetId = null;
+                        AutoAttacking = false;
+                    }
                     break;
                 case ZoneDoors doors:
                     Zone?.Apply(doors);
@@ -178,7 +237,18 @@ namespace EQClassic.ClientCore
                     Zone?.Apply(door);
                     break;
                 case ZoneMessage text:
+                    if (text.Text == "Auto attack is off.")
+                        AutoAttacking = false;
                     MessageReceived?.Invoke(text.Text);
+                    break;
+                case CombatEvent swing when Zone != null:
+                    Zone.Apply(swing);
+                    CombatReceived?.Invoke(swing);
+                    MessageReceived?.Invoke(CombatText.Describe(swing, Zone.YourEntityId, id => Zone.Get(id)?.DisplayName));
+                    break;
+                case PlayerHealth health:
+                    Hp = health.Hp;
+                    MaxHp = health.MaxHp;
                     break;
                 case ZoneChange change:
                     Zone = null;

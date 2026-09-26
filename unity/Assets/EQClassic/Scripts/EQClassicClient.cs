@@ -58,7 +58,15 @@ namespace EQClassic.Unity
             if (_client.State == GameState.InZone)
             {
                 if (Input.GetKeyDown(KeyCode.U) && _client.UseNearestDoor() == null)
-                    _messages.Add("There is nothing here to use.");
+                    AddMessage("There is nothing here to use.");
+                if (Input.GetKeyDown(KeyCode.Tab) && _client.TargetNearest() == null)
+                    AddMessage("There is no one near to target.");
+                if (Input.GetKeyDown(KeyCode.F))
+                    _client.ToggleAutoAttack();
+                if (Input.GetKeyDown(KeyCode.T))
+                    _client.FaceTarget();
+                if (Input.GetKeyDown(KeyCode.Escape))
+                    _client.SetTarget(null);
                 _presenter.Present(_client, Time.deltaTime);
             }
         }
@@ -68,12 +76,22 @@ namespace EQClassic.Unity
             _client?.Dispose();
         }
 
+        private void AddMessage(string text)
+        {
+            _messages.Add(text);
+            if (_messages.Count > 8)
+                _messages.RemoveAt(0);
+        }
+
         private void OnGUI()
         {
             var state = _client?.State ?? GameState.Disconnected;
             if (state == GameState.InZone)
             {
-                GUI.Label(new Rect(10, 10, 700, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows to move, Q/E to turn, U to use a door");
+                GUI.Label(new Rect(10, 10, 900, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows move, Q/E turn, U use a door, Tab target, T face it, F attack, Esc clear target");
+                GUI.Label(new Rect(10, 32, 400, 20), $"HP {_client.Hp} / {_client.MaxHp}" + (_client.AutoAttacking ? "   (attacking)" : ""));
+                if (_client.TargetId is int target && _client.Zone?.Get(target) is { } t)
+                    GUI.Label(new Rect(10, 54, 400, 20), $"Target: {t.DisplayName}  {t.HpPercent}%");
                 for (int i = 0; i < _messages.Count; i++)
                     GUI.Label(new Rect(10, Screen.height - 20 * (_messages.Count - i) - 10, 700, 20), _messages[i]);
                 return;
@@ -141,12 +159,8 @@ namespace EQClassic.Unity
             _client?.Dispose();
             _client = new GameClient(string.IsNullOrWhiteSpace(_fingerprint) ? null : _fingerprint.Trim());
             _client.ZoneEntered += zone => _presenter.Enter(zone);
-            _client.MessageReceived += text =>
-            {
-                _messages.Add(text);
-                if (_messages.Count > 6)
-                    _messages.RemoveAt(0);
-            };
+            _client.CombatReceived += _presenter.OnCombat;
+            _client.MessageReceived += AddMessage;
             _client.Connect(_host, int.TryParse(_port, out var p) ? p : 5999);
         }
     }

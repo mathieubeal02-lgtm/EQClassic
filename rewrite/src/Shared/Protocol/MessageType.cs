@@ -33,4 +33,8 @@ public enum MessageType : byte
     ClickDoor = 25,
     DoorState = 26,
     ZoneMessage = 27,
+    SetTarget = 28,
+    AutoAttack = 29,
+    CombatEvent = 30,
+    PlayerHealth = 31,
 }

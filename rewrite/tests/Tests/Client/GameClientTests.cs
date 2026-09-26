@@ -27,7 +27,8 @@ public sealed class GameClientTests : IDisposable
         var directory = new WorldDirectory();
         var zoneData = new InMemoryZoneDataSource();
         zoneData.Zones["grobb"] = new ZoneData("grobb",
-            [new SpawnPoint(1, new Vec3(0, 0, 4), 0, 3, [(new NpcTemplate(52001, "a_troll_guard", 9, 0, 20, 8f), 100)])],
+            [new SpawnPoint(1, new Vec3(0, 0, 4), 0, 3, [(new NpcTemplate(52001, "a_troll_guard", 9, 0, 20, 8f), 100)]),
+             new SpawnPoint(2, new Vec3(14, 12, 4), 0, 0, [(new NpcTemplate(1, "a_rat01", 36, 2, 1, 2f) { Combat = new NpcCombatStats(1, 16, 1, 4, AC: 5) }, 100)])],
             new Dictionary<int, Grid> { [3] = new Grid(3, GridType.BackAndForth, [new Waypoint(new Vec3(0, 0, 4), 0), new Waypoint(new Vec3(0, 200, 4), 0)]) },
             [new ZoneLine(396, new Vec3(50.34f, -129.93f, 3.13f), 20, "innothule", new Vec3(-612.29f, -2789.26f, -31.44f))],
             [new Door(1, "DOOR1", new Vec3(15, 10, 4), 128, 0), new Door(2, "CELLDOOR", new Vec3(10, 34, 4), 0, 0, KeyItem: 1)]);
@@ -151,6 +152,27 @@ public sealed class GameClientTests : IDisposable
         Assert.Equal(2, client.UseNearestDoor()?.Id);
         Assert.True(Run(() => messages.Count > 0));
         Assert.Equal(ZoneInstance.NoKeyMessage, messages[0]);
+    }
+
+    [Fact]
+    public void Targets_the_nearest_npc_and_trades_blows_with_it()
+    {
+        var client = InZone("Qbot"); // at (10, 10), the rat at (14, 12)
+        var lines = new List<string>();
+        client.MessageReceived += lines.Add;
+        Assert.True(Run(() => client.MaxHp > 0), "no hit points received");
+
+        Assert.Equal("a rat", client.TargetNearest()?.DisplayName);
+        client.ToggleAutoAttack();
+        Assert.True(client.AutoAttacking);
+        Assert.True(Run(() => lines.Any(l => l.StartsWith("You hit a rat") || l.StartsWith("You try to hit a rat")), 8000), string.Join(" | ", lines));
+        Assert.True(Run(() => lines.Any(l => l.StartsWith("A rat hits YOU") || l.StartsWith("A rat tries to hit YOU")), 8000), string.Join(" | ", lines));
+        Assert.Contains("Auto attack is on.", lines);
+        Assert.InRange(client.Hp, 1, client.MaxHp);
+
+        client.ToggleAutoAttack();
+        Assert.True(Run(() => lines.Contains("Auto attack is off.")));
+        Assert.False(client.AutoAttacking);
     }
 
     [Fact]

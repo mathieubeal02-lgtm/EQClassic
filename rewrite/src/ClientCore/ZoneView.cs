@@ -26,6 +26,10 @@ namespace EQClassic.ClientCore
             public EntitySpawn Spawn { get; }
             public int Id => Spawn.Id;
             public string ModelCode => ModelCodes.For(Spawn.Race, Spawn.Gender);
+            /// <summary>Name as the Trilogy client shows it ("a_rat01" → "a rat").</summary>
+            public string DisplayName => CombatText.DisplayName(Spawn.Name);
+            /// <summary>Hit points in percent, from the last combat event about it.</summary>
+            public int HpPercent { get; internal set; } = 100;
             internal readonly List<(double Time, Vec3 Position, float Heading)> Snapshots = new List<(double, Vec3, float)>();
             internal uint LastTick;
 
@@ -56,6 +60,37 @@ namespace EQClassic.ClientCore
 
         private readonly Dictionary<int, DoorInfo> _doors = new Dictionary<int, DoorInfo>();
         public IReadOnlyCollection<DoorInfo> Doors => _doors.Values;
+
+        /// <summary>A swing: remembers the defender's health for the target window.</summary>
+        public void Apply(CombatEvent swing)
+        {
+            if (_entities.TryGetValue(swing.DefenderId, out var defender))
+                defender.HpPercent = swing.DefenderHpPercent;
+        }
+
+        /// <summary>
+        /// Tab targeting: the NPCs within <paramref name="reach"/>, nearest first; the one after
+        /// <paramref name="current"/> in that order (so repeated Tabs cycle), or the nearest. Null when none is near.
+        /// </summary>
+        public EntityView? NextNpc(Vec3 position, float reach, int? current = null)
+        {
+            var near = new List<(float Distance, EntityView Entity)>();
+            foreach (var e in _entities.Values)
+            {
+                if (e.Spawn.IsPlayer || e.Id == YourEntityId)
+                    continue;
+                var p = e.Latest;
+                float dx = p.X - position.X, dy = p.Y - position.Y, dz = p.Z - position.Z;
+                float distance = dx * dx + dy * dy + dz * dz;
+                if (distance <= reach * reach)
+                    near.Add((distance, e));
+            }
+            if (near.Count == 0)
+                return null;
+            near.Sort((a, b) => a.Distance.CompareTo(b.Distance));
+            int index = near.FindIndex(n => n.Entity.Id == current);
+            return near[(index + 1) % near.Count].Entity;
+        }
 
         public void Apply(ZoneDoors doors)
         {

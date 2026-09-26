@@ -270,4 +270,54 @@ namespace EQClassic.Shared.Zone
         public void WriteFields(NetDataWriter writer) => writer.Put(Text);
         public static ZoneMessage ReadFields(NetDataReader reader) => new ZoneMessage(reader.GetString());
     }
+
+    /// <summary>Client to zone server: target an entity (0 clears the target).</summary>
+    public sealed record SetTarget(int EntityId) : IMessage
+    {
+        public MessageType Type => MessageType.SetTarget;
+        public void WriteFields(NetDataWriter writer) => writer.Put(EntityId);
+        public static SetTarget ReadFields(NetDataReader reader) => new SetTarget(reader.GetInt());
+    }
+
+    /// <summary>Client to zone server: auto-attack the target, or stop (legacy OP_AutoAttack).</summary>
+    public sealed record AutoAttack(bool On) : IMessage
+    {
+        public MessageType Type => MessageType.AutoAttack;
+        public void WriteFields(NetDataWriter writer) => writer.Put(On);
+        public static AutoAttack ReadFields(NetDataReader reader) => new AutoAttack(reader.GetBool());
+    }
+
+    /// <summary>
+    /// Zone server to the clients near the fight: one melee swing. Damage 0 is a miss; the
+    /// defender's hit points after it, in percent (target window).
+    /// </summary>
+    public sealed record CombatEvent(int AttackerId, int DefenderId, int Damage, int DefenderHpPercent) : IMessage
+    {
+        public MessageType Type => MessageType.CombatEvent;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(AttackerId);
+            writer.Put(DefenderId);
+            writer.Put(Damage);
+            writer.Put((byte)DefenderHpPercent);
+        }
+
+        public static CombatEvent ReadFields(NetDataReader reader) =>
+            new CombatEvent(reader.GetInt(), reader.GetInt(), reader.GetInt(), reader.GetByte());
+    }
+
+    /// <summary>Zone server to one client: their own hit points.</summary>
+    public sealed record PlayerHealth(int Hp, int MaxHp) : IMessage
+    {
+        public MessageType Type => MessageType.PlayerHealth;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(Hp);
+            writer.Put(MaxHp);
+        }
+
+        public static PlayerHealth ReadFields(NetDataReader reader) => new PlayerHealth(reader.GetInt(), reader.GetInt());
+    }
 }

@@ -59,6 +59,10 @@ public static class MessageCodec
                 MessageType.ClickDoor => ClickDoor.ReadFields(reader),
                 MessageType.DoorState => DoorState.ReadFields(reader),
                 MessageType.ZoneMessage => ZoneMessage.ReadFields(reader),
+                MessageType.SetTarget => SetTarget.ReadFields(reader),
+                MessageType.AutoAttack => AutoAttack.ReadFields(reader),
+                MessageType.CombatEvent => CombatEvent.ReadFields(reader),
+                MessageType.PlayerHealth => PlayerHealth.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

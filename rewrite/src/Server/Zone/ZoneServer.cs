@@ -39,6 +39,10 @@ public sealed class ZoneServer : IDisposable
     /// a little more so entities do not pop at the edge of the view).
     /// </summary>
     public float UpdateRange { get; set; } = 600f;
+    /// <summary>Items for the players' weapons and armour (melee); null: bare hands, no AC.</summary>
+    public EQClassic.Server.Combat.IItemSource? Items { get; set; }
+    /// <summary>Combat events reach the players this close to the fight.</summary>
+    public float CombatHearingRange { get; set; } = 200f;
 
     // type byte + tick (4) + count (2); each position is id + 4 floats.
     private const int PositionsHeaderSize = 7, PositionSize = 20;
@@ -121,7 +125,21 @@ public sealed class ZoneServer : IDisposable
                 var response = Enter(peer, enter);
                 Send(peer, response, DeliveryMethod.ReliableOrdered);
                 if (response.Accepted && _players.TryGetValue(peer, out var entered))
+                {
                     Send(peer, DoorsOf(entered.Instance), DeliveryMethod.ReliableOrdered); // after the entry: same channel, in order
+                    if (entered.Instance.Get(entered.EntityId) is { } me)
+                        Send(peer, new PlayerHealth(me.Hp, me.Fighter.MaxHp), DeliveryMethod.ReliableOrdered);
+                }
+                break;
+
+            case SetTarget target when _players.TryGetValue(peer, out var targeter):
+                targeter.Instance.SetTarget(targeter.EntityId, target.EntityId == 0 ? null : target.EntityId);
+                Broadcast(targeter.Instance, targeter.Instance.DrainEvents());
+                break;
+
+            case AutoAttack attack when _players.TryGetValue(peer, out var attacker):
+                attacker.Instance.SetAutoAttack(attacker.EntityId, attack.On);
+                Broadcast(attacker.Instance, attacker.Instance.DrainEvents());
                 break;
 
             case ClickDoor click when _players.TryGetValue(peer, out var clicker):
@@ -163,7 +181,9 @@ public sealed class ZoneServer : IDisposable
             _instances[ticket.Zone] = instance;
             Log?.Invoke($"zone {ticket.Zone} booted: {instance.Entities.Count()} NPC(s)");
         }
-        var entity = instance.AddPlayer(ticket.CharacterName, ticket.Race, ticket.Gender, ticket.Level, ticket.Position);
+        var fighter = ticket.Profile is { } profile ? EQClassic.Server.Combat.Combatant.ForPlayer(profile, Items) : null;
+        var entity = instance.AddPlayer(ticket.CharacterName, ticket.Race, ticket.Gender, ticket.Level, ticket.Position,
+            ticket.Profile?.Heading ?? 0, fighter, ticket.Profile?.CurHp);
         _players[peer] = new Player { Instance = instance, EntityId = entity.Id, Ticket = ticket };
         foreach (var (other, p) in _players)
             if (other != peer && p.Instance == instance)
@@ -195,13 +215,50 @@ public sealed class ZoneServer : IDisposable
                     break;
                 case ZoneInstance.Teleported teleported when PeerOf(instance, teleported.PlayerId) is { } moved:
                     var to = teleported.Destination;
-                    Send(moved, new MoveCorrection(to.X, to.Y, to.Z, "teleport"), DeliveryMethod.ReliableOrdered);
+                    Send(moved, new MoveCorrection(to.X, to.Y, to.Z, teleported.Reason), DeliveryMethod.ReliableOrdered);
                     break;
                 case ZoneInstance.Told told when PeerOf(instance, told.PlayerId) is { } listener:
                     Send(listener, new ZoneMessage(told.Text), DeliveryMethod.ReliableOrdered);
                     break;
+                case ZoneInstance.Swung swung when instance.Get(swung.DefenderId) is { } defender:
+                    SendNear(instance, defender.Position, new CombatEvent(swung.AttackerId, swung.DefenderId, swung.Damage, swung.DefenderHpPercent));
+                    break;
+                case ZoneInstance.HealthChanged health when PeerOf(instance, health.PlayerId) is { } hurt:
+                    Send(hurt, new PlayerHealth(health.Hp, health.MaxHp), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.Slain slain:
+                    AnnounceDeath(instance, slain);
+                    break;
             }
         }
+    }
+
+    /// <summary>Legacy death messages: the killer, the victim, then everyone near.</summary>
+    private void AnnounceDeath(ZoneInstance instance, ZoneInstance.Slain slain)
+    {
+        string victim = DisplayName(slain.VictimName), killer = DisplayName(slain.KillerName);
+        foreach (var (peer, player) in _players)
+        {
+            if (player.Instance != instance)
+                continue;
+            string? text = player.EntityId == slain.KillerId ? $"You have slain {victim}!"
+                : player.EntityId == slain.VictimId ? $"You have been slain by {killer}!"
+                : instance.Get(player.EntityId) is { } p && instance.Get(slain.KillerId) is { } k && Distance2(p.Position, k.Position) <= CombatHearingRange * CombatHearingRange
+                    ? $"{victim} has been slain by {killer}!" : null;
+            if (text is not null)
+                Send(peer, new ZoneMessage(text), DeliveryMethod.ReliableOrdered);
+        }
+    }
+
+    /// <summary>NPC names as the client shows them: "a_rat01" → "a rat".</summary>
+    public static string DisplayName(string name) => name.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9').Replace('_', ' ').Trim();
+
+    private void SendNear(ZoneInstance instance, Vec3 at, IMessage message)
+    {
+        float range2 = CombatHearingRange * CombatHearingRange;
+        foreach (var (peer, player) in _players)
+            if (player.Instance == instance && instance.Get(player.EntityId) is { } p && Distance2(p.Position, at) <= range2)
+                Send(peer, message, DeliveryMethod.ReliableOrdered);
     }
 
     private NetPeer? PeerOf(ZoneInstance instance, int entityId) =>
@@ -238,7 +295,7 @@ public sealed class ZoneServer : IDisposable
             return;
         var last = player.Instance.Get(player.EntityId)?.Position ?? player.Ticket.Position;
         var (zone, at) = saveAs ?? (player.Instance.ShortName, last);
-        Characters?.SavePosition(player.Ticket.CharacterName, zone, at.X, at.Y, at.Z);
+        Characters?.SavePosition(player.Ticket.CharacterName, zone, at.X, at.Y, at.Z, player.Instance.Get(player.EntityId)?.Hp);
         player.Instance.RemovePlayer(player.EntityId);
         foreach (var (other, p) in _players)
             if (p.Instance == player.Instance)
