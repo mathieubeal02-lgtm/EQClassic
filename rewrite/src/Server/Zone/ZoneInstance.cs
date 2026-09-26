@@ -920,7 +920,15 @@ public sealed partial class ZoneInstance
             e.Heading = Heading(before, e.Position, e.Heading);
             e.Moved = true;
             if (arrived && e.Grid is not null)
+            {
                 e.PauseLeft = Math.Max(e.Grid.Waypoints[waypoint].PauseSeconds, 0);
+                if (e.Npc is { } walker)
+                {
+                    var vars = QuestVariables(e.Id, 0);
+                    vars["wp"] = waypoint.ToString(); // 0-based index in the grid, as EQEmu's cur_wp
+                    _events.Add(new QuestTriggered(e.Id, 0, walker, "EVENT_WAYPOINT", vars));
+                }
+            }
         }
 
         AdvanceCasting();

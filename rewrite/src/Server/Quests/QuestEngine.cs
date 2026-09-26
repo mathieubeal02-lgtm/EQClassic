@@ -39,6 +39,23 @@ public sealed class QuestEngine
     /// </summary>
     public string? ScriptFor(string zone, int npcTypeId, string npcName)
     {
+        // Asked at every spawn, waypoint and death: the answer is kept a minute (new scripts show up after that).
+        var key = (zone, npcTypeId, npcName);
+        var now = DateTime.UtcNow;
+        lock (_lookups)
+            if (_lookups.TryGetValue(key, out var known) && now - known.At < LookupLifetime)
+                return known.Script;
+        var script = FindScript(zone, npcTypeId, npcName);
+        lock (_lookups)
+            _lookups[key] = (script, now);
+        return script;
+    }
+
+    private static readonly TimeSpan LookupLifetime = TimeSpan.FromMinutes(1);
+    private readonly Dictionary<(string, int, string), (string? Script, DateTime At)> _lookups = new();
+
+    private string? FindScript(string zone, int npcTypeId, string npcName)
+    {
         string name = CleanName(npcName);
         foreach (var path in new[]
                  {

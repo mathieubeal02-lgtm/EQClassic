@@ -110,6 +110,28 @@ public class QuestTests
     }
 
     [Fact]
+    public void Walkers_raise_a_waypoint_event_and_npcs_turn_to_who_speaks()
+    {
+        var walker = new NpcTemplate(3, "Guard_Walker", 1, 0, 20, 6f) { Combat = new NpcCombatStats(1, 500, 1, 2) };
+        var grid = new Grid(1, GridType.Circular, [new Waypoint(new Vec3(100, 0, 0), 0), new Waypoint(new Vec3(110, 0, 0), 0)]);
+        var data = new ZoneData("qeynos2", [new SpawnPoint(1, new Vec3(100, 0, 0), 0, 1, [(walker, 100)], 600, 0)], new Dictionary<int, Grid> { [1] = grid });
+        var zone = new ZoneInstance(data);
+        var ann = zone.AddPlayer("Ann", 1, 0, 10, new Vec3(100, 50, 0));
+        var npc = zone.Entities.Single(e => !e.IsPlayer);
+        var events = new List<ZoneInstance.ZoneEvent>();
+        for (int i = 0; i < 100; i++)
+        {
+            zone.Tick(0.1f);
+            events.AddRange(zone.DrainEvents());
+        }
+        Assert.Contains(events, e => e is ZoneInstance.QuestTriggered { Event: "EVENT_WAYPOINT" } t && t.Variables["wp"] is "0" or "1");
+
+        float before = npc.Heading;
+        zone.FaceTowards(npc.Id, ann.Id);
+        Assert.NotEqual(before, npc.Heading);
+    }
+
+    [Fact]
     public void Quest_faction_moves_the_standing_with_the_message()
     {
         var data = new InMemoryFactionData();
@@ -129,12 +151,15 @@ public class QuestTests
             Directory.CreateDirectory(Path.Combine(dir, "qeynos2"));
             Directory.CreateDirectory(Path.Combine(dir, "templates"));
             File.WriteAllText(Path.Combine(dir, "templates", "Guard_Tom.pl"), "");
-            var engine = new QuestEngine(dir, "quest-host.pl");
-            Assert.EndsWith(Path.Combine("templates", "Guard_Tom.pl"), engine.ScriptFor("qeynos2", 1, "Guard_Tom01"));
+            QuestEngine Engine() => new(dir, "quest-host.pl"); // lookups are kept a minute: a fresh engine sees new files
+            Assert.EndsWith(Path.Combine("templates", "Guard_Tom.pl"), Engine().ScriptFor("qeynos2", 1, "Guard_Tom01"));
             File.WriteAllText(Path.Combine(dir, "qeynos2", "Guard_Tom.pl"), "");
-            Assert.EndsWith(Path.Combine("qeynos2", "Guard_Tom.pl"), engine.ScriptFor("qeynos2", 1, "Guard_Tom01"));
+            Assert.EndsWith(Path.Combine("qeynos2", "Guard_Tom.pl"), Engine().ScriptFor("qeynos2", 1, "Guard_Tom01"));
             File.WriteAllText(Path.Combine(dir, "qeynos2", "1.pl"), "");
+            var engine = Engine();
             Assert.EndsWith(Path.Combine("qeynos2", "1.pl"), engine.ScriptFor("qeynos2", 1, "Guard_Tom01"));
+            File.Delete(Path.Combine(dir, "qeynos2", "1.pl"));
+            Assert.EndsWith(Path.Combine("qeynos2", "1.pl"), engine.ScriptFor("qeynos2", 1, "Guard_Tom01")); // kept
             Assert.Null(engine.ScriptFor("qeynos2", 2, "Nobody"));
             Assert.Equal("Tom-s_Guard", QuestEngine.CleanName("Tom`s_Guard012"));
         }

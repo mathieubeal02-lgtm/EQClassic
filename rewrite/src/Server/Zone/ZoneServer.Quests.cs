@@ -53,6 +53,8 @@ public sealed partial class ZoneServer
         if (instance.Get(playerId) is not { PlayerTargetId: { } targetId } player || instance.Get(targetId) is not { } npc
             || Distance2(player.Position, npc.Position) > SayRange * SayRange || npc.TargetId is not null) // busy fighting
             return;
+        if (Quests is not null && npc.Npc is { } template && ScriptFor(instance, template, "EVENT_SAY") is not null)
+            instance.FaceTowards(npc.Id, playerId);
         QuestEvent(instance, npc.Id, playerId, "EVENT_SAY", vars => vars["text"] = text);
     }
 
@@ -64,6 +66,7 @@ public sealed partial class ZoneServer
             instance.ReturnItems(handedIn.PlayerId, handedIn.Items);
             return;
         }
+        instance.FaceTowards(npc.Id, handedIn.PlayerId);
         var vars = instance.QuestVariables(npc.Id, handedIn.PlayerId);
         var count = new Dictionary<int, int>();
         for (int i = 0; i < 4; i++)

@@ -87,6 +87,16 @@ public sealed partial class ZoneInstance
         _events.Add(new HandedIn(player.Id, npc.Id, items, side.Coins));
     }
 
+    /// <summary>PerlembParser on EVENT_SAY and EVENT_ITEM: the NPC turns to the player.</summary>
+    public void FaceTowards(int npcId, int playerId)
+    {
+        if (_entities.TryGetValue(npcId, out var npc) && !npc.IsPlayer && _entities.TryGetValue(playerId, out var player) && npc.TargetId is null)
+        {
+            npc.Heading = Heading(npc.Position, player.Position, npc.Heading);
+            npc.Moved = true;
+        }
+    }
+
     /// <summary>Gives items back (an NPC with no use for them, or plugin::return_items).</summary>
     public void ReturnItems(int playerId, IEnumerable<int> items)
     {
