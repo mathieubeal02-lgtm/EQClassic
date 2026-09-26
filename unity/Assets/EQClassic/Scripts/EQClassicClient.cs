@@ -651,12 +651,12 @@ namespace EQClassic.Unity
                 if (_client.MaxMana > 0)
                     DrawBar(new Rect(10, 52, 220, 12), (float)_client.Mana / _client.MaxMana, new Color(0.2f, 0.3f, 0.9f), $"{_client.Mana} / {_client.MaxMana}");
                 if (_client.Stamina is { } stamina)
-                    DrawBar(new Rect(232, 52, 80, 12), (100 - stamina.Fatigue) / 100f, new Color(0.9f, 0.6f, 0.1f),
-                        stamina.Hunger == 0 ? "hungry" : stamina.Thirst == 0 ? "thirsty" : "stamina");
+                    DrawBar(new Rect(10, 65, 220, 6), (100 - stamina.Fatigue) / 100f, new Color(0.9f, 0.6f, 0.1f), "");
                 if (_client.Experience is { } xp)
-                    DrawBar(new Rect(10, 66, 220, 8), xp.Fraction, new Color(0.9f, 0.8f, 0.2f), "");
+                    DrawBar(new Rect(10, 72, 220, 8), xp.Fraction, new Color(0.9f, 0.8f, 0.2f), "");
                 if (_client.Experience is { } lvl)
-                    GUI.Label(new Rect(10, 74, 220, 20), $"Level {lvl.Level}  {(int)(lvl.Fraction * 100)}%");
+                    GUI.Label(new Rect(10, 80, 320, 20), $"Level {lvl.Level}  {(int)(lvl.Fraction * 100)}%"
+                        + (_client.Stamina is { Hunger: 0 } ? "  hungry" : "") + (_client.Stamina is { Thirst: 0 } ? "  thirsty" : ""));
                 if (_client.Casting is { } casting)
                     DrawBar(new Rect(Screen.width / 2 - 150, Screen.height - 320, 300, 16), _client.CastProgress, new Color(0.7f, 0.3f, 0.9f), casting.SpellName);
                 DrawGems();
