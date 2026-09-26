@@ -70,6 +70,20 @@ namespace EQClassic.ClientCore
         /// <summary>Model used for races missing from the table.</summary>
         public const string Fallback = "hum";
 
+        // Default sizes of the playable races (the size a spawn of that race has when nothing changes it).
+        private static readonly Dictionary<int, float> DefaultSizes = new Dictionary<int, float>
+        {
+            [1] = 6f, [2] = 7f, [3] = 6f, [4] = 5f, [5] = 6f, [6] = 5f, [7] = 5.5f, [8] = 4f, [9] = 8f, [10] = 9f,
+            [11] = 3.5f, [12] = 3f, [128] = 6f, [71] = 6f,
+        };
+
+        /// <summary>
+        /// How much to scale a model for a spawn's size: size / the race's default size, for the races
+        /// whose default size is known (1 otherwise, or for sizes 0 and below).
+        /// </summary>
+        public static float Scale(int race, float size) =>
+            size > 0 && DefaultSizes.TryGetValue(race, out var normal) ? size / normal : 1f;
+
         public static bool IsKnown(int race) => Playable.ContainsKey(race) || GenderedOthers.ContainsKey(race) || Others.ContainsKey(race);
     }
 }

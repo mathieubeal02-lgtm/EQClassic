@@ -125,6 +125,8 @@ namespace EQClassic.Unity
                 ReadCameraInput(player);
             if (InputEnabled && (Input.GetKeyDown(KeyCode.R) || Input.GetKeyDown(KeyCode.Numlock)))
                 _autorun = !_autorun;
+            if (InputEnabled && Input.GetKeyDown(KeyCode.Space))
+                player.Jump();
             float forward = InputEnabled ? Input.GetAxis("Vertical") : 0f;
             if (forward < -0.1f)
                 _autorun = false; // backing up stops autorun, as in the old client
@@ -190,6 +192,8 @@ namespace EQClassic.Unity
                 go = new GameObject("entity");
                 var model = Instantiate(prefab);
                 model.transform.SetParent(go.transform, false);
+                // The spawn's size relative to its race's usual one (a giant guard, a gnome child...).
+                model.transform.localScale = model.transform.localScale * ModelCodes.Scale(entity.Spawn.Race, entity.Spawn.Size);
                 model.transform.localPosition = new Vector3(0f, FeetOffset(model), 0f);
                 var controller = model.GetComponentInChildren<CharacterAnimationController>();
                 if (controller != null)

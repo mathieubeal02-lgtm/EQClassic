@@ -49,11 +49,30 @@ namespace EQClassic.ClientCore
             _dirty = true;
         }
 
+        /// <summary>Units per second² pulling the player down; a jump starts at <see cref="JumpSpeed"/> (about 5.7 units high).</summary>
+        public const float Gravity = 90f, JumpSpeed = 32f, MaxFallSpeed = 200f;
+        /// <summary>A floor further below than this is a drop: the player falls instead of snapping to it.</summary>
+        public const float StepDown = 2f;
+
+        /// <summary>Vertical speed (units per second, up positive) while in the air.</summary>
+        public float VerticalSpeed { get; private set; }
+        public bool Airborne { get; private set; }
+
+        /// <summary>Jump (Space), from the ground only.</summary>
+        public void Jump()
+        {
+            if (Airborne)
+                return;
+            Airborne = true;
+            VerticalSpeed = JumpSpeed;
+            _dirty = true;
+        }
+
         /// <summary>
         /// Moves on the zone's collision mesh: the character follows the ground (climbing at most
-        /// <see cref="StepUp"/>, dropping off ledges), and does not move when a wall crosses the path
-        /// at waist height or when there is no ground at the destination (outside the zone).
-        /// Returns false when the move was blocked.
+        /// <see cref="StepUp"/>), falls from ledges and jumps with gravity, and does not move when a
+        /// wall crosses the path at waist height or when there is no ground at the destination
+        /// (outside the zone). Returns false when the horizontal move was blocked.
         /// </summary>
         public bool Move(float forward, float strafe, float turn, float seconds, ZoneCollisionMesh mesh)
         {
@@ -63,14 +82,47 @@ namespace EQClassic.ClientCore
             {
                 var ground = mesh.GroundZ(x, y, z, StepUp);
                 if (ground is float g
-                    && mesh.LineOfSight(new Vec3(from.X, from.Y, from.Z + WaistHeight), new Vec3(x, y, g + WaistHeight)))
-                    return g;
+                    && mesh.LineOfSight(new Vec3(from.X, from.Y, from.Z + WaistHeight), new Vec3(x, y, Math.Max(g, z) + WaistHeight)))
+                    return z; // height is settled below, with gravity
                 blocked = true;
                 return z;
             });
             if (blocked)
                 Position = from;
+            Fall(seconds, mesh);
             return !blocked;
+        }
+
+        /// <summary>Vertical motion: stay on the ground, or fly and fall until landing.</summary>
+        private void Fall(float seconds, ZoneCollisionMesh mesh)
+        {
+            var p = Position;
+            float? ground = mesh.GroundZ(p.X, p.Y, p.Z, StepUp);
+            if (!Airborne)
+            {
+                if (ground is float g && g >= p.Z - StepDown)
+                {
+                    if (g != p.Z)
+                    {
+                        Position = new Vec3(p.X, p.Y, g); // walk up a step or down a gentle slope
+                        _dirty = true;
+                    }
+                    return;
+                }
+                Airborne = true; // walked off a ledge
+                VerticalSpeed = 0f;
+            }
+            VerticalSpeed = Math.Max(VerticalSpeed - Gravity * seconds, -MaxFallSpeed);
+            float z = p.Z + VerticalSpeed * seconds;
+            float? landing = mesh.GroundZ(p.X, p.Y, Math.Max(z, p.Z), 0f);
+            if (VerticalSpeed <= 0f && landing is float floor && z <= floor)
+            {
+                z = floor;
+                Airborne = false;
+                VerticalSpeed = 0f;
+            }
+            Position = new Vec3(p.X, p.Y, z);
+            _dirty = true;
         }
 
         /// <summary>forward/strafe in [-1, 1], turn in [-1, 1] (positive = clockwise).</summary>

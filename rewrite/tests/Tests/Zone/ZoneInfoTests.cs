@@ -35,4 +35,17 @@ public class ZoneInfoTests
         Assert.Equal(ZoneInstance.UnderworldReason, zone.MovePlayer(player.Id, new Vec3(428, -74, -410), 0));
         Assert.Equal(new Vec3(info.SafeX, info.SafeY, info.SafeZ), player.Position);
     }
+
+    [Fact]
+    public void Falls_are_free_but_climbing_is_limited()
+    {
+        var zone = new ZoneInstance(new ZoneData("qeynos2", [], new Dictionary<int, Grid>()));
+        var player = zone.AddPlayer("Qbot", 9, 0, 1, new Vec3(0, 0, 200));
+        zone.Tick(0.5f);
+        Assert.Null(zone.MovePlayer(player.Id, new Vec3(5, 0, 100), 0));   // 100 units down in 0.5 s
+        zone.Tick(0.5f);
+        Assert.Null(zone.MovePlayer(player.Id, new Vec3(5, 0, 110), 0));   // a jump's worth up
+        zone.Tick(0.5f);
+        Assert.NotNull(zone.MovePlayer(player.Id, new Vec3(5, 0, 180), 0)); // 70 up: refused
+    }
 }

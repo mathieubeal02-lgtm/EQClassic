@@ -17,6 +17,9 @@ public sealed class ZoneInstance
     /// <summary>An engaged NPC stops this close to its target (melee reach in the rewrite until combat, M5).</summary>
     public const float MeleeRange = 10f;
     private const float MoveTolerance = 5f;
+    /// <summary>Upward speed a jump or a slope allows (units per second), plus a step.</summary>
+    public const float MaxClimbSpeed = 40f;
+    private const float ClimbTolerance = 8f;
     /// <summary>A door untouched this long is closed again (legacy: "not touched in twelve seconds").</summary>
     public const double DoorCloseSeconds = 12;
     /// <summary>Farthest a player may be from a door to use it. Not in the legacy handler: a rewrite sanity check.</summary>
@@ -293,7 +296,8 @@ public sealed class ZoneInstance
 
     /// <summary>
     /// Validates a player's reported position: refused when faster than <see cref="MaxPlayerSpeed"/>
-    /// since the last accepted move (teleport hacks, lag spikes are corrected, not trusted).
+    /// on the ground plane or climbing faster than <see cref="MaxClimbSpeed"/> since the last accepted
+    /// move (teleport hacks, lag spikes are corrected, not trusted); falls are free.
     /// Returns null when accepted, otherwise the reason (the position stays the last valid one).
     /// An accepted move onto a zone line queues <see cref="CrossedZoneLine"/>.
     /// </summary>
@@ -302,9 +306,14 @@ public sealed class ZoneInstance
         if (!_entities.TryGetValue(id, out var player) || !player.IsPlayer)
             return "not in zone";
         double elapsed = Math.Max(_time - player.LastMoveTime, 0.05);
-        float distance = MathF.Sqrt(Distance2(player.Position, to));
+        float moveX = to.X - player.Position.X, moveY = to.Y - player.Position.Y;
+        float distance = MathF.Sqrt(moveX * moveX + moveY * moveY);
         if (distance > MaxPlayerSpeed * elapsed + MoveTolerance)
             return $"moved {distance:0} units in {elapsed:0.00} s";
+        // Falling is free (the legacy server checked nothing); climbing is limited to jumps and steps.
+        float climb = to.Z - player.Position.Z;
+        if (climb > MaxClimbSpeed * elapsed + ClimbTolerance)
+            return $"climbed {climb:0} units in {elapsed:0.00} s";
         if (Info is { } info && to.Z < info.Underworld)
         {
             // Fell through the world: back to the zone's safe point, as the Trilogy client did.

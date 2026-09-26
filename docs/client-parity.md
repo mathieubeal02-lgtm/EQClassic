@@ -14,7 +14,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Zones | Every zone of the install (s3d/wld) | Partial: zones imported with Lantern; a zone that is not imported shows a message | 1 |
 | Placed objects | Trees, lamps, furniture | Done (without per-instance vertex colours) | — |
 | Doors | Click to open, lifts, teleports | Done (animation approximated per open type) | — |
-| Characters | Race/gender models, textures, size | Partial: models by race; no armour textures, no face/hair, size ignored | 2 |
+| Characters | Race/gender models, textures, size | Partial: models by race, scaled by spawn size for the playable races; no armour textures, no face/hair | 2 |
 | Equipment | Weapons in hand, armour tint and material | Todo | 3 |
 | Animations | Walk, run, idle, combat, damage, death, social | Partial: idle/walk/run, attack, flinch | 2 |
 | Sky, day and night | Sky dome, sun/moon, day/night light from the server clock | Written (Lantern sky on its own URP camera, sky type from the zone header, Norrath's clock from time_of_day, night ambient), to check in Unity | 2 |
@@ -37,7 +37,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Look up/down, centre | Page Up / Page Down, Home | Written, to check in Unity | 1 |
 | Walk, run, strafe, turn | Arrows/WASD, run toggle | Done: Shift walks | 1 |
 | Autorun | Num Lock / R | Written, to check in Unity | 1 |
-| Jump | Space | Todo | 2 |
+| Jump and falls | Space; falling off ledges | Done: jump (about 5.7 units), gravity, falls from ledges; the server limits climbing, not falling | — |
 | Sit, stand, crouch | Sitting regenerates faster | Partial: X or /sit, seen by others, walking stands up; no crouch | 1 |
 | Swimming, levitation, falling damage | | Todo | 3 |
 | Collisions | Walls, objects, steps | Done (ground, steps, walls, solid objects of the export) | — |

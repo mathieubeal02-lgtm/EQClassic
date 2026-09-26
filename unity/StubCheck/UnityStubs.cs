@@ -99,7 +99,7 @@ namespace UnityEngine
     public enum LightType { Spot, Directional, Point }
     public enum KeyCode
     {
-        Tab = 9, Escape = 27, Q = 113, C = 99, E = 101, F = 102, R = 114, T = 116, U = 117, X = 120, Numlock = 300, RightShift = 303, LeftShift = 304,
+        Tab = 9, Escape = 27, Space = 32, Q = 113, C = 99, E = 101, F = 102, R = 114, T = 116, U = 117, X = 120, Numlock = 300, RightShift = 303, LeftShift = 304,
         Home = 278, PageUp = 280, PageDown = 281, F9 = 290, Return = 13, KeypadEnter = 271, Slash = 47,
     }
     public enum RuntimeInitializeLoadType { AfterSceneLoad, BeforeSceneLoad }

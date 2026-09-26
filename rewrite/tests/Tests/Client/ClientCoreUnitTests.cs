@@ -78,6 +78,41 @@ public class ClientCoreUnitTests
     }
 
     [Fact]
+    public void Walking_off_a_ledge_falls_with_gravity_and_lands()
+    {
+        // Upper floor at 20 for x 0..50, lower floor at 0 from 50 on.
+        var mesh = ZoneCollisionMesh.ParseLantern([.. Floor(0, 50, 20, 0), .. Floor(50, 200, 0, 4)]);
+        var player = new LocalPlayer(1, new Vec3(45, 50, 20), heading: 90);
+        player.Move(1, 0, 0, 0.2f, mesh); // 9 units east: over the drop
+        Assert.True(player.Airborne);
+        Assert.InRange(player.Position.Z, 15f, 20f);   // not snapped down
+        for (int i = 0; i < 40 && player.Airborne; i++)
+            player.Move(0, 0, 0, 0.05f, mesh);
+        Assert.False(player.Airborne);
+        Assert.Equal(0f, player.Position.Z);
+    }
+
+    [Fact]
+    public void A_jump_goes_up_about_six_units_and_comes_back_down()
+    {
+        var mesh = ZoneCollisionMesh.ParseLantern(Floor(0, 200, 0, 0));
+        var player = new LocalPlayer(1, new Vec3(40, 50, 0), heading: 90);
+        player.Jump();
+        float top = 0;
+        for (int i = 0; i < 40 && player.Airborne; i++)
+        {
+            player.Move(0, 0, 0, 0.02f, mesh);
+            top = Math.Max(top, player.Position.Z);
+        }
+        Assert.InRange(top, 5f, 6.5f); // 32² / (2 × 90) = 5.7
+        Assert.False(player.Airborne);
+        Assert.Equal(0f, player.Position.Z);
+        player.Jump();
+        player.Jump(); // no double jump
+        Assert.Equal(LocalPlayer.JumpSpeed, player.VerticalSpeed);
+    }
+
+    [Fact]
     public void Walls_and_the_edge_of_the_zone_stop_the_player()
     {
         string[] wallAt60 = ["v,0,0,60", "v,100,0,60", "v,100,50,60", "v,0,50,60", "i,0,4,5,6", "i,0,4,6,7"];
@@ -134,6 +169,15 @@ public class ClientCoreUnitTests
         player.Walking = true;
         player.Move(forward: 1, strafe: 0, turn: 0, seconds: 1);
         Assert.Equal(LocalPlayer.WalkSpeed, player.Position.Y, precision: 3);
+    }
+
+    [Fact]
+    public void Models_scale_with_the_spawn_size_for_known_races()
+    {
+        Assert.Equal(1f, ModelCodes.Scale(9, 8f));    // a troll of troll size
+        Assert.Equal(1.5f, ModelCodes.Scale(1, 9f));  // a big human
+        Assert.Equal(1f, ModelCodes.Scale(36, 2f));   // rats: default size unknown, left alone
+        Assert.Equal(1f, ModelCodes.Scale(1, 0f));
     }
 
     [Fact]
