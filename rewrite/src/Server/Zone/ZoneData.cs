@@ -76,6 +76,17 @@ public sealed record ZoneData(string ShortName, IReadOnlyList<SpawnPoint> Spawns
 {
     public IReadOnlyList<ZoneLine> Lines => ZoneLines ?? Array.Empty<ZoneLine>();
     public IReadOnlyList<Door> Doors => ZoneDoors ?? Array.Empty<Door>();
+    public ZoneRules Rules { get; init; } = ZoneRules.Anything;
+}
+
+/// <summary>
+/// A zone_rules row (Database::LoadZoneRules): who may bind here (0 nobody, 1 only yourself,
+/// 2 anyone, as in the cities), whether levitation works, whether outdoor spells (movement speed,
+/// levitation, harmony) may be cast.
+/// </summary>
+public sealed record ZoneRules(int CanBind, bool CanLevitate, bool Outdoor)
+{
+    public static readonly ZoneRules Anything = new(2, true, true);
 }
 
 public interface IZoneDataSource
@@ -213,11 +224,28 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
                     new Vec3(r.IsDBNull(12) ? 0 : r.GetFloat(12), r.IsDBNull(13) ? 0 : r.GetFloat(13), r.IsDBNull(14) ? 0 : r.GetFloat(14))));
         }
 
+        var rules = ZoneRules.Anything;
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = $"SELECT can_bind, can_lev, castoutdoor FROM `{_p}zone_rules` WHERE short_name = @zone";
+            cmd.Parameters.AddWithValue("@zone", shortName);
+            try
+            {
+                using var r = cmd.ExecuteReader();
+                if (r.Read())
+                    rules = new ZoneRules(Int(r, 0), Int(r, 1) != 0, Int(r, 2) != 0);
+            }
+            catch (MySqlException)
+            {
+                // no zone_rules table: no restriction
+            }
+        }
+
         var grids = points.ToDictionary(kv => kv.Key,
             kv => new Grid(kv.Key, gridTypes.GetValueOrDefault(kv.Key, 3) == 0 ? GridType.Circular : GridType.BackAndForth, kv.Value));
 
         return new ZoneData(shortName,
             spawns.Select(kv => new SpawnPoint(kv.Key, kv.Value.Pos, kv.Value.Heading, kv.Value.Grid, kv.Value.Candidates, kv.Value.Respawn, kv.Value.Variance)).ToList(),
-            grids, lines, doors);
+            grids, lines, doors) { Rules = rules };
     }
 }

@@ -55,6 +55,8 @@ public sealed partial class ZoneInstance
     public sealed record BuffsChanged(int EntityId) : ZoneEvent;
     public sealed record BuffFaded(int EntityId, int SpellId) : ZoneEvent;
     public const string DidNotTakeHoldMessage = "Your spell did not take hold.";
+    /// <summary>A player's bind point changed (bind affinity): the server saves it.</summary>
+    public sealed record BindChanged(int PlayerId) : ZoneEvent;
 
     /// <summary>The spells of spdat.eff by id; null: nobody can cast.</summary>
     public IReadOnlyList<Spell>? Spells { get; init; }
@@ -70,16 +72,19 @@ public sealed partial class ZoneInstance
         SpellEffect.InfraVision, SpellEffect.UltraVision, SpellEffect.TotalHp, SpellEffect.MagnifyVision, SpellEffect.HealOverTime,
         BuffRules.StackingBlock, BuffRules.StackingOverwrite,
         BuffRules.DiseaseCounter, BuffRules.PoisonCounter, BuffRules.CurseCounter, // what cures count down: nothing to do until cures exist
+        SpellEffect.Invisibility, SpellEffect.InvisVsUndead, SpellEffect.Stun, SpellEffect.BindAffinity, SpellEffect.Gate, SpellEffect.Mez,
+        SpellEffect.SummonItem, SpellEffect.Levitate, SpellEffect.Teleport, SpellEffect.Root, WipeHateList,
     ];
+
+    private const int WipeHateList = 63;
 
     /// <summary>
     /// Whether the rewrite applies every effect of the spell: hit points now or over time, stat and
-    /// resist buffs and debuffs, haste and slow, movement speed, mana over time, and the effects the
-    /// client shows by itself (vision, blindness), on one target.
+    /// resist buffs and debuffs, haste and slow, movement speed, mana over time, invisibility, root,
+    /// mez, stun, levitation, bind affinity, gate, teleports, summoned items, and the effects the
+    /// client shows by itself (vision, blindness). Group spells land on the caster (no groups yet).
     /// </summary>
-    public static bool IsSupported(Spell spell) =>
-        spell.TargetType is not (SpellTarget.AECaster or SpellTarget.AETarget or SpellTarget.GroupV1 or SpellTarget.GroupV2)
-        && spell.Effect.All(e => SupportedEffects.Contains(e));
+    public static bool IsSupported(Spell spell) => spell.Effect.All(e => SupportedEffects.Contains(e));
 
     private void SetUpMagic(Entity player, PlayerMagic? magic)
     {
@@ -288,7 +293,7 @@ public sealed partial class ZoneInstance
             Interrupt(player);
     }
 
-    /// <summary>SpellFinished + SpellOnTarget + SpellEffect for the instant hit point effects.</summary>
+    /// <summary>SpellFinished: range, the zone's rules, mana, then the spell on each of its targets.</summary>
     private void FinishCast(Entity caster)
     {
         var cast = caster.Cast!;
@@ -306,40 +311,212 @@ public sealed partial class ZoneInstance
             _events.Add(new CastEnded(caster.Id, spell.Id, CastOutcome.Interrupted));
             return;
         }
-        SetMana(caster, caster.Mana - spell.Mana);
+        SetMana(caster, caster.Mana - spell.Mana); // a refusal by the zone's rules spends it too (InterruptSpell(false, true))
+        if (ZoneRefusal(caster, target, spell) is { } refusal)
+        {
+            _events.Add(new Told(caster.Id, refusal));
+            _events.Add(new CastEnded(caster.Id, spell.Id, CastOutcome.Interrupted));
+            return;
+        }
+        if (!spell.Beneficial)
+            BreakInvisibility(caster);
+        var targets = spell.TargetType switch
+        {
+            SpellTarget.AECaster => InArea(caster.Position, spell, except: caster),
+            SpellTarget.AETarget => InArea(target.Position, spell, except: spell.Beneficial ? null : caster),
+            _ => [target],
+        };
+        var outcome = CastOutcome.Finished;
+        foreach (var t in targets)
+            if (_entities.ContainsKey(t.Id) && !t.IsCorpse)
+                outcome = SpellOnTarget(caster, t, spell);
+        _events.Add(new CastEnded(caster.Id, spell.Id, targets.Count == 1 ? outcome : CastOutcome.Finished));
+    }
+
+    /// <summary>Area spells: NPCs (hostile spells) or players (helpful ones) within the spell's area range.</summary>
+    private List<Entity> InArea(Vec3 centre, Spell spell, Entity? except)
+    {
+        float r2 = spell.AoeRange * spell.AoeRange;
+        return _entities.Values.Where(e => e != except && !e.IsCorpse && e.IsPlayer == spell.Beneficial && Distance2(e.Position, centre) <= r2).ToList();
+    }
+
+    /// <summary>SpellFinished's checks of the zone's rules (zone_rules): binding, levitation, outdoor spells.</summary>
+    private string? ZoneRefusal(Entity caster, Entity target, Spell spell)
+    {
+        var rules = Rules;
+        if (spell.Effect.Contains((byte)SpellEffect.BindAffinity))
+        {
+            // The legacy zone lets others be bound only in can_bind 2 zones and within a group; no groups yet.
+            bool permit = target == caster ? rules.CanBind >= 1 : rules.CanBind == 2;
+            if (!permit)
+                return target == caster ? "You may not bind here." : "Your target may not be bound here.";
+        }
+        if (spell.Effect.Contains((byte)SpellEffect.Levitate) && !rules.CanLevitate)
+            return "You can't levitate in this zone.";
+        if (IsOutdoorSpell(spell) && !rules.Outdoor)
+            return "You can't cast this spell indoors.";
+        return null;
+    }
+
+    /// <summary>Spell::IsOutDoorSpell: faster movement, levitation, harmony.</summary>
+    private static bool IsOutdoorSpell(Spell spell)
+    {
+        for (int i = 0; i < Spell.EffectCount; i++)
+            if (spell.Effect[i] == SpellEffect.MovementSpeed && spell.Base[i] > 0 || spell.Effect[i] is SpellEffect.Levitate or Harmony)
+                return true;
+        return false;
+    }
+
+    private const int Harmony = 86;
+
+    /// <summary>SpellOnTarget + SpellEffect: resist, buff, then the instant effects.</summary>
+    private CastOutcome SpellOnTarget(Entity caster, Entity target, Spell spell)
+    {
         bool hostile = !spell.Beneficial && target != caster;
         if (hostile)
             caster.LastCombatTime = target.LastCombatTime = _time;
         if (hostile && target.Npc is { } npc
-            && SpellRules.Resists(SpellRules.ResistChance(spell.ResistType, SpellRules.NpcResist(spell.ResistType, npc.Combat), target.Level, caster.Level), _random))
+            && SpellRules.Resists(SpellRules.ResistChance(spell.ResistType, NpcResist(target, npc, spell.ResistType), target.Level, caster.Level), _random))
         {
             _events.Add(new Told(caster.Id, $"Your target resisted the {spell.Name} spell."));
-            _events.Add(new CastEnded(caster.Id, spell.Id, CastOutcome.Resisted));
             AfterHarm(caster, target, 0); // a resisted spell still angers
-            return;
+            return CastOutcome.Resisted;
         }
         if (spell.IsBuff && !AddBuff(caster, target, spell))
         {
             _events.Add(new Told(caster.Id, DidNotTakeHoldMessage));
-            _events.Add(new CastEnded(caster.Id, spell.Id, CastOutcome.Resisted));
             if (hostile)
                 AfterHarm(caster, target, 0);
-            return;
+            return CastOutcome.Resisted;
         }
-        _events.Add(new CastEnded(caster.Id, spell.Id, CastOutcome.Finished));
-        // SpellEffect: the hit point effects apply at once, for buffs too (then every tic).
-        int change = 0;
-        for (int i = 0; i < Spell.EffectCount; i++)
-            if (spell.Effect[i] is SpellEffect.CurrentHp or SpellEffect.CurrentHpOnce)
-                change += spell.Value(i, caster.Level);
         int before = target.Hp;
-        target.Hp = Math.Min(target.Fighter.MaxHp, target.Hp + change);
+        ApplyInstantEffects(caster, target, spell);
+        if (!_entities.ContainsKey(target.Id))
+            return CastOutcome.Finished;
         _events.Add(new SpellLanded(caster.Id, target.Id, spell.Id, target.Hp - before));
         if (hostile)
             AfterHarm(caster, target, before - target.Hp);
         else if (target.IsPlayer && target.Hp != before)
             _events.Add(new HealthChanged(target.Id, target.Hp, target.Fighter.MaxHp));
+        if (spell.Effect.Contains((byte)WipeHateList) && !target.IsPlayer && _entities.ContainsKey(target.Id) && !target.IsCorpse)
+        {
+            Disengage(target); // NPC::WhipeHateList, after the spell's own anger: it forgets everyone
+            foreach (var p in _entities.Values.Where(p => p.IsPlayer && Distance2(p.Position, target.Position) <= 200f * 200f))
+                _events.Add(new Told(p.Id, "My mind fogs. Who are my friends? Who are my enemies?... it was all so clear a moment ago..."));
+        }
+        return CastOutcome.Finished;
     }
+
+    private static int NpcResist(Entity target, NpcTemplate npc, int resistType) =>
+        SpellRules.NpcResist(resistType, npc.Combat) + resistType switch
+        {
+            1 => target.Bonuses.MR, 2 => target.Bonuses.FR, 3 => target.Bonuses.CR, 4 => target.Bonuses.PR, 5 => target.Bonuses.DR, _ => 0,
+        };
+
+    /// <summary>
+    /// SpellEffect's single-time part: hit points (for buffs too, then every tic), mana, stun, bind
+    /// affinity, gate, teleport, summoned items.
+    /// </summary>
+    private void ApplyInstantEffects(Entity caster, Entity target, Spell spell)
+    {
+        int change = 0;
+        for (int i = 0; i < Spell.EffectCount; i++)
+        {
+            int v = spell.Value(i, caster.Level);
+            switch (spell.Effect[i])
+            {
+                case SpellEffect.CurrentHp:
+                case SpellEffect.CurrentHpOnce:
+                    change += v;
+                    break;
+                case SpellEffect.CurrentMana when target.MaxMana > 0:
+                    SetMana(target, target.Mana + v);
+                    break;
+                case SpellEffect.Stun when !target.IsPlayer:
+                    target.StunnedUntil = Math.Max(target.StunnedUntil, _time + spell.Base[i] / 1000.0);
+                    break;
+                case SpellEffect.BindAffinity when target.IsPlayer:
+                    target.BindZone = ShortName;
+                    target.Bind = target.Position;
+                    _events.Add(new Told(target.Id, "You feel yourself bind to the area."));
+                    _events.Add(new BindChanged(target.Id));
+                    break;
+                case SpellEffect.Gate when target.IsPlayer:
+                    SendToBind(target, "gate");
+                    return;
+                case SpellEffect.Teleport when target.IsPlayer && spell.TeleportZone.Length > 0:
+                    Teleport(target, spell.TeleportZone, new Vec3(spell.Base[1], spell.Base[0], spell.Base[2]), "teleport");
+                    return;
+                case SpellEffect.SummonItem when target.IsPlayer:
+                    SummonItem(target, spell.Base[i], Math.Clamp(v, 1, 20));
+                    break;
+            }
+        }
+        target.Hp = Math.Min(target.Fighter.MaxHp, target.Hp + change);
+    }
+
+    /// <summary>Client::SummonItem: into the first free general slot (there is no cursor yet).</summary>
+    private void SummonItem(Entity player, int itemId, int charges)
+    {
+        if (player.Inventory is not { } inventory || itemId <= 0)
+            return;
+        int slot = inventory.FreeGeneralSlot();
+        if (slot < 0)
+        {
+            _events.Add(new Told(player.Id, "You have no room to hold the summoned item."));
+            return;
+        }
+        inventory.Items[slot] = itemId;
+        inventory.Charges[slot] = charges;
+        _events.Add(new InventoryChanged(player.Id));
+    }
+
+    /// <summary>To a place in this zone, or across zones through the zone server (like a zone line).</summary>
+    private void Teleport(Entity player, string zone, Vec3 to, string reason)
+    {
+        if (!string.Equals(zone, ShortName, StringComparison.OrdinalIgnoreCase))
+        {
+            _events.Add(new CrossedZoneLine(player.Id, new ZoneLine(0, player.Position, 0, zone, to), to));
+            return;
+        }
+        player.Position = to;
+        player.LastMoveTime = _time;
+        player.Moved = true;
+        _events.Add(new Teleported(player.Id, to, reason));
+    }
+
+    /// <summary>Gate and death: the bind point, in this zone or another; where the player entered when it is unknown.</summary>
+    private void SendToBind(Entity player, string reason)
+    {
+        if (player.BindZone.Length == 0)
+            Teleport(player, ShortName, player.EntryPosition, reason);
+        else
+            Teleport(player, player.BindZone, player.Bind, reason);
+    }
+
+    /// <summary>Invisibility ends when its owner attacks or casts a hostile spell.</summary>
+    private void BreakInvisibility(Entity e)
+    {
+        var invisible = e.BuffList.Where(b => b.Spell.Effect.Contains((byte)SpellEffect.Invisibility) || b.Spell.Effect.Contains((byte)SpellEffect.InvisVsUndead)).ToList();
+        RemoveBuffs(e, invisible);
+    }
+
+    /// <summary>Takes buffs off (they fade with their message) and updates the bonuses.</summary>
+    private void RemoveBuffs(Entity e, List<Buff> buffs)
+    {
+        if (buffs.Count == 0)
+            return;
+        foreach (var b in buffs)
+        {
+            e.BuffList.Remove(b);
+            _events.Add(new BuffFaded(e.Id, b.Spell.Id));
+        }
+        UpdateBonuses(e);
+    }
+
+    /// <summary>Damage wakes a mesmerized NPC or player.</summary>
+    private void BreakMez(Entity e) =>
+        RemoveBuffs(e, e.BuffList.Where(b => b.Spell.Effect.Contains((byte)SpellEffect.Mez)).ToList());
 
     /// <summary>Mob::AddBuff + HandleBuffSpellEffects: false when stacking keeps it out.</summary>
     private bool AddBuff(Entity caster, Entity target, Spell spell)

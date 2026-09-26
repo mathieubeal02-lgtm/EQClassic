@@ -59,6 +59,9 @@ namespace EQClassic.ClientCore
         /// <summary>Vertical speed (units per second, up positive) while in the air.</summary>
         public float VerticalSpeed { get; private set; }
         public bool Airborne { get; private set; }
+        /// <summary>Levitating (a buff): drops are floated down at <see cref="LevitateFallSpeed"/>.</summary>
+        public bool Levitating { get; set; }
+        public const float LevitateFallSpeed = 8f;
 
         /// <summary>Jump (Space), from the ground only.</summary>
         public void Jump()
@@ -114,7 +117,7 @@ namespace EQClassic.ClientCore
                 Airborne = true; // walked off a ledge
                 VerticalSpeed = 0f;
             }
-            VerticalSpeed = Math.Max(VerticalSpeed - Gravity * seconds, -MaxFallSpeed);
+            VerticalSpeed = Math.Max(VerticalSpeed - Gravity * seconds, Levitating ? -LevitateFallSpeed : -MaxFallSpeed);
             float z = p.Z + VerticalSpeed * seconds;
             float? landing = mesh.GroundZ(p.X, p.Y, Math.Max(z, p.Z), 0f);
             if (VerticalSpeed <= 0f && landing is float floor && z <= floor)

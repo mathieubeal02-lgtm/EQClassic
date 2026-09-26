@@ -352,6 +352,10 @@ public sealed class ZoneServer : IDisposable
                         && instance.SpellById(faded.SpellId) is { Fades.Length: > 0 } fadedSpell:
                     Send(fadedPeer, new ZoneMessage(fadedSpell.Fades), DeliveryMethod.ReliableOrdered);
                     break;
+                case ZoneInstance.BindChanged bound when instance.Get(bound.PlayerId) is { } boundPlayer
+                        && _players.Values.FirstOrDefault(p => p.Instance == instance && p.EntityId == bound.PlayerId) is { Ticket.Profile: not null } boundBy:
+                    Characters?.SaveBind(boundBy.Ticket.CharacterName, boundPlayer.BindZone, boundPlayer.Bind.X, boundPlayer.Bind.Y, boundPlayer.Bind.Z);
+                    break;
                 case ZoneInstance.GemsChanged gems when PeerOf(instance, gems.PlayerId) is { } memPeer && instance.Get(gems.PlayerId) is { } memorizer:
                     Send(memPeer, SpellBookOf(instance, memorizer), DeliveryMethod.ReliableOrdered);
                     break;
@@ -464,7 +468,8 @@ public sealed class ZoneServer : IDisposable
     }
 
     private static PlayerBuffs BuffsOf(ZoneInstance.Entity p) =>
-        new(p.Buffs.Select(b => new BuffView(b.Spell.Id, b.Spell.Name, b.TicsLeft, b.Spell.Beneficial)).ToList(), p.Bonuses.MovementSpeed);
+        new(p.Buffs.Select(b => new BuffView(b.Spell.Id, b.Spell.Name, b.TicsLeft, b.Spell.Beneficial)).ToList(),
+            p.Bonuses.Rooted || p.Bonuses.Mezzed ? -100 : p.Bonuses.MovementSpeed, p.Bonuses.Levitating);
 
     private static SpellBook SpellBookOf(ZoneInstance instance, ZoneInstance.Entity p)
     {
@@ -526,6 +531,7 @@ public sealed class ZoneServer : IDisposable
                 Coins = now.Inventory?.Coins ?? p.Coins,
                 Mana = now.Mana, SpellBook = now.Book, SpellGemIds = now.Gems.ToArray(),
                 Buffs = ZoneInstance.SaveBuffs(now).Select(b => (b.SpellId, b.CasterLevel, b.TicsLeft)).ToArray(),
+                BindZone = now.BindZone, BindX = now.Bind.X, BindY = now.Bind.Y, BindZ = now.Bind.Z,
             }
             : player.Ticket.Profile;
         var ticket = player.Ticket with { Zone = crossed.Line.TargetZone, Position = d, Level = now?.Level ?? player.Ticket.Level, Profile = profile };

@@ -23,6 +23,9 @@ public interface ICharacterStore
     /// <summary>The 30 inventory slots (item ids and charges) and the money, into the profile.</summary>
     void SaveInventory(string name, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins);
 
+    /// <summary>Where death and gate send the character (bind_point_zone and bind_location slot 0).</summary>
+    void SaveBind(string name, string zone, float x, float y, float z);
+
     /// <summary>Spell book, memorised gems, current mana and buffs, into the profile.</summary>
     void SaveSpells(string name, IReadOnlyList<int> book, IReadOnlyList<int> gems, int mana, IReadOnlyList<(int SpellId, int CasterLevel, int Tics)> buffs);
 }
@@ -96,6 +99,17 @@ public sealed class InMemoryCharacterStore : ICharacterStore
         _characters[i] = c with { Profile = c.Profile with { SpellBook = book.ToArray(), SpellGemIds = gems.ToArray(), Mana = mana, Buffs = buffs.ToArray() } };
         if (Profiles.TryGetValue(name, out var raw))
             WriteSpells(raw, book, gems, mana, buffs);
+    }
+
+    public void SaveBind(string name, string zone, float x, float y, float z)
+    {
+        int i = _characters.FindIndex(c => string.Equals(c.Profile.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (i < 0)
+            return;
+        var c = _characters[i];
+        _characters[i] = c with { Profile = c.Profile with { BindZone = zone, BindX = x, BindY = y, BindZ = z } };
+        if (Profiles.TryGetValue(name, out var raw))
+            ProfileTemplate.SetBind(raw, zone, x, y, z);
     }
 
     internal static void WriteSpells(byte[] profile, IReadOnlyList<int> book, IReadOnlyList<int> gems, int mana, IReadOnlyList<(int SpellId, int CasterLevel, int Tics)> buffs)
@@ -189,6 +203,9 @@ public sealed class MySqlCharacterStore : ICharacterStore
 
     public void SaveInventory(string name, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins) =>
         Update(name, profile => InMemoryCharacterStore.WriteInventory(profile, items, charges, coins));
+
+    public void SaveBind(string name, string zone, float x, float y, float z) =>
+        Update(name, profile => ProfileTemplate.SetBind(profile, zone, x, y, z));
 
     public void SaveSpells(string name, IReadOnlyList<int> book, IReadOnlyList<int> gems, int mana, IReadOnlyList<(int SpellId, int CasterLevel, int Tics)> buffs) =>
         Update(name, profile => InMemoryCharacterStore.WriteSpells(profile, book, gems, mana, buffs));

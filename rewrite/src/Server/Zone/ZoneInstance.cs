@@ -99,6 +99,11 @@ public sealed partial class ZoneInstance
         public IReadOnlyList<Buff> Buffs => BuffList;
         internal readonly List<Buff> BuffList = new();
         public StatBonuses Bonuses { get; internal set; } = StatBonuses.None;
+        /// <summary>NPCs: stunned (no moving, no fighting) until then.</summary>
+        internal double StunnedUntil = double.NegativeInfinity;
+        /// <summary>Players: where death and gate send them (bind affinity changes it); empty zone when unknown.</summary>
+        public string BindZone { get; internal set; } = "";
+        public Vec3 Bind { get; internal set; }
     }
 
     public abstract record ZoneEvent;
@@ -188,6 +193,8 @@ public sealed partial class ZoneInstance
     private double _time;
 
     public string ShortName { get; }
+    /// <summary>zone_rules: binding, levitation, outdoor spells.</summary>
+    public ZoneRules Rules { get; }
     public ZoneCollisionMesh? Mesh { get; }
     public IFactionStandings Factions { get; set; } = new IndifferentFactions();
     /// <summary>The legacy zone header (cfg/&lt;zone&gt;.cfg), when known: sent to clients, and its underworld depth applies.</summary>
@@ -204,6 +211,7 @@ public sealed partial class ZoneInstance
     public ZoneInstance(ZoneData data, ZoneCollisionMesh? mesh = null, int seed = 0)
     {
         ShortName = data.ShortName;
+        Rules = data.Rules;
         Mesh = mesh;
         _grids = data.Grids;
         _lines = data.Lines;
@@ -228,6 +236,8 @@ public sealed partial class ZoneInstance
         player.Fighter = fighter ?? progress?.FighterAt?.Invoke(level, StatBonuses.None) ?? DefaultPlayer(level);
         player.Hp = hp is int h && h > 0 && h <= player.Fighter.MaxHp ? h : player.Fighter.MaxHp;
         player.EntryPosition = position;
+        player.BindZone = progress?.BindZone ?? "";
+        player.Bind = progress?.Bind ?? default;
         SetUpMagic(player, progress?.Magic);
         return player;
     }
@@ -296,6 +306,8 @@ public sealed partial class ZoneInstance
             return;
         }
         player.AutoAttack = on;
+        if (on)
+            BreakInvisibility(player);
         player.SwingIn = 0; // the first swing goes out as soon as the target is in reach
         _events.Add(new Told(playerId, on ? "Auto attack is on." : "Auto attack is off."));
     }
@@ -630,7 +642,7 @@ public sealed partial class ZoneInstance
 
         foreach (var e in _entities.Values.ToList())
         {
-            if (e.IsPlayer || e.IsCorpse)
+            if (e.IsPlayer || e.IsCorpse || Incapacitated(e))
                 continue;
             if (e.TargetId is int targetId)
             {
@@ -688,7 +700,7 @@ public sealed partial class ZoneInstance
     {
         foreach (var e in _entities.Values.ToList())
         {
-            if (!_entities.ContainsKey(e.Id)) // slain earlier in this tick
+            if (!_entities.ContainsKey(e.Id) || Incapacitated(e)) // slain earlier in this tick, or stunned or mesmerized
                 continue;
             int? targetId = e.IsPlayer ? (e.AutoAttack ? e.PlayerTargetId : null) : e.TargetId;
             if (targetId is not int tid)
@@ -750,6 +762,8 @@ public sealed partial class ZoneInstance
             defender.TargetId = attacker.Id; // hit by a player: it fights back
             _events.Add(new Engaged(defender.Id, attacker.Id));
         }
+        if (damage > 0 && defender.Bonuses.Mezzed)
+            BreakMez(defender);
         if (defender.IsPlayer && damage > 0)
         {
             _events.Add(new HealthChanged(defender.Id, Math.Max(defender.Hp, 0), defender.Fighter.MaxHp));
@@ -834,16 +848,7 @@ public sealed partial class ZoneInstance
             SetExperience(player, player.Exp - loss);
         player.Hp = player.Fighter.MaxHp;
         _events.Add(new HealthChanged(player.Id, player.Hp, player.Fighter.MaxHp));
-        var bind = player.Progress is { BindZone: { Length: > 0 } zone } p ? (Zone: zone, Position: p.Bind) : (Zone: ShortName, Position: player.EntryPosition);
-        if (!string.Equals(bind.Zone, ShortName, StringComparison.OrdinalIgnoreCase))
-        {
-            _events.Add(new CrossedZoneLine(player.Id, new ZoneLine(0, player.Position, 0, bind.Zone, bind.Position), bind.Position));
-            return;
-        }
-        player.Position = bind.Position;
-        player.LastMoveTime = _time;
-        player.Moved = true;
-        _events.Add(new Teleported(player.Id, bind.Position, DeathReason));
+        SendToBind(player, DeathReason);
     }
 
     /// <summary>
@@ -873,7 +878,7 @@ public sealed partial class ZoneInstance
         float bestD2 = float.MaxValue;
         foreach (var p in _entities.Values)
         {
-            if (!p.IsPlayer)
+            if (!p.IsPlayer || p.Bonuses.Invisible || p.Bonuses.InvisibleToUndead && npc.Npc!.Undead)
                 continue;
             var r2 = AggroRules.RadiusSquared(Factions.Standing(p, npc.Npc!), p.Level, npc.Level, p.Sitting, npc.Npc!.Undead);
             float d2 = Distance2(p.Position, npc.Position);
@@ -887,6 +892,9 @@ public sealed partial class ZoneInstance
         return best;
     }
 
+    /// <summary>Stunned or mesmerized: no moving, no fighting, no noticing anyone.</summary>
+    private bool Incapacitated(Entity e) => e.StunnedUntil > _time || e.Bonuses.Mezzed;
+
     private void Chase(Entity npc, int targetId, float seconds)
     {
         if (!_entities.TryGetValue(targetId, out var target))
@@ -894,6 +902,8 @@ public sealed partial class ZoneInstance
             Disengage(npc);
             return;
         }
+        if (npc.Bonuses.Rooted)
+            return; // rooted: fights whoever is in reach, goes nowhere
         float dx = target.Position.X - npc.Position.X, dy = target.Position.Y - npc.Position.Y;
         float distance = MathF.Sqrt(dx * dx + dy * dy);
         if (distance <= MeleeRange)

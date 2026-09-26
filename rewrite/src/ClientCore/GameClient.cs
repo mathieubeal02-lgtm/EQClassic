@@ -492,7 +492,10 @@ namespace EQClassic.ClientCore
                 case PlayerBuffs buffs:
                     Buffs = buffs;
                     if (Player != null)
-                        Player.SpeedFactor = Math.Max(0.1f, (100 + buffs.MovementSpeed) / 100f);
+                    {
+                        Player.SpeedFactor = Math.Max(0f, (100 + buffs.MovementSpeed) / 100f); // 0 when rooted
+                        Player.Levitating = buffs.Levitating;
+                    }
                     break;
                 case SpellBook book:
                     SpellBook = book;

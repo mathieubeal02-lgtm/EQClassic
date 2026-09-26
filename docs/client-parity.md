@@ -39,7 +39,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Autorun | Num Lock / R | Written, to check in Unity | 1 |
 | Jump and falls | Space; falling off ledges | Done: jump (about 5.7 units), gravity, falls from ledges; the server limits climbing, not falling | — |
 | Sit, stand, crouch | Sitting regenerates faster | Partial: X or /sit, seen by others, walking stands up; no crouch | 1 |
-| Swimming, levitation, falling damage | | Todo | 3 |
+| Swimming, levitation, falling damage | | Partial: levitation floats you down; no swimming or falling damage | 3 |
 | Collisions | Walls, objects, steps | Done (ground, steps, walls, solid objects of the export) | — |
 
 ## Interface
@@ -54,7 +54,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Inventory | Worn slots, bags, weight, money | Partial: window (I) with every worn and general slot and money; click an item then a slot to move or equip it (server checks slot, class, race, two-handed; armour and weapon apply to combat); saved in the profile. No bags, weight or icons | 2 |
 | Loot | Corpse window | Done: NPCs leave corpses with their loot table's items and coins (legacy rolls, rot timers, killer's rights then free for all), L opens the loot window, Take / Done | — |
 | Merchants, bank, trade | | Todo | 3 |
-| Spell book, spell gems, casting bar | Book pages, 8 gems, memorising, scribing scrolls, casting bar | Partial: book window (B, memorise by gem number), 8 gems (keys 1-8 or click, /cast N), casting bar, Scribe button on scrolls in the inventory, casting animation (t05). Direct damage, heals and buffs (stats, AC, HP, haste, slow, speed, damage and heals over time); no AE, group, root, mez, charm, pets or teleports yet; no icons, no memorising time, no spell particles | 2 |
+| Spell book, spell gems, casting bar | Book pages, 8 gems, memorising, scribing scrolls, casting bar | Partial: book window (B, memorise by gem number), 8 gems (keys 1-8 or click, /cast N), casting bar, Scribe button on scrolls in the inventory, casting animation (t05). Direct damage, heals, buffs (stats, AC, HP, haste, slow, speed, damage and heals over time), root, mez, stun, invisibility, levitation, bind, gate, teleports, summoning, area spells; no charm, fear, pets or cures yet; no icons, no memorising time, no spell particles | 2 |
 | Hot buttons, abilities, skills window | | Todo | 2 |
 | Group and guild windows | | Todo | 3 |
 | Buff window | | Partial: list of buffs with time left, detrimental ones in red; no icons, no clicking off | 3 |

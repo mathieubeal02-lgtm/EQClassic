@@ -714,10 +714,11 @@ namespace EQClassic.Shared.Zone
     public sealed record BuffView(int SpellId, string Name, int TicsLeft, bool Beneficial);
 
     /// <summary>
-    /// Zone server to the player: their buffs (the buff window), and the movement speed they add up
-    /// to (percent: spirit of wolf, snares), which the client applies to its own movement.
+    /// Zone server to the player: their buffs (the buff window), and what the client applies to its
+    /// own movement: the speed they add up to (percent: spirit of wolf, snares; −100 when rooted)
+    /// and levitation (no falling).
     /// </summary>
-    public sealed record PlayerBuffs(IReadOnlyList<BuffView> Buffs, int MovementSpeed) : IMessage
+    public sealed record PlayerBuffs(IReadOnlyList<BuffView> Buffs, int MovementSpeed, bool Levitating = false) : IMessage
     {
         public MessageType Type => MessageType.PlayerBuffs;
 
@@ -732,6 +733,7 @@ namespace EQClassic.Shared.Zone
                 writer.Put(b.Beneficial);
             }
             writer.Put((short)MovementSpeed);
+            writer.Put(Levitating);
         }
 
         public static PlayerBuffs ReadFields(NetDataReader reader)
@@ -740,7 +742,7 @@ namespace EQClassic.Shared.Zone
             var buffs = new List<BuffView>(count);
             for (int n = 0; n < count; n++)
                 buffs.Add(new BuffView(reader.GetInt(), reader.GetString(), reader.GetInt(), reader.GetBool()));
-            return new PlayerBuffs(buffs, reader.GetShort());
+            return new PlayerBuffs(buffs, reader.GetShort(), reader.GetBool());
         }
     }
 }

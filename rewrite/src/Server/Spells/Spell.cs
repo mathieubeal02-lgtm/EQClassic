@@ -9,7 +9,9 @@ public static class SpellEffect
     public const int CurrentHp = 0, ArmorClass = 1, Atk = 2, MovementSpeed = 3, Str = 4, Dex = 5, Agi = 6, Sta = 7, Int = 8, Wis = 9,
         Cha = 10, AttackSpeed = 11, SeeInvis = 13, WaterBreathing = 14, CurrentMana = 15, Blind = 20, ResistFire = 46, ResistCold = 47,
         ResistPoison = 48, ResistDisease = 49, ResistMagic = 50, DamageShield = 59, InfraVision = 65, UltraVision = 66, TotalHp = 69,
-        CurrentHpOnce = 79, MagnifyVision = 87, HealOverTime = 100, CompleteHeal = 101;
+        CurrentHpOnce = 79, MagnifyVision = 87, HealOverTime = 100, CompleteHeal = 101,
+        Invisibility = 12, Stun = 21, BindAffinity = 25, Gate = 26, InvisVsUndead = 28, Mez = 31, SummonItem = 32, Levitate = 57,
+        Teleport = 83, Root = 99;
     /// <summary>Unused effect slot.</summary>
     public const int Blank = 254;
 }
@@ -31,6 +33,8 @@ public sealed record Spell(int Id, string Name)
     /// <summary>classes[] values above this mean the class never gets the spell (the file uses 61 and 255).</summary>
     public const int MaxLevel = 60;
 
+    /// <summary>teleport_zone: the zone of a teleport, or the item a summoning spell makes.</summary>
+    public string TeleportZone { get; init; } = "";
     public string YouCast { get; init; } = "";
     public string OtherCasts { get; init; } = "";
     public string CastOnYou { get; init; } = "";
@@ -76,7 +80,7 @@ public sealed record Spell(int Id, string Name)
     public int Value(int index, int casterLevel)
     {
         int formula = Formula[index], b = Base[index], max = Max[index];
-        if (Effect[index] == SummonItemEffect)
+        if (Effect[index] == SpellEffect.SummonItem)
             (b, max) = (0, 20);
         int ubase = Math.Abs(b);
         int result = formula switch
@@ -99,8 +103,6 @@ public sealed record Spell(int Id, string Name)
         int sign = b < 0 ? -1 : 1; // the legacy sign(): zero counts as positive
         return result >= max && max != 0 ? max * sign : result * sign;
     }
-
-    private const int SummonItemEffect = 32;
 
     private static readonly Encoding Latin1 = Encoding.Latin1;
 
@@ -128,6 +130,7 @@ public sealed record Spell(int Id, string Name)
         }
         return new Spell(id, Text(r.Slice(0, 32)))
         {
+            TeleportZone = Text(r.Slice(64, 32)),
             YouCast = Text(r.Slice(96, 64)),
             OtherCasts = Text(r.Slice(160, 64)),
             CastOnYou = Text(r.Slice(224, 64)),

@@ -38,6 +38,11 @@ public sealed record StatBonuses
     public int Slow { get; init; }
     /// <summary>Percent added to movement speed (negative: snare).</summary>
     public int MovementSpeed { get; init; }
+    public bool Invisible { get; init; }
+    public bool InvisibleToUndead { get; init; }
+    public bool Rooted { get; init; }
+    public bool Mezzed { get; init; }
+    public bool Levitating { get; init; }
 
     /// <summary>
     /// Adds up the buffs. AC on beneficial spells goes through the legacy AproximateSpellAC curve;
@@ -48,6 +53,7 @@ public sealed record StatBonuses
     {
         int ac = 0, atk = 0, str = 0, sta = 0, agi = 0, dex = 0, @int = 0, wis = 0, cha = 0, hp = 0, hpTic = 0, manaTic = 0;
         int mr = 0, fr = 0, cr = 0, pr = 0, dr = 0, haste = 0, slow = 0, speed = 0;
+        bool invisible = false, invisibleToUndead = false, rooted = false, mezzed = false, levitating = false;
         foreach (var buff in buffs)
         {
             var s = buff.Spell;
@@ -78,6 +84,11 @@ public sealed record StatBonuses
                     case SpellEffect.ResistPoison: pr += v; break;
                     case SpellEffect.ResistDisease: dr += v; break;
                     case SpellEffect.MovementSpeed: speed += v; break;
+                    case SpellEffect.Invisibility: invisible = true; break;
+                    case SpellEffect.InvisVsUndead: invisibleToUndead = true; break;
+                    case SpellEffect.Root: rooted = true; break;
+                    case SpellEffect.Mez: mezzed = true; break;
+                    case SpellEffect.Levitate: levitating = true; break;
                     case SpellEffect.AttackSpeed:
                         if (v > 100) haste = Math.Max(haste, v - 100);
                         else if (v > 0 && v < 100) slow = Math.Max(slow, 100 - v);
@@ -89,7 +100,8 @@ public sealed record StatBonuses
         {
             AC = ac, Atk = atk, Str = str, Sta = sta, Agi = agi, Dex = dex, Int = @int, Wis = wis, Cha = cha, Hp = hp,
             HpPerTic = hpTic, ManaPerTic = manaTic, MR = mr, FR = fr, CR = cr, PR = pr, DR = dr, Haste = haste, Slow = slow,
-            MovementSpeed = speed,
+            MovementSpeed = speed, Invisible = invisible, InvisibleToUndead = invisibleToUndead, Rooted = rooted, Mezzed = mezzed,
+            Levitating = levitating,
         };
     }
 
