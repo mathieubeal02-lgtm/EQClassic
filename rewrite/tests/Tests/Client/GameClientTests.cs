@@ -193,6 +193,37 @@ public sealed class GameClientTests : IDisposable
     }
 
     [Fact]
+    public void Players_say_tell_and_who()
+    {
+        var qbot = InZone("Qbot");
+        var other = AtCharacterSelect();
+        other.CreateCharacter(new CreateCharacterRequest("Qchat", 9, 10, 0, 203, 1, "grobb", new CharacterStats(75, 75, 75, 75, 75, 75, 75)));
+        Run(() => other.Characters.Any(c => c.Name == "Qchat"));
+        other.EnterWorld("Qchat");
+        Run(() => other.State == GameState.InZone);
+        var heard = new List<string>();
+        var said = new List<string>();
+        qbot.MessageReceived += heard.Add;
+        other.MessageReceived += said.Add;
+
+        other.ExecuteChat("hail, Qbot");                // Qchat at (40, -60), Qbot at (10, 10): 76 units, within say range
+        Assert.True(Run(() => heard.Contains("Qchat says, 'hail, Qbot'")), string.Join(" | ", heard));
+        Assert.True(Run(() => said.Contains("You say, 'hail, Qbot'")));
+
+        other.ExecuteChat("/tell qbot meet me at the gate");
+        Assert.True(Run(() => heard.Contains("Qchat tells you, 'meet me at the gate'")));
+        Assert.True(Run(() => said.Contains("You told Qbot, 'meet me at the gate'")));
+        other.ExecuteChat("/tell Nobody hello");
+        Assert.True(Run(() => said.Contains("Nobody is not online at this time.")));
+
+        qbot.ExecuteChat("/who");
+        Assert.True(Run(() => heard.Contains("There are 2 players in grobb.")), string.Join(" | ", heard));
+        Assert.Contains("[1 Shaman] Qchat (Troll)", heard);
+        qbot.ExecuteChat("/loc");
+        Assert.Contains("Your Location is 10.00, 10.00, 4.00", heard);
+    }
+
+    [Fact]
     public void Follows_a_zone_line_into_the_next_zone()
     {
         var client = InZone("Qbot");

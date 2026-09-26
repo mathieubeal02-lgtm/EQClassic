@@ -23,21 +23,21 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Water and lava | Surfaces, swimming, underwater tint | Todo | 2 |
 | Light sources | Torches and lanterns in hand, zone lights | Partial: one light around the player | 3 |
 | Particles | Spell effects | Todo (with spells) | 3 |
-| Name plates | Names above heads, consider colours | Todo | 1 |
+| Name plates | Names above heads, consider colours | Written (con colour after considering, target in brackets), to check in Unity | 1 |
 | Loading screen | Between zones | Todo | 3 |
 
 ## Camera and movement
 
 | Feature | Trilogy client | Status | Priority |
 |---|---|---|---|
-| First-person view | Default view | Todo | 1 |
-| Third-person views | Chase and overhead, cycled with F9, zoom | Partial: one chase view that pulls in at walls | 1 |
-| Mouse look | Right button held: look around and turn | Todo | 1 |
-| Look up/down, centre | Page Up / Page Down, Home | Todo | 1 |
-| Walk, run, strafe, turn | Arrows/WASD, run toggle | Partial: always runs | 1 |
-| Autorun | Num Lock / R | Todo | 1 |
+| First-person view | Default view | Written (F9, wheel), to check in Unity | 1 |
+| Third-person views | Chase and overhead, cycled with F9, zoom | Written, to check in Unity (pulls in at walls) | 1 |
+| Mouse look | Right button held: look around and turn | Written, to check in Unity | 1 |
+| Look up/down, centre | Page Up / Page Down, Home | Written, to check in Unity | 1 |
+| Walk, run, strafe, turn | Arrows/WASD, run toggle | Done: Shift walks | 1 |
+| Autorun | Num Lock / R | Written, to check in Unity | 1 |
 | Jump | Space | Todo | 2 |
-| Sit, stand, crouch | Sitting regenerates faster | Partial: the server knows sitting, no key yet | 1 |
+| Sit, stand, crouch | Sitting regenerates faster | Partial: X or /sit, seen by others, walking stands up; no crouch | 1 |
 | Swimming, levitation, falling damage | | Todo | 3 |
 | Collisions | Walls, objects, steps | Done (ground, steps, walls, solid objects of the export) | — |
 
@@ -45,11 +45,11 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 
 | Feature | Trilogy client | Status | Priority |
 |---|---|---|---|
-| Chat window | Say, shout, OOC, tells, group, guild, emotes, channels, scrolling | Partial: last lines of server messages on screen | 1 |
-| Slash commands | /who, /loc, /sit, /camp, /con, /target... | Todo | 1 |
+| Chat window | Say, shout, OOC, tells, group, guild, emotes, channels, scrolling | Partial: Enter to type; say, shout, OOC, auction, tells (across zones), emotes; last 12 lines on screen. No group/guild channels, no scrolling back | 1 |
+| Slash commands | /who, /loc, /sit, /camp, /con, /target... | Partial: /say /shout /ooc /auction /tell /em /who /loc /sit /stand /camp /con /target | 1 |
 | Player window | HP, mana, stamina, experience bars | Partial: HP as text | 1 |
 | Target window | Name, health, consider colour | Partial: name and health as text | 1 |
-| Consider (C) | Con colour and faction message | Todo (server rules exist: AggroRules) | 1 |
+| Consider (C) | Con colour and faction message | Done (faction always indifferent until the faction port) | — |
 | Inventory | Worn slots, bags, weight, money | Todo (server: items, profile slots) | 2 |
 | Loot | Corpse window | Todo (server: loot tables) | 2 |
 | Merchants, bank, trade | | Todo | 3 |

@@ -20,6 +20,10 @@ namespace EQClassic.Unity
         private string _password = "";
         private string _newName = "";
         private readonly System.Collections.Generic.List<string> _messages = new System.Collections.Generic.List<string>();
+        private bool _chatOpen;
+        private string _chatLine = "";
+        private int _chatClosedFrame = -1;
+        private const int ChatLines = 12;
 
         private void Awake()
         {
@@ -57,6 +61,18 @@ namespace EQClassic.Unity
             _client.Update(Time.deltaTime);
             if (_client.State == GameState.InZone)
             {
+                _presenter.InputEnabled = !_chatOpen;
+                if (!_chatOpen && Time.frameCount != _chatClosedFrame
+                    && (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) || Input.GetKeyDown(KeyCode.Slash)))
+                {
+                    _chatOpen = true;
+                    _chatLine = Input.GetKeyDown(KeyCode.Slash) ? "/" : "";
+                }
+                if (_chatOpen)
+                {
+                    _presenter.Present(_client, Time.deltaTime);
+                    return; // typing: no game keys
+                }
                 if (Input.GetKeyDown(KeyCode.U) && _client.UseNearestDoor() == null)
                     AddMessage("There is nothing here to use.");
                 if (Input.GetKeyDown(KeyCode.Tab) && _client.TargetNearest() == null)
@@ -83,8 +99,42 @@ namespace EQClassic.Unity
         private void AddMessage(string text)
         {
             _messages.Add(text);
-            if (_messages.Count > 8)
+            if (_messages.Count > 100)
                 _messages.RemoveAt(0);
+        }
+
+        /// <summary>The chat window: the latest lines, and the input line while it is open.</summary>
+        private void DrawChat()
+        {
+            int shown = System.Math.Min(ChatLines, _messages.Count);
+            float bottom = Screen.height - 36;
+            for (int i = 0; i < shown; i++)
+                GUI.Label(new Rect(10, bottom - 20 * (shown - i), 800, 20), _messages[_messages.Count - shown + i]);
+            if (!_chatOpen)
+                return;
+            GUI.SetNextControlName("chat");
+            _chatLine = GUI.TextField(new Rect(10, Screen.height - 30, 700, 22), _chatLine);
+            GUI.FocusControl("chat");
+            var e = Event.current;
+            if (e.type != EventType.KeyDown)
+                return;
+            if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter)
+            {
+                _client.ExecuteChat(_chatLine);
+                CloseChat(e);
+            }
+            else if (e.keyCode == KeyCode.Escape)
+            {
+                CloseChat(e);
+            }
+        }
+
+        private void CloseChat(Event e)
+        {
+            _chatOpen = false;
+            _chatLine = "";
+            _chatClosedFrame = Time.frameCount;
+            e.Use();
         }
 
         private void OnGUI()
@@ -99,8 +149,7 @@ namespace EQClassic.Unity
                 GUI.Label(new Rect(10, 32, 400, 20), $"HP {_client.Hp} / {_client.MaxHp}" + (_client.AutoAttacking ? "   (attacking)" : "") + (_client.Sitting ? "   (sitting)" : ""));
                 if (_client.TargetId is int target && _client.Zone?.Get(target) is { } t)
                     GUI.Label(new Rect(10, 54, 400, 20), $"Target: {t.DisplayName}  {t.HpPercent}%");
-                for (int i = 0; i < _messages.Count; i++)
-                    GUI.Label(new Rect(10, Screen.height - 20 * (_messages.Count - i) - 10, 700, 20), _messages[i]);
+                DrawChat();
                 return;
             }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Diagnostics;
 using EQClassic.Shared.Characters;
@@ -68,6 +69,76 @@ namespace EQClassic.ClientCore
             var target = Zone.NextNpc(Player.Position, TargetReach, TargetId);
             SetTarget(target?.Id);
             return target;
+        }
+
+        /// <summary>Seconds /camp takes (the player must stay put).</summary>
+        public const float CampSeconds = 30f;
+        private float? _campLeft;
+        private Vec3 _campFrom;
+
+        /// <summary>Runs a line typed in the chat box: chat to send, or a slash command.</summary>
+        public void ExecuteChat(string line)
+        {
+            if (_state != GameState.InZone || Player == null || Zone == null)
+                return;
+            var parsed = Chat.Parse(line);
+            switch (parsed.Action)
+            {
+                case ChatAction.Send:
+                    _connection?.Send(new ChatSend(parsed.Channel, parsed.Target, parsed.Text));
+                    break;
+                case ChatAction.Who:
+                    _connection?.Send(new WhoRequest());
+                    break;
+                case ChatAction.Location:
+                    MessageReceived?.Invoke(Chat.Location(Player.Position));
+                    break;
+                case ChatAction.Sit:
+                    _connection?.Send(new SetSitting(true));
+                    break;
+                case ChatAction.Stand:
+                    _connection?.Send(new SetSitting(false));
+                    break;
+                case ChatAction.Consider:
+                    Consider();
+                    break;
+                case ChatAction.Target:
+                    var found = parsed.Target.Length == 0 ? null : Zone.Entities.Where(e => e.Id != Zone.YourEntityId)
+                        .FirstOrDefault(e => e.DisplayName.StartsWith(parsed.Target, StringComparison.OrdinalIgnoreCase)
+                                          || e.Spawn.Name.StartsWith(parsed.Target, StringComparison.OrdinalIgnoreCase));
+                    if (found == null)
+                        MessageReceived?.Invoke("Couldn't find anyone by that name.");
+                    else
+                        SetTarget(found.Id);
+                    break;
+                case ChatAction.Camp:
+                    _connection?.Send(new SetSitting(true));
+                    _campLeft = CampSeconds;
+                    _campFrom = Player.Position;
+                    MessageReceived?.Invoke("It will take you about 30 seconds to prepare your camp.");
+                    break;
+                case ChatAction.Unknown:
+                    MessageReceived?.Invoke(parsed.Text);
+                    break;
+            }
+        }
+
+        private void UpdateCamp(float seconds)
+        {
+            if (_campLeft is not float left || Player == null)
+                return;
+            var p = Player.Position;
+            if (Math.Abs(p.X - _campFrom.X) + Math.Abs(p.Y - _campFrom.Y) > 0.5f)
+            {
+                _campLeft = null;
+                MessageReceived?.Invoke("You abandon your preparations to camp.");
+                return;
+            }
+            _campLeft = left - seconds;
+            if (_campLeft > 0)
+                return;
+            _campLeft = null;
+            Fail("You have camped. Log in again to play.");
         }
 
         /// <summary>Considers the target (C): the answer arrives as a line in <see cref="MessageReceived"/>.</summary>
@@ -180,6 +251,8 @@ namespace EQClassic.ClientCore
                 Fail(_connection.DisconnectReason ?? "connection lost");
             if (_state == GameState.InZone && Player?.Due(seconds) is PlayerMove move)
                 _connection?.Send(move);
+            if (_state == GameState.InZone)
+                UpdateCamp(seconds);
         }
 
         private void Handle(IMessage message)
@@ -270,6 +343,9 @@ namespace EQClassic.ClientCore
                 case ConsiderResult considered when Zone?.Get(considered.EntityId) is { } seen:
                     seen.Con = considered.Con;
                     MessageReceived?.Invoke(ConsiderRules.Message(seen.DisplayName, considered.Standing, considered.Con));
+                    break;
+                case ChatMessage chat:
+                    MessageReceived?.Invoke(Chat.Format(chat, _characterName ?? ""));
                     break;
                 case EntityAppearance appearance:
                     Zone?.Apply(appearance);

@@ -94,7 +94,7 @@ namespace UnityEngine
     public enum KeyCode
     {
         Tab = 9, Escape = 27, Q = 113, C = 99, E = 101, F = 102, R = 114, T = 116, U = 117, X = 120, Numlock = 300, RightShift = 303, LeftShift = 304,
-        Home = 278, PageUp = 280, PageDown = 281, F9 = 290,
+        Home = 278, PageUp = 280, PageDown = 281, F9 = 290, Return = 13, KeypadEnter = 271, Slash = 47,
     }
     public enum RuntimeInitializeLoadType { AfterSceneLoad, BeforeSceneLoad }
 
@@ -141,12 +141,23 @@ namespace UnityEngine
     public static class Time
     {
         public static float deltaTime => 0;
+        public static int frameCount => 0;
     }
 
     public static class Debug
     {
         public static void Log(object message) { }
         public static void LogWarning(object message) { }
+    }
+
+    public enum EventType { KeyDown = 4 }
+
+    public sealed class Event
+    {
+        public static Event current => null;
+        public EventType type => default;
+        public KeyCode keyCode => default;
+        public void Use() { }
     }
 
     public static class Screen
@@ -189,6 +200,9 @@ namespace UnityEngine
 
     public static class GUI
     {
+        public static void SetNextControlName(string name) { }
+        public static void FocusControl(string name) { }
+        public static string TextField(Rect position, string text) => text;
         public static Color color { get; set; }
         public static void Label(Rect position, string text, GUIStyle style) { }
         public static void Box(Rect position, string text) { }

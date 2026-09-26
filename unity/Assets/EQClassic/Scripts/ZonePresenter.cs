@@ -53,6 +53,9 @@ namespace EQClassic.Unity
         private float _eyeHeight = 2.5f; // Unity units above the feet; measured from the player's model
         private bool _playerHidden;
 
+        /// <summary>False while the chat line is open: the keys type text instead of moving.</summary>
+        public bool InputEnabled { get; set; } = true;
+
         /// <summary>The zone the server put us in has no imported assets in this client.</summary>
         public string MissingZone { get; private set; }
         private readonly Dictionary<int, DoorVisual> _doors = new Dictionary<int, DoorVisual>();
@@ -117,17 +120,18 @@ namespace EQClassic.Unity
             if (zone == null || player == null)
                 return;
 
-            ReadCameraInput(player);
-            if (Input.GetKeyDown(KeyCode.R) || Input.GetKeyDown(KeyCode.Numlock))
+            if (InputEnabled)
+                ReadCameraInput(player);
+            if (InputEnabled && (Input.GetKeyDown(KeyCode.R) || Input.GetKeyDown(KeyCode.Numlock)))
                 _autorun = !_autorun;
-            float forward = Input.GetAxis("Vertical");
+            float forward = InputEnabled ? Input.GetAxis("Vertical") : 0f;
             if (forward < -0.1f)
                 _autorun = false; // backing up stops autorun, as in the old client
             if (_autorun)
                 forward = 1f;
-            float strafe = Input.GetAxis("Horizontal");
-            float turn = (Input.GetKey(KeyCode.E) ? 1f : 0f) - (Input.GetKey(KeyCode.Q) ? 1f : 0f);
-            player.Walking = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            float strafe = InputEnabled ? Input.GetAxis("Horizontal") : 0f;
+            float turn = !InputEnabled ? 0f : (Input.GetKey(KeyCode.E) ? 1f : 0f) - (Input.GetKey(KeyCode.Q) ? 1f : 0f);
+            player.Walking = InputEnabled && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
             if (_mesh != null)
                 player.Move(forward, strafe, turn, deltaTime, _mesh); // ground, steps and walls
             else

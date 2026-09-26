@@ -41,4 +41,7 @@ public enum MessageType : byte
     ConsiderResult = 33,
     SetSitting = 34,
     EntityAppearance = 35,
+    ChatSend = 36,
+    ChatMessage = 37,
+    WhoRequest = 38,
 }

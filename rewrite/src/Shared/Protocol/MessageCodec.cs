@@ -67,6 +67,9 @@ public static class MessageCodec
                 MessageType.ConsiderResult => ConsiderResult.ReadFields(reader),
                 MessageType.SetSitting => SetSitting.ReadFields(reader),
                 MessageType.EntityAppearance => EntityAppearance.ReadFields(reader),
+                MessageType.ChatSend => ChatSend.ReadFields(reader),
+                MessageType.ChatMessage => ChatMessage.ReadFields(reader),
+                MessageType.WhoRequest => new WhoRequest(),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

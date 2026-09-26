@@ -366,4 +366,45 @@ namespace EQClassic.Shared.Zone
 
         public static EntityAppearance ReadFields(NetDataReader reader) => new EntityAppearance(reader.GetInt(), reader.GetBool());
     }
+
+    public enum ChatChannel : byte { Say = 0, Shout = 1, Ooc = 2, Auction = 3, Tell = 4, Emote = 5 }
+
+    /// <summary>Client to zone server: a chat line (To is the tell recipient).</summary>
+    public sealed record ChatSend(ChatChannel Channel, string To, string Text) : IMessage
+    {
+        public MessageType Type => MessageType.ChatSend;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put((byte)Channel);
+            writer.Put(To);
+            writer.Put(Text);
+        }
+
+        public static ChatSend ReadFields(NetDataReader reader) => new ChatSend((ChatChannel)reader.GetByte(), reader.GetString(), reader.GetString());
+    }
+
+    /// <summary>Zone server to the clients that hear it (the sender too, for the echo).</summary>
+    public sealed record ChatMessage(ChatChannel Channel, string From, string To, string Text) : IMessage
+    {
+        public MessageType Type => MessageType.ChatMessage;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put((byte)Channel);
+            writer.Put(From);
+            writer.Put(To);
+            writer.Put(Text);
+        }
+
+        public static ChatMessage ReadFields(NetDataReader reader) =>
+            new ChatMessage((ChatChannel)reader.GetByte(), reader.GetString(), reader.GetString(), reader.GetString());
+    }
+
+    /// <summary>Client to zone server: /who (the answer comes as ZoneMessage lines).</summary>
+    public sealed record WhoRequest : IMessage
+    {
+        public MessageType Type => MessageType.WhoRequest;
+        public void WriteFields(NetDataWriter writer) { }
+    }
 }

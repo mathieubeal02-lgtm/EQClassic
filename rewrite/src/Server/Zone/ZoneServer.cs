@@ -137,6 +137,14 @@ public sealed class ZoneServer : IDisposable
                 Broadcast(targeter.Instance, targeter.Instance.DrainEvents());
                 break;
 
+            case ChatSend chat when _players.TryGetValue(peer, out var speaker) && chat.Text.Length is > 0 and <= MaxChatLength:
+                Chat(peer, speaker, chat);
+                break;
+
+            case WhoRequest when _players.TryGetValue(peer, out var asker):
+                Who(peer, asker);
+                break;
+
             case ConsiderRequest consider when _players.TryGetValue(peer, out var considerer):
                 considerer.Instance.Consider(considerer.EntityId, consider.EntityId);
                 Broadcast(considerer.Instance, considerer.Instance.DrainEvents());
@@ -247,6 +255,70 @@ public sealed class ZoneServer : IDisposable
                     break;
             }
         }
+    }
+
+    public const int MaxChatLength = 512;
+    /// <summary>Say and emotes reach this far (units).</summary>
+    public const float SayRange = 200f;
+
+    /// <summary>
+    /// Say and emotes to the players near the speaker, shout / OOC / auction to the whole zone,
+    /// tells to the named character in any zone of this server; the speaker gets the echo.
+    /// </summary>
+    private void Chat(NetPeer peer, Player speaker, ChatSend chat)
+    {
+        string from = speaker.Ticket.CharacterName;
+        if (chat.Channel == ChatChannel.Tell)
+        {
+            var (to, recipient) = _players.FirstOrDefault(kv => string.Equals(kv.Value.Ticket.CharacterName, chat.To, StringComparison.OrdinalIgnoreCase));
+            if (to is null)
+            {
+                Send(peer, new ZoneMessage($"{chat.To} is not online at this time."), DeliveryMethod.ReliableOrdered);
+                return;
+            }
+            var tell = new ChatMessage(ChatChannel.Tell, from, recipient.Ticket.CharacterName, chat.Text);
+            Send(to, tell, DeliveryMethod.ReliableOrdered);
+            if (to != peer)
+                Send(peer, tell, DeliveryMethod.ReliableOrdered);
+            return;
+        }
+        var message = new ChatMessage(chat.Channel, from, "", chat.Text);
+        if (chat.Channel is ChatChannel.Say or ChatChannel.Emote)
+        {
+            var at = speaker.Instance.Get(speaker.EntityId)?.Position ?? speaker.Ticket.Position;
+            foreach (var (other, p) in _players)
+                if (p.Instance == speaker.Instance && p.Instance.Get(p.EntityId) is { } e && Distance2(e.Position, at) <= SayRange * SayRange)
+                    Send(other, message, DeliveryMethod.ReliableOrdered);
+        }
+        else
+        {
+            SendToZone(speaker.Instance, message);
+        }
+    }
+
+    private static readonly string[] ClassNames = ["", "Warrior", "Cleric", "Paladin", "Ranger", "Shadow Knight", "Druid", "Monk", "Bard",
+        "Rogue", "Shaman", "Necromancer", "Wizard", "Magician", "Enchanter", "Beastlord"];
+
+    private static string RaceName(int race) => race switch
+    {
+        1 => "Human", 2 => "Barbarian", 3 => "Erudite", 4 => "Wood Elf", 5 => "High Elf", 6 => "Dark Elf", 7 => "Half Elf",
+        8 => "Dwarf", 9 => "Troll", 10 => "Ogre", 11 => "Halfling", 12 => "Gnome", 128 => "Iksar", _ => "Unknown",
+    };
+
+    /// <summary>/who: the players in the asker's zone, "[level class] name (race)".</summary>
+    private void Who(NetPeer peer, Player asker)
+    {
+        var here = _players.Values.Where(p => p.Instance == asker.Instance)
+            .Select(p => p.Instance.Get(p.EntityId)).Where(e => e is not null).OrderBy(e => e!.Name).ToList();
+        Send(peer, new ZoneMessage("Players in EverQuest:"), DeliveryMethod.ReliableOrdered);
+        Send(peer, new ZoneMessage("---------------------------"), DeliveryMethod.ReliableOrdered);
+        foreach (var e in here)
+        {
+            int c = e!.Fighter.Class;
+            Send(peer, new ZoneMessage($"[{e.Level} {(c > 0 && c < ClassNames.Length ? ClassNames[c] : "Unknown")}] {e.Name} ({RaceName(e.Race)})"), DeliveryMethod.ReliableOrdered);
+        }
+        Send(peer, new ZoneMessage(here.Count == 1 ? $"There is 1 player in {asker.Instance.ShortName}."
+            : $"There are {here.Count} players in {asker.Instance.ShortName}."), DeliveryMethod.ReliableOrdered);
     }
 
     /// <summary>Legacy death messages: the killer, the victim, then everyone near.</summary>
