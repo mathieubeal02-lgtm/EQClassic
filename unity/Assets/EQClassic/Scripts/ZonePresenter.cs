@@ -244,14 +244,7 @@ namespace EQClassic.Unity
                 string name = entity.DisplayName;
                 if (_client?.TargetId == pair.Key)
                     name = "[ " + name + " ]";
-                GUI.color = entity.Con switch
-                {
-                    ConColor.Green => Color.green,
-                    ConColor.Blue => new Color(0.4f, 0.6f, 1f),
-                    ConColor.Yellow => Color.yellow,
-                    ConColor.Red => Color.red,
-                    _ => Color.white,
-                };
+                GUI.color = EQClassicClient.ConColour(entity.Con);
                 GUI.Label(new Rect(screen.x - 120f, Screen.height - screen.y - 10f, 240f, 20f), name, _plateStyle);
             }
             GUI.color = colour;
@@ -320,13 +313,13 @@ namespace EQClassic.Unity
 
         /// <summary>
         /// The collision mesh the server walks NPCs on (LanternExtractor export, copied into
-        /// Assets/EQAssets by tools/unity/setup-client.sh). Without it the player keeps its height.
+        /// the export folder in the Editor, next to the asset bundles in player builds). Without it the player keeps its height.
         /// </summary>
         private static ZoneCollisionMesh LoadCollision(string zone)
         {
             // Editor: the Lantern export (zone and solid objects); standalone builds: the merged
             // copy EQClassicBuild writes next to the asset bundles.
-            var exports = Path.Combine(Application.dataPath, "EQAssets");
+            var exports = ClientPaths.Exports;
             var path = Path.Combine(exports, zone, "Zone", "Meshes", zone + "_collision.txt");
             if (File.Exists(path))
                 return ZoneCollisionMesh.LoadLanternZone(exports, zone);
@@ -344,7 +337,7 @@ namespace EQClassic.Unity
         /// </summary>
         private void PlaceObjects(string zone)
         {
-            var list = Path.Combine(Application.dataPath, "EQAssets", zone, "Zone", "object_instances.txt");
+            var list = Path.Combine(ClientPaths.Exports, zone, "Zone", "object_instances.txt");
             if (!File.Exists(list))
                 list = Path.Combine(ClientBundles.Directory, zone + "_objects.txt");
             if (!File.Exists(list))

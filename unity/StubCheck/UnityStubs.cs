@@ -87,6 +87,10 @@ namespace UnityEngine
     public struct Rect
     {
         public Rect(float x, float y, float width, float height) { }
+        public float x => 0;
+        public float y => 0;
+        public float width => 0;
+        public float height => 0;
     }
 
     public enum PrimitiveType { Sphere, Capsule, Cylinder, Cube, Plane, Quad }
@@ -121,6 +125,7 @@ namespace UnityEngine
     public struct Color
     {
         public Color(float r, float g, float b) { }
+        public Color(float r, float g, float b, float a) { }
         public static Color white => default;
         public static Color green => default;
         public static Color yellow => default;
@@ -148,6 +153,15 @@ namespace UnityEngine
     {
         public static void Log(object message) { }
         public static void LogWarning(object message) { }
+    }
+
+    public class Texture : Object { }
+
+    public sealed class Texture2D : Texture
+    {
+        public Texture2D(int width, int height) { }
+        public void SetPixel(int x, int y, Color color) { }
+        public void Apply() { }
     }
 
     public enum EventType { KeyDown = 4 }
@@ -200,6 +214,7 @@ namespace UnityEngine
 
     public static class GUI
     {
+        public static void DrawTexture(Rect position, Texture image) { }
         public static void SetNextControlName(string name) { }
         public static void FocusControl(string name) { }
         public static string TextField(Rect position, string text) => text;

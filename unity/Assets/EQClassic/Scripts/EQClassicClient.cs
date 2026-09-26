@@ -1,5 +1,6 @@
 using EQClassic.ClientCore;
 using EQClassic.Shared.Characters;
+using EQClassic.Shared.Zone;
 using UnityEngine;
 
 namespace EQClassic.Unity
@@ -103,6 +104,36 @@ namespace EQClassic.Unity
                 _messages.RemoveAt(0);
         }
 
+        private static Texture2D _white;
+
+        /// <summary>A filled bar (hit points) with a label over it.</summary>
+        private static void DrawBar(Rect area, float fraction, Color fill, string label)
+        {
+            if (_white == null)
+            {
+                _white = new Texture2D(1, 1);
+                _white.SetPixel(0, 0, Color.white);
+                _white.Apply();
+            }
+            var colour = GUI.color;
+            GUI.color = new Color(0f, 0f, 0f, 0.6f);
+            GUI.DrawTexture(area, _white);
+            GUI.color = fill;
+            GUI.DrawTexture(new Rect(area.x, area.y, area.width * Mathf.Clamp(fraction, 0f, 1f), area.height), _white);
+            GUI.color = colour;
+            GUI.Label(new Rect(area.x + 4, area.y - 3, area.width, area.height + 6), label);
+        }
+
+        /// <summary>Consider colours as the Trilogy client shows them (white until considered).</summary>
+        public static Color ConColour(ConColor? con) => con switch
+        {
+            ConColor.Green => Color.green,
+            ConColor.Blue => new Color(0.4f, 0.6f, 1f),
+            ConColor.Yellow => Color.yellow,
+            ConColor.Red => Color.red,
+            _ => Color.white,
+        };
+
         /// <summary>The chat window: the latest lines, and the input line while it is open.</summary>
         private void DrawChat()
         {
@@ -146,9 +177,16 @@ namespace EQClassic.Unity
                 if (_presenter.MissingZone != null)
                     GUI.Box(new Rect(Screen.width / 2 - 300, 80, 600, 44),
                         $"The zone '{_presenter.MissingZone}' is not installed in this client (not imported from Lantern).\nYou are there for the server, but nothing can be drawn.");
-                GUI.Label(new Rect(10, 32, 400, 20), $"HP {_client.Hp} / {_client.MaxHp}" + (_client.AutoAttacking ? "   (attacking)" : "") + (_client.Sitting ? "   (sitting)" : ""));
+                DrawBar(new Rect(10, 34, 220, 16), _client.MaxHp > 0 ? (float)_client.Hp / _client.MaxHp : 0f, new Color(0.8f, 0.1f, 0.1f),
+                    $"{_client.Hp} / {_client.MaxHp}" + (_client.AutoAttacking ? "  attacking" : "") + (_client.Sitting ? "  sitting" : ""));
                 if (_client.TargetId is int target && _client.Zone?.Get(target) is { } t)
-                    GUI.Label(new Rect(10, 54, 400, 20), $"Target: {t.DisplayName}  {t.HpPercent}%");
+                {
+                    var colour = GUI.color;
+                    GUI.color = ConColour(t.Con);
+                    GUI.Label(new Rect(250, 30, 300, 20), t.DisplayName);
+                    GUI.color = colour;
+                    DrawBar(new Rect(250, 50, 220, 12), t.HpPercent / 100f, new Color(0.8f, 0.1f, 0.1f), t.HpPercent + "%");
+                }
                 DrawChat();
                 return;
             }

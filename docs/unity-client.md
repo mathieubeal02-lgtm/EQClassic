@@ -31,10 +31,12 @@ cd rewrite && dotnet run --project src/Server -- \
 ```
 
 4. In Unity Hub, open `build/unity-client`. The first import takes several minutes.
-5. Run **EQClassic > Import Zones and Characters** (zones from `EQC_ZONES`, default `qeynos2`), or
-   LanternUnityTools' own **EQ > Assets > Import Zone** and **Import Characters**. Our menu runs the
-   same importers without their dialogs and under the invariant culture: on a French system theirs
-   fail with a FormatException (they parse `0.5` with the current culture).
+5. Import the zones and characters with `tools/unity/import-zones.sh --characters all` (Unity closed;
+   about an hour for the 120 Trilogy zones). It copies a few exports at a time into
+   `Assets/EQAssets`, runs the LanternUnityTools importers through our editor script (without their
+   dialogs, under the invariant culture: on a French system theirs fail with a FormatException),
+   then removes the copies. The exports themselves stay in `build/lantern-work/Exports` (or
+   `EQC_EXPORTS`): with all of them under `Assets`, Unity spends hours scanning 125,000 files.
 6. Open an empty scene and press **Play**. The login screen appears. Enter the server address, an
    account (for example `bot` / `bot`), pick the world and a character. You then walk with
    WASD or the arrows and turn with Q/E. The NPCs follow their paths as the server moves them.
