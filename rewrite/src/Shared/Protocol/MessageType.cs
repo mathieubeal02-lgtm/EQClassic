@@ -79,4 +79,5 @@ public enum MessageType : byte
     BankContents = 71,
     PlayerStamina = 72,
     ConsumeItem = 73,
+    EntityIllusion = 74,
 }

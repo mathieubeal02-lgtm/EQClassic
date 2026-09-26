@@ -12,6 +12,20 @@ public class ClientCoreUnitTests
     private static readonly EntitySpawn Guard = new(2, "a_troll_guard", false, 9, 0, 20, 8f, 0, 0, 0, 0);
 
     [Fact]
+    public void An_illusion_redraws_the_entity_where_it_stands()
+    {
+        var view = ViewWith(Guard);
+        view.Apply(new EntityPositions(1, [new EntityPosition(2, 5, 10, 0, 90)]), now: 1.0);
+        var events = new List<string>();
+        view.Removed += id => events.Add($"removed {id}");
+        view.Added += e => events.Add($"added {e.Id} race {e.Spawn.Race} at {e.Latest.X},{e.Latest.Y}");
+        view.Apply(new EntityIllusion(2, 142, 0), now: 1.1);
+        Assert.Equal(["removed 2", "added 2 race 142 at 5,10"], events);
+        view.Apply(new EntityIllusion(2, 142, 0), now: 1.2); // no change, nothing to redraw
+        Assert.Equal(2, events.Count);
+    }
+
+    [Fact]
     public void Positions_are_interpolated_between_updates()
     {
         var view = ViewWith(Guard);

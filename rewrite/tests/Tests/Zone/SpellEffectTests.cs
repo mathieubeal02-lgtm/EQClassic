@@ -156,6 +156,20 @@ public class SpellEffectTests
     }
 
     [Fact]
+    public void An_illusion_changes_what_others_see_until_it_is_taken_off()
+    {
+        var (zone, player) = Setup();
+        zone.SetTarget(player.Id, player.Id);
+        var events = Cast(zone, player, 287); // Minor Illusion: race 142, rooted in place
+        Assert.Contains(new ZoneInstance.IllusionChanged(player.Id), events);
+        Assert.Equal(142, player.ToSpawn().Race);
+        Assert.Equal(1, player.Race);
+        events = Cast(zone, player, CancelMagic);
+        Assert.Contains(new ZoneInstance.IllusionChanged(player.Id), events);
+        Assert.Equal(1, player.ToSpawn().Race);
+    }
+
+    [Fact]
     public void A_rooted_npc_does_not_chase()
     {
         var (zone, player) = Setup(npcs: (new Vec3(40, 0, 0), Orc()));

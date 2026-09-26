@@ -56,6 +56,8 @@ public sealed partial class ZoneInstance
     /// <summary>The buffs on an entity changed (added, faded, a tic went by).</summary>
     public sealed record BuffsChanged(int EntityId) : ZoneEvent;
     public sealed record BuffFaded(int EntityId, int SpellId) : ZoneEvent;
+    /// <summary>The entity looks like another race now (or like itself again).</summary>
+    public sealed record IllusionChanged(int EntityId) : ZoneEvent;
     public const string DidNotTakeHoldMessage = "Your spell did not take hold.";
     /// <summary>A player's bind point changed (bind affinity): the server saves it.</summary>
     public sealed record BindChanged(int PlayerId) : ZoneEvent;
@@ -77,7 +79,7 @@ public sealed partial class ZoneInstance
         SpellEffect.Invisibility, SpellEffect.InvisVsUndead, SpellEffect.Stun, SpellEffect.BindAffinity, SpellEffect.Gate, SpellEffect.Mez,
         SpellEffect.SummonItem, SpellEffect.Levitate, SpellEffect.Teleport, SpellEffect.Root, WipeHateList, SummonPetEffect, NecPetEffect,
         SpellEffect.DamageShield, SpellEffect.Rune, SpellEffect.Stamina, SpellEffect.CancelMagic, SpellEffect.Fear,
-        SpellEffect.Lull, SpellEffect.FrenzyRadius, SpellEffect.Harmony, SpellEffect.Succor,
+        SpellEffect.Lull, SpellEffect.FrenzyRadius, SpellEffect.Harmony, SpellEffect.Succor, SpellEffect.Illusion,
     ];
 
     private const int WipeHateList = 63, SummonPetEffect = 33, NecPetEffect = 71;
@@ -644,7 +646,10 @@ public sealed partial class ZoneInstance
     /// <summary>Mob::CalcBonuses after a buff comes or goes: the fighter, hit points and mana follow.</summary>
     private void UpdateBonuses(Entity e)
     {
+        int looked = e.LooksLike;
         e.Bonuses = StatBonuses.From(e.BuffList);
+        if (e.LooksLike != looked)
+            _events.Add(new IllusionChanged(e.Id)); // SendIllusionPacket, when an illusion lands or fades
         RebuildFighter(e);
         if (e.Magic is { } magic)
         {

@@ -12,7 +12,7 @@ public static class SpellEffect
         CurrentHpOnce = 79, MagnifyVision = 87, HealOverTime = 100, CompleteHeal = 101,
         Invisibility = 12, Stun = 21, BindAffinity = 25, Gate = 26, InvisVsUndead = 28, Mez = 31, SummonItem = 32, Levitate = 57,
         Teleport = 83, Root = 99,
-        Lull = 18, Fear = 23, Stamina = 24, CancelMagic = 27, FrenzyRadius = 30, Rune = 55, Harmony = 86, Succor = 88;
+        Lull = 18, Fear = 23, Stamina = 24, CancelMagic = 27, FrenzyRadius = 30, Rune = 55, Harmony = 86, Succor = 88, Illusion = 58;
     /// <summary>Unused effect slot.</summary>
     public const int Blank = 254;
 }

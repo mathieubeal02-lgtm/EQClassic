@@ -105,6 +105,7 @@ public static class MessageCodec
                 MessageType.BankContents => BankContents.ReadFields(reader),
                 MessageType.PlayerStamina => PlayerStamina.ReadFields(reader),
                 MessageType.ConsumeItem => ConsumeItem.ReadFields(reader),
+                MessageType.EntityIllusion => EntityIllusion.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

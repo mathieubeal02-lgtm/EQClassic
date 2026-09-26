@@ -74,6 +74,25 @@ namespace EQClassic.ClientCore
             AppearanceChanged?.Invoke(e);
         }
 
+        /// <summary>
+        /// An illusion: the entity is drawn again as another race, where it stands (its view is
+        /// replaced: <see cref="Removed"/> then <see cref="Added"/>).
+        /// </summary>
+        public void Apply(EntityIllusion illusion, double now)
+        {
+            if (!_entities.TryGetValue(illusion.EntityId, out var old) || old.Spawn.Race == illusion.Race && old.Spawn.Gender == illusion.Gender)
+                return;
+            var at = old.Latest;
+            var last = old.Snapshots[old.Snapshots.Count - 1];
+            var view = new EntityView(old.Spawn with { Race = illusion.Race, Gender = illusion.Gender, X = at.X, Y = at.Y, Z = at.Z, Heading = last.Heading }, now)
+            {
+                HpPercent = old.HpPercent, Sitting = old.Sitting, Con = old.Con, LastTick = old.LastTick,
+            };
+            _entities[view.Id] = view;
+            Removed?.Invoke(view.Id);
+            Added?.Invoke(view);
+        }
+
         /// <summary>A swing: remembers the defender's health for the target window.</summary>
         public void Apply(CombatEvent swing)
         {

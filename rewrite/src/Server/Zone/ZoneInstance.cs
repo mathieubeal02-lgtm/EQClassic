@@ -81,7 +81,9 @@ public sealed partial class ZoneInstance
 
         public int HpPercent => Fighter.MaxHp <= 0 ? 0 : Math.Clamp((int)Math.Ceiling(100.0 * Hp / Fighter.MaxHp), 0, 100);
 
-        public EntitySpawn ToSpawn() => new(Id, Name, IsPlayer, Race, Gender, Level, Size, Position.X, Position.Y, Position.Z, Heading, IsCorpse);
+        public EntitySpawn ToSpawn() => new(Id, Name, IsPlayer, LooksLike, Gender, Level, Size, Position.X, Position.Y, Position.Z, Heading, IsCorpse);
+        /// <summary>The race others see: an illusion's, or its own.</summary>
+        public int LooksLike => Bonuses.IllusionRace > 0 ? Bonuses.IllusionRace : Race;
 
         /// <summary>A dead NPC's body, with what it carried until looted or rotten.</summary>
         public bool IsCorpse => Corpse is not null;

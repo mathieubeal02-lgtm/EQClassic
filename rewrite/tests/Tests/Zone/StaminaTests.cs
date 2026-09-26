@@ -94,5 +94,6 @@ public class StaminaTests
     {
         Assert.Equal(new PlayerStamina(32000, 0, 100), MessageCodec.Decode(MessageCodec.Encode(new PlayerStamina(32000, 0, 100))));
         Assert.Equal(new ConsumeItem(251), MessageCodec.Decode(MessageCodec.Encode(new ConsumeItem(251))));
+        Assert.Equal(new EntityIllusion(7, 142, 1), MessageCodec.Decode(MessageCodec.Encode(new EntityIllusion(7, 142, 1))));
     }
 }

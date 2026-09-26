@@ -356,6 +356,21 @@ namespace EQClassic.Shared.Zone
     }
 
     /// <summary>Zone server to the clients: an entity sat down or stood up.</summary>
+    /// <summary>Zone server to players: an entity looks like another race (an illusion), or like itself again (legacy OP_Illusion).</summary>
+    public sealed record EntityIllusion(int EntityId, int Race, int Gender) : IMessage
+    {
+        public MessageType Type => MessageType.EntityIllusion;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(EntityId);
+            writer.Put((ushort)Race);
+            writer.Put((byte)Gender);
+        }
+
+        public static EntityIllusion ReadFields(NetDataReader reader) => new EntityIllusion(reader.GetInt(), reader.GetUShort(), reader.GetByte());
+    }
+
     public sealed record EntityAppearance(int EntityId, bool Sitting) : IMessage
     {
         public MessageType Type => MessageType.EntityAppearance;
