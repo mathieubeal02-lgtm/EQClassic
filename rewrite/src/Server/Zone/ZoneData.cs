@@ -21,6 +21,8 @@ public sealed record NpcTemplate(int Id, string Name, int Race, int Gender, int 
 
     /// <summary>What it drops when it dies (npc_types_without.loottable_id; 0: nothing).</summary>
     public int LoottableId { get; init; }
+    /// <summary>Merchants: their merchantlist (npc_types_without.merchant_id; 0: none).</summary>
+    public int MerchantId { get; init; }
 }
 
 /// <summary>
@@ -139,7 +141,7 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
                 SELECT s.id, s.x, s.y, s.z, s.heading, s.pathgrid, n.id, n.name, n.race, n.gender, n.level, n.size, e.chance,
                        s.respawntime, s.variance, n.runspeed, n.bodytype, n.npc_faction_id,
                        n.class, n.hp, n.mindmg, n.maxdmg, n.AC, n.ATK, n.Accuracy, n.avoidance, n.attack_speed, n.STR, n.loottable_id,
-                       n.MR, n.CR, n.DR, n.FR, n.PR
+                       n.MR, n.CR, n.DR, n.FR, n.PR, n.merchant_id
                 FROM `{_p}spawn2` s
                 JOIN `{_p}spawnentry` e ON e.spawngroupID = s.spawngroupID
                 JOIN `{_p}npc_types_without` n ON n.id = e.npcID
@@ -168,6 +170,7 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
                         MR = Int(r, 29), CR = Int(r, 30), DR = Int(r, 31), FR = Int(r, 32), PR = Int(r, 33),
                     },
                     LoottableId = Int(r, 28),
+                    MerchantId = Int(r, 34),
                 };
                 spawn.Candidates.Add((npc, Convert.ToInt32(r.GetValue(12))));
             }

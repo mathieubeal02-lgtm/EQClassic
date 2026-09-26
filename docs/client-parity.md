@@ -53,7 +53,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Consider (C) | Con colour and faction message | Done (standings from the faction tables and the character's faction values) | — |
 | Inventory | Worn slots, bags, weight, money | Partial: window (I) with every worn and general slot and money; click an item then a slot to move or equip it (server checks slot, class, race, two-handed; armour and weapon apply to combat); saved in the profile. No bags, weight or icons | 2 |
 | Loot | Corpse window | Done: NPCs leave corpses with their loot table's items and coins (legacy rolls, rot timers, killer's rights then free for all), L opens the loot window, Take / Done | — |
-| Merchants, bank, trade | | Todo | 3 |
+| Merchants, bank, trade | | Partial: merchants (U on a targeted merchant): goods from `merchantlist` at 2.5 times their value, selling at 0.4 times from the inventory, the legacy refusals (busy, dubious); no bank or trade yet | 3 |
 | Spell book, spell gems, casting bar | Book pages, 8 gems, memorising, scribing scrolls, casting bar | Partial: book window (B, memorise by gem number), 8 gems (keys 1-8 or click, /cast N), casting bar, Scribe button on scrolls in the inventory, casting animation (t05). Direct damage, heals, buffs (stats, AC, HP, haste, slow, speed, damage and heals over time), root, mez, stun, invisibility, levitation, bind, gate, teleports, summoning, area spells; no charm, fear, pets or cures yet; no icons, no memorising time, no spell particles | 2 |
 | Hot buttons, abilities, skills window | | Todo | 2 |
 | Group and guild windows | | Todo | 3 |

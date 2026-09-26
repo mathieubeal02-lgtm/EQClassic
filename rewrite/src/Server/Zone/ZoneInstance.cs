@@ -109,6 +109,9 @@ public sealed partial class ZoneInstance
         internal readonly Dictionary<int, int> FactionValues = new();
         public int FactionValue(int factionId) => FactionValues.GetValueOrDefault(factionId);
         internal void SetFactionValue(int factionId, int value) => FactionValues[factionId] = value;
+        /// <summary>Players: the merchant whose window is open, and its goods.</summary>
+        public int? MerchantId { get; internal set; }
+        internal IReadOnlyList<int> MerchantGoods = Array.Empty<int>();
     }
 
     public abstract record ZoneEvent;

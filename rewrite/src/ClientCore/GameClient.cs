@@ -307,6 +307,44 @@ namespace EQClassic.ClientCore
             return door;
         }
 
+        /// <summary>
+        /// Use (U): the nearest door within reach, else the targeted NPC (a merchant opens their window;
+        /// the server refuses the others). Returns what was used, or null.
+        /// </summary>
+        public string? Use()
+        {
+            if (UseNearestDoor() != null)
+                return "door";
+            if (TargetId is int id && Zone?.Get(id) is { Spawn: { IsPlayer: false, IsCorpse: false } })
+            {
+                _connection?.Send(new MerchantRequest(id));
+                return "npc";
+            }
+            return null;
+        }
+
+        /// <summary>The open merchant window (goods with their values), or null.</summary>
+        public MerchantGoods? Merchant { get; private set; }
+
+        public void Buy(int index)
+        {
+            if (Merchant is { } m)
+                _connection?.Send(new MerchantBuy(m.NpcId, index));
+        }
+
+        public void Sell(int slot)
+        {
+            if (Merchant is { } m)
+                _connection?.Send(new MerchantSell(m.NpcId, slot));
+        }
+
+        public void CloseMerchant()
+        {
+            if (Merchant is { } m)
+                _connection?.Send(new MerchantEnd(m.NpcId));
+            Merchant = null;
+        }
+
         public void Connect(string host, int port = ProtocolInfo.DefaultLoginPort)
         {
             LastError = null;
@@ -485,6 +523,9 @@ namespace EQClassic.ClientCore
                 case PlayerExperience experience:
                     Experience = experience;
                     break;
+                case MerchantGoods goods:
+                    Merchant = goods.NpcId == 0 ? null : goods;
+                    break;
                 case PlayerMana mana:
                     Mana = mana.Mana;
                     MaxMana = mana.MaxMana;
@@ -518,6 +559,7 @@ namespace EQClassic.ClientCore
                     break;
                 case ZoneChange change:
                     LootingCorpse = null;
+                    Merchant = null;
                     Casting = null;
                     ZoneInfo = null;
                     Zone = null;

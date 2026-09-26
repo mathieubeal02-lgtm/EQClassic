@@ -499,7 +499,8 @@ namespace EQClassic.Shared.Zone
     }
 
     /// <summary>An item as the client shows it: id, name, charges (0 when not stackable).</summary>
-    public sealed record ItemView(int ItemId, string Name, int Charges);
+    /// <summary>An item as the windows show it; Price is its value in copper (items' price), which merchants multiply.</summary>
+    public sealed record ItemView(int ItemId, string Name, int Charges, int Price = 0);
 
     internal static class ItemViews
     {
@@ -511,6 +512,7 @@ namespace EQClassic.Shared.Zone
                 writer.Put(i.ItemId);
                 writer.Put(i.Name);
                 writer.Put((short)i.Charges);
+                writer.Put(i.Price);
             }
         }
 
@@ -519,7 +521,7 @@ namespace EQClassic.Shared.Zone
             int count = reader.GetUShort();
             var list = new List<ItemView>(count);
             for (int n = 0; n < count; n++)
-                list.Add(new ItemView(reader.GetInt(), reader.GetString(), reader.GetShort()));
+                list.Add(new ItemView(reader.GetInt(), reader.GetString(), reader.GetShort(), reader.GetInt()));
             return list;
         }
     }
@@ -744,5 +746,96 @@ namespace EQClassic.Shared.Zone
                 buffs.Add(new BuffView(reader.GetInt(), reader.GetString(), reader.GetInt(), reader.GetBool()));
             return new PlayerBuffs(buffs, reader.GetShort(), reader.GetBool());
         }
+    }
+
+    /// <summary>
+    /// The legacy merchant (Client::ProcessOP_ShopRequest, ShopPlayerBuy, ShopPlayerSell): a price
+    /// multiplier of 2.5; you pay the item's price × 2.5 and get price × 0.4 (price − price ×
+    /// (1 − 1/2.5)), rounded to the nearest copper.
+    /// </summary>
+    public static class MerchantRules
+    {
+        public const double PriceMultiplier = 2.5;
+
+        public static int BuyPrice(int price) => Round(price * PriceMultiplier);
+        public static int SellPrice(int price) => Round(price - price * (1 - 1 / PriceMultiplier));
+
+        /// <summary>The legacy rounding: floor, plus one when the rest is above 0.49.</summary>
+        private static int Round(double value)
+        {
+            int floor = (int)System.Math.Floor(value);
+            return value - floor > 0.49 ? floor + 1 : floor;
+        }
+
+        /// <summary>"1p 2g 3s 4c".</summary>
+        public static string Coins(int copper)
+        {
+            if (copper <= 0)
+                return "0c";
+            var parts = new List<string>();
+            if (copper >= 1000) parts.Add($"{copper / 1000}p");
+            if (copper / 100 % 10 > 0) parts.Add($"{copper / 100 % 10}g");
+            if (copper / 10 % 10 > 0) parts.Add($"{copper / 10 % 10}s");
+            if (copper % 10 > 0) parts.Add($"{copper % 10}c");
+            return string.Join(" ", parts);
+        }
+    }
+
+    /// <summary>Client to zone server: open a merchant's window (legacy OP_ShopRequest).</summary>
+    public sealed record MerchantRequest(int NpcId) : IMessage
+    {
+        public MessageType Type => MessageType.MerchantRequest;
+        public void WriteFields(NetDataWriter writer) => writer.Put(NpcId);
+        public static MerchantRequest ReadFields(NetDataReader reader) => new MerchantRequest(reader.GetInt());
+    }
+
+    /// <summary>Zone server to the player: the merchant's goods (at most 30); prices are the items' values. NpcId 0 closes the window.</summary>
+    public sealed record MerchantGoods(int NpcId, IReadOnlyList<ItemView> Items) : IMessage
+    {
+        public MessageType Type => MessageType.MerchantGoods;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(NpcId);
+            ItemViews.Write(writer, Items);
+        }
+
+        public static MerchantGoods ReadFields(NetDataReader reader) => new MerchantGoods(reader.GetInt(), ItemViews.Read(reader));
+    }
+
+    /// <summary>Client to zone server: buy one of the goods (legacy OP_ShopPlayerBuy).</summary>
+    public sealed record MerchantBuy(int NpcId, int Index) : IMessage
+    {
+        public MessageType Type => MessageType.MerchantBuy;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(NpcId);
+            writer.Put((byte)Index);
+        }
+
+        public static MerchantBuy ReadFields(NetDataReader reader) => new MerchantBuy(reader.GetInt(), reader.GetByte());
+    }
+
+    /// <summary>Client to zone server: sell the item of an inventory slot (legacy OP_ShopPlayerSell).</summary>
+    public sealed record MerchantSell(int NpcId, int Slot) : IMessage
+    {
+        public MessageType Type => MessageType.MerchantSell;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(NpcId);
+            writer.Put((byte)Slot);
+        }
+
+        public static MerchantSell ReadFields(NetDataReader reader) => new MerchantSell(reader.GetInt(), reader.GetByte());
+    }
+
+    /// <summary>Client to zone server: close the merchant's window (legacy OP_ShopEnd).</summary>
+    public sealed record MerchantEnd(int NpcId) : IMessage
+    {
+        public MessageType Type => MessageType.MerchantEnd;
+        public void WriteFields(NetDataWriter writer) => writer.Put(NpcId);
+        public static MerchantEnd ReadFields(NetDataReader reader) => new MerchantEnd(reader.GetInt());
     }
 }

@@ -10,6 +10,21 @@ public readonly record struct Coins(int Platinum, int Gold, int Silver, int Copp
     public bool IsZero => Platinum == 0 && Gold == 0 && Silver == 0 && Copper == 0;
     public Coins Add(Coins o) => new(Platinum + o.Platinum, Gold + o.Gold, Silver + o.Silver, Copper + o.Copper);
 
+    public long TotalCopper => Copper + Silver * 10L + Gold * 100L + Platinum * 1000L;
+
+    /// <summary>Client::TakeMoneyFromPP: the rest, counted again in the biggest coins; null when short.</summary>
+    public Coins? Take(int copper)
+    {
+        long left = TotalCopper - copper;
+        if (left < 0)
+            return null;
+        return new Coins((int)(left / 1000), (int)(left / 100 % 10), (int)(left / 10 % 10), (int)(left % 10));
+    }
+
+    /// <summary>Client::AddMoneyToPP: the amount split into platinum, gold, silver and copper, added to each.</summary>
+    public Coins AddCopper(int copper) =>
+        new(Platinum + copper / 1000, Gold + copper / 100 % 10, Silver + copper / 10 % 10, Copper + copper % 10);
+
     /// <summary>"3 platinum, 2 gold and 5 copper" (the legacy loot message's list).</summary>
     public override string ToString()
     {

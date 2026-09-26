@@ -62,4 +62,9 @@ public enum MessageType : byte
     PlayerMana = 54,
     ScribeScroll = 55,
     PlayerBuffs = 56,
+    MerchantRequest = 57,
+    MerchantGoods = 58,
+    MerchantBuy = 59,
+    MerchantSell = 60,
+    MerchantEnd = 61,
 }

@@ -85,7 +85,7 @@ namespace EQClassic.Unity
                     _presenter.Present(_client, Time.deltaTime);
                     return; // typing: no game keys
                 }
-                if (Input.GetKeyDown(KeyCode.U) && _client.UseNearestDoor() == null)
+                if (Input.GetKeyDown(KeyCode.U) && _client.Use() == null)
                     AddMessage("There is nothing here to use.");
                 if (Input.GetKeyDown(KeyCode.Tab) && _client.TargetNearest() == null)
                     AddMessage("There is no one near to target.");
@@ -223,6 +223,9 @@ namespace EQClassic.Unity
                 GUILayout.BeginHorizontal();
                 if (item.Name.StartsWith("Spell: ") && GUILayout.Button("Scribe", GUILayout.Width(60)))
                     _client.Scribe(slot);
+                if (_client.Merchant != null && item.ItemId != 0
+                    && GUILayout.Button("Sell " + MerchantRules.Coins(MerchantRules.SellPrice(item.Price)), GUILayout.Width(90)))
+                    _client.Sell(slot);
                 bool clicked = GUILayout.Button($"{where}: {what}");
                 GUILayout.EndHorizontal();
                 if (clicked)
@@ -280,6 +283,33 @@ namespace EQClassic.Unity
                 y += 18;
             }
         }
+
+        /// <summary>A merchant's window (U on a merchant): the goods at 2.5 times their value; the inventory shows Sell buttons.</summary>
+        private void DrawMerchant(MerchantGoods merchant)
+        {
+            GUILayout.BeginArea(new Rect(Screen.width - 330, 60, 320, Screen.height - 120), GUI.skin.box);
+            string name = _client.Zone?.Get(merchant.NpcId)?.DisplayName ?? "Merchant";
+            GUILayout.Label($"{name} - click to buy (sell from the inventory, I)");
+            _merchantScroll = GUILayout.BeginScrollView(_merchantScroll);
+            for (int i = 0; i < merchant.Items.Count; i++)
+            {
+                var item = merchant.Items[i];
+                if (GUILayout.Button($"{item.Name}  {MerchantRules.Coins(MerchantRules.BuyPrice(item.Price))}"))
+                    _client.Buy(i);
+            }
+            GUILayout.EndScrollView();
+            if (_client.Inventory is { } money)
+                GUILayout.Label($"You have {money.Platinum}p {money.Gold}g {money.Silver}s {money.Copper}c");
+            if (GUILayout.Button("Done"))
+            {
+                _client.CloseMerchant();
+                _inventoryOpen = false;
+            }
+            GUILayout.EndArea();
+            _inventoryOpen = true;
+        }
+
+        private Vector2 _merchantScroll;
 
         /// <summary>The spell book (B): every scribed spell by level; a gem button memorises it there.</summary>
         private void DrawBook()
@@ -377,7 +407,7 @@ namespace EQClassic.Unity
             var state = _client?.State ?? GameState.Disconnected;
             if (state == GameState.InZone)
             {
-                GUI.Label(new Rect(10, 10, 1200, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows move, Q/E turn, R autorun, Shift walk, Space jump, X sit, right mouse look, wheel zoom, F9 view, U door, Tab target, T face, C consider, F attack, L loot, I inventory, B spell book, 1-8 cast");
+                GUI.Label(new Rect(10, 10, 1200, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows move, Q/E turn, R autorun, Shift walk, Space jump, X sit, right mouse look, wheel zoom, F9 view, U door/merchant, Tab target, T face, C consider, F attack, L loot, I inventory, B spell book, 1-8 cast");
                 if (_presenter.MissingZone != null)
                     GUI.Box(new Rect(Screen.width / 2 - 300, 80, 600, 44),
                         $"The zone '{_presenter.MissingZone}' is not installed in this client (not imported from Lantern).\nYou are there for the server, but nothing can be drawn.");
@@ -408,6 +438,8 @@ namespace EQClassic.Unity
                     DrawInventory();
                 if (_bookOpen)
                     DrawBook();
+                if (_client.Merchant is { } merchant)
+                    DrawMerchant(merchant);
                 return;
             }
 

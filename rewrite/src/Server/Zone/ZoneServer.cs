@@ -219,6 +219,26 @@ public sealed class ZoneServer : IDisposable
                 Broadcast(caster.Instance, caster.Instance.DrainEvents());
                 break;
 
+            case MerchantRequest shop when _players.TryGetValue(peer, out var shopper):
+                shopper.Instance.OpenMerchant(shopper.EntityId, shop.NpcId);
+                Broadcast(shopper.Instance, shopper.Instance.DrainEvents());
+                break;
+
+            case MerchantBuy buy when _players.TryGetValue(peer, out var buyer):
+                buyer.Instance.Buy(buyer.EntityId, buy.NpcId, buy.Index);
+                Broadcast(buyer.Instance, buyer.Instance.DrainEvents());
+                break;
+
+            case MerchantSell sell when _players.TryGetValue(peer, out var seller):
+                seller.Instance.Sell(seller.EntityId, sell.NpcId, sell.Slot);
+                Broadcast(seller.Instance, seller.Instance.DrainEvents());
+                break;
+
+            case MerchantEnd shopEnd when _players.TryGetValue(peer, out var leaver):
+                leaver.Instance.CloseMerchant(leaver.EntityId);
+                Broadcast(leaver.Instance, leaver.Instance.DrainEvents());
+                break;
+
             case ClickDoor click when _players.TryGetValue(peer, out var clicker):
                 clicker.Instance.ClickDoor(clicker.EntityId, click.DoorId);
                 Broadcast(clicker.Instance, clicker.Instance.DrainEvents());
@@ -367,6 +387,12 @@ public sealed class ZoneServer : IDisposable
                         && _players.Values.FirstOrDefault(p => p.Instance == instance && p.EntityId == factions.PlayerId) is { } factionPlayer:
                     FactionValues?.Save(factionPlayer.Ticket.CharacterName, fighter.FactionValues);
                     break;
+                case ZoneInstance.MerchantShown shown when PeerOf(instance, shown.PlayerId) is { } shopPeer:
+                    Send(shopPeer, new MerchantGoods(shown.NpcId, shown.Goods.Select(id => View(id, 1)).ToList()), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.MerchantClosed closed when PeerOf(instance, closed.PlayerId) is { } closedPeer:
+                    Send(closedPeer, new MerchantGoods(0, Array.Empty<ItemView>()), DeliveryMethod.ReliableOrdered);
+                    break;
                 case ZoneInstance.GemsChanged gems when PeerOf(instance, gems.PlayerId) is { } memPeer && instance.Get(gems.PlayerId) is { } memorizer:
                     Send(memPeer, SpellBookOf(instance, memorizer), DeliveryMethod.ReliableOrdered);
                     break;
@@ -503,7 +529,7 @@ public sealed class ZoneServer : IDisposable
     }
 
     private ItemView View(int itemId, int charges) =>
-        new(itemId, itemId == 0 ? "" : Items?.Get(itemId)?.Name ?? $"item #{itemId}", charges);
+        itemId == 0 ? new(0, "", charges) : Items?.Get(itemId) is { } item ? new(itemId, item.Name, charges, item.Price) : new(itemId, $"item #{itemId}", charges);
 
     private PlayerInventory InventoryOf(ZoneInstance.Entity p)
     {
