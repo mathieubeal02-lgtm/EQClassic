@@ -54,4 +54,5 @@ public enum MessageType : byte
     LootEnd = 46,
     LootContents = 47,
     PlayerInventory = 48,
+    MoveItem = 49,
 }

@@ -191,12 +191,17 @@ namespace EQClassic.Unity
             GUILayout.EndArea();
         }
 
-        /// <summary>The inventory window (I): worn slots, the eight general slots, money.</summary>
+        private int? _heldSlot;
+
+        /// <summary>
+        /// The inventory window (I): every worn slot and the eight general slots, money. Click an item to
+        /// pick it up, then the slot to put it in (the server checks it fits, and swaps).
+        /// </summary>
         private void DrawInventory()
         {
             var inventory = _client.Inventory;
-            GUILayout.BeginArea(new Rect(Screen.width - 640, 90, 300, Screen.height - 180), GUI.skin.box);
-            GUILayout.Label("Inventory");
+            GUILayout.BeginArea(new Rect(Screen.width - 640, 60, 300, Screen.height - 120), GUI.skin.box);
+            GUILayout.Label(_heldSlot is int held && inventory != null ? $"Inventory - holding {inventory.Slots[held].Name}" : "Inventory");
             if (inventory == null)
             {
                 GUILayout.Label("(not received yet)");
@@ -206,10 +211,21 @@ namespace EQClassic.Unity
             for (int slot = 0; slot < inventory.Slots.Count; slot++)
             {
                 var item = inventory.Slots[slot];
-                if (slot < SlotNames.Length && item.ItemId == 0)
-                    continue; // empty worn slots are not listed
                 string where = slot < SlotNames.Length ? SlotNames[slot] : $"General {slot - SlotNames.Length + 1}";
-                GUILayout.Label($"{where}: {(item.ItemId == 0 ? "-" : item.Charges > 1 ? $"{item.Name} ({item.Charges})" : item.Name)}");
+                string what = item.ItemId == 0 ? "-" : item.Charges > 1 ? $"{item.Name} ({item.Charges})" : item.Name;
+                if (GUILayout.Button($"{where}: {what}"))
+                {
+                    if (_heldSlot is int from)
+                    {
+                        if (from != slot)
+                            _client.MoveItem(from, slot);
+                        _heldSlot = null;
+                    }
+                    else if (item.ItemId != 0)
+                    {
+                        _heldSlot = slot;
+                    }
+                }
             }
             GUILayout.Label($"{inventory.Platinum} pp  {inventory.Gold} gp  {inventory.Silver} sp  {inventory.Copper} cp");
             GUILayout.EndArea();

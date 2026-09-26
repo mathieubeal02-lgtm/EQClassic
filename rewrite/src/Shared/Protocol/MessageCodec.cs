@@ -80,6 +80,7 @@ public static class MessageCodec
                 MessageType.LootEnd => LootEnd.ReadFields(reader),
                 MessageType.LootContents => LootContents.ReadFields(reader),
                 MessageType.PlayerInventory => PlayerInventory.ReadFields(reader),
+                MessageType.MoveItem => MoveItem.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

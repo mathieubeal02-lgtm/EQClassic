@@ -175,6 +175,13 @@ namespace EQClassic.ClientCore
                 _connection?.Send(new LootTake(corpse, index));
         }
 
+        /// <summary>Moves or swaps two inventory slots (equip, unequip); the server answers with the new inventory or a refusal.</summary>
+        public void MoveItem(int from, int to)
+        {
+            if (_state == GameState.InZone)
+                _connection?.Send(new EQClassic.Shared.Zone.MoveItem(from, to));
+        }
+
         public void EndLoot()
         {
             if (LootingCorpse is int corpse)

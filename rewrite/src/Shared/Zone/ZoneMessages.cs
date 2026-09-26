@@ -585,4 +585,18 @@ namespace EQClassic.Shared.Zone
         public static PlayerInventory ReadFields(NetDataReader reader) =>
             new PlayerInventory(ItemViews.Read(reader), reader.GetInt(), reader.GetInt(), reader.GetInt(), reader.GetInt());
     }
+
+    /// <summary>Client to zone server: move or swap the items of two inventory slots (legacy OP_MoveItem).</summary>
+    public sealed record MoveItem(int From, int To) : IMessage
+    {
+        public MessageType Type => MessageType.MoveItem;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put((byte)From);
+            writer.Put((byte)To);
+        }
+
+        public static MoveItem ReadFields(NetDataReader reader) => new MoveItem(reader.GetByte(), reader.GetByte());
+    }
 }

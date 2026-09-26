@@ -483,6 +483,61 @@ public sealed class ZoneInstance
         _events.Add(new LootShown(playerId, corpseId, corpse.Items.ToList()));
     }
 
+    /// <summary>
+    /// Moves or swaps the items of two inventory slots (legacy OP_MoveItem, which the Trilogy client
+    /// validated itself): an item going to a worn slot must fit it (slots bitmask) and the player's
+    /// class and race; no two-handed weapon with something in the off hand. A change to the worn
+    /// slots rebuilds the fighter (armour class, weapon).
+    /// </summary>
+    public void MoveItem(int playerId, int from, int to)
+    {
+        if (!_entities.TryGetValue(playerId, out var player) || player.Inventory is not { } inventory
+            || from is < 0 or >= PlayerInventory.Slots || to is < 0 or >= PlayerInventory.Slots || from == to || inventory.Items[from] == 0)
+            return;
+        string? refusal = CanWear(player, inventory.Items[from], to) ?? CanWear(player, inventory.Items[to], from);
+        if (refusal is null && WouldClashTwoHanded(inventory, from, to))
+            refusal = "You cannot use a two-handed weapon with something in your off hand.";
+        if (refusal is not null)
+        {
+            _events.Add(new Told(playerId, refusal));
+            _events.Add(new InventoryChanged(playerId)); // puts the client's view back
+            return;
+        }
+        (inventory.Items[from], inventory.Items[to]) = (inventory.Items[to], inventory.Items[from]);
+        (inventory.Charges[from], inventory.Charges[to]) = (inventory.Charges[to], inventory.Charges[from]);
+        _events.Add(new InventoryChanged(playerId));
+        if ((from < PlayerInventory.FirstGeneral || to < PlayerInventory.FirstGeneral) && player.Progress?.FighterAt is { } rebuild)
+        {
+            player.Fighter = rebuild(player.Level);
+            player.Hp = Math.Min(player.Hp, player.Fighter.MaxHp);
+            _events.Add(new HealthChanged(player.Id, player.Hp, player.Fighter.MaxHp));
+        }
+    }
+
+    private const int PrimarySlot = 13, SecondarySlot = 14;
+
+    /// <summary>Why this item cannot go to that slot, or null (general slots take anything).</summary>
+    private string? CanWear(Entity player, int itemId, int slot)
+    {
+        if (itemId == 0 || slot >= PlayerInventory.FirstGeneral)
+            return null;
+        if (Items?.Get(itemId) is not { } item)
+            return "You cannot equip that there.";
+        if (!item.FitsSlot(slot))
+            return "You cannot equip that there.";
+        if (!item.UsableByClass(player.Fighter.Class))
+            return "Your class cannot use that item.";
+        if (!item.UsableByRace(player.Race))
+            return "Your race cannot use that item.";
+        return null;
+    }
+
+    private bool WouldClashTwoHanded(PlayerInventory inventory, int from, int to)
+    {
+        int Slot(int i) => i == from ? inventory.Items[to] : i == to ? inventory.Items[from] : inventory.Items[i];
+        return Items?.Get(Slot(PrimarySlot)) is { TwoHanded: true } && Slot(SecondarySlot) != 0;
+    }
+
     /// <summary>Takes one item off the corpse being looted, into the first free general slot.</summary>
     public void TakeLoot(int playerId, int corpseId, int index)
     {

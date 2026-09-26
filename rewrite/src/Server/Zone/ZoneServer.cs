@@ -173,6 +173,11 @@ public sealed class ZoneServer : IDisposable
                 Broadcast(taker.Instance, taker.Instance.DrainEvents());
                 break;
 
+            case MoveItem move when _players.TryGetValue(peer, out var mover):
+                mover.Instance.MoveItem(mover.EntityId, move.From, move.To);
+                Broadcast(mover.Instance, mover.Instance.DrainEvents());
+                break;
+
             case LootEnd end when _players.TryGetValue(peer, out var closer):
                 closer.Instance.CloseLoot(closer.EntityId, end.CorpseId);
                 Broadcast(closer.Instance, closer.Instance.DrainEvents());
@@ -233,10 +238,12 @@ public sealed class ZoneServer : IDisposable
             Log?.Invoke($"zone {ticket.Zone} booted: {instance.Entities.Count()} NPC(s)");
         }
         var profile = ticket.Profile;
+        var inventory = profile is null ? null : ZoneInstance.PlayerInventory.From(profile.Inventory, profile.Charges, profile.Coins);
         var progress = profile is null ? null : new ZoneInstance.PlayerProgress(profile.Exp, profile.BindZone,
             new Vec3(profile.BindX, profile.BindY, profile.BindZ),
-            level => EQClassic.Server.Combat.Combatant.ForPlayer(profile with { Level = level }, Items),
-            ZoneInstance.PlayerInventory.From(profile.Inventory, profile.Charges, profile.Coins));
+            // The fighter reads the inventory as it is when rebuilt (level up, equipment change).
+            level => EQClassic.Server.Combat.Combatant.ForPlayer(profile with { Level = level, Inventory = inventory!.Items.ToArray() }, Items),
+            inventory);
         var entity = instance.AddPlayer(ticket.CharacterName, ticket.Race, ticket.Gender, profile?.Level ?? ticket.Level, ticket.Position,
             profile?.Heading ?? 0, null, profile?.CurHp, progress);
         _players[peer] = new Player { Instance = instance, EntityId = entity.Id, Ticket = ticket };

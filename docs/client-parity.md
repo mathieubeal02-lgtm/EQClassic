@@ -51,7 +51,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Player window | HP, mana, stamina, experience bars | Partial: HP and experience bars, level; no mana or stamina yet | 1 |
 | Target window | Name, health, consider colour | Written (name in con colour, health bar), to check in Unity | 1 |
 | Consider (C) | Con colour and faction message | Done (faction always indifferent until the faction port) | — |
-| Inventory | Worn slots, bags, weight, money | Partial: window (I) listing worn and general slots and money, saved in the profile; no moving or equipping items yet, no bags | 2 |
+| Inventory | Worn slots, bags, weight, money | Partial: window (I) with every worn and general slot and money; click an item then a slot to move or equip it (server checks slot, class, race, two-handed; armour and weapon apply to combat); saved in the profile. No bags, weight or icons | 2 |
 | Loot | Corpse window | Done: NPCs leave corpses with their loot table's items and coins (legacy rolls, rot timers, killer's rights then free for all), L opens the loot window, Take / Done | — |
 | Merchants, bank, trade | | Todo | 3 |
 | Spell book, spell gems, casting bar | | Todo (server: spells) | 2 |
