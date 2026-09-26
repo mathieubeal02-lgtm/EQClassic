@@ -117,7 +117,7 @@ public sealed partial class ZoneInstance
         internal NpcSpellSet? SpellSet;
         internal bool SpellSetChecked;
         internal int SpellCredit;
-        internal double NextOffense, NextDefense, NextCredit;
+        internal double NextOffense, NextDefense, NextCredit, NextIdle;
         /// <summary>Players: skill values by skill id (the fighter builder reads the same array).</summary>
         public int[] Skills { get; internal set; } = new int[SkillCaps.SkillCount];
         /// <summary>Players: when each ability can be used again; hidden (and where), sneaking.</summary>
@@ -819,8 +819,8 @@ public sealed partial class ZoneInstance
 
         foreach (var e in _entities.Values.ToList())
         {
-            if (e.IsPlayer || e.IsCorpse || Incapacitated(e))
-                continue;
+            if (e.IsPlayer || e.IsCorpse || Incapacitated(e) || e.Cast is not null)
+                continue; // casting NPCs stand still
             if (e.Fleeing)
             {
                 FleeStep(e, seconds);

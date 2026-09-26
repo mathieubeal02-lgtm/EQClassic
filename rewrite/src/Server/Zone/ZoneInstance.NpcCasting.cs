@@ -56,8 +56,9 @@ public sealed class MySqlNpcSpellSource : INpcSpellSource
 /// (Zone/Source/npc.cpp) and the low-health rescue in NPC::Damage (attack.cpp): an engaged caster tries a
 /// debuff or nuke every 6 s, heals an ally of its faction at a quarter of its health every 3 s, and heals
 /// itself when losing badly. Each spell spends one of its (level/10 + 3) credits, which come back slowly.
-/// NPC fleeing and out-of-combat buffing are not ported yet; FLEE_RATIO and NPC_BUFF_RANGE, missing
-/// from the legacy headers, are taken as 1.5 and 200 units.
+/// Out of combat, at each aggro scan (EntityList::AddHateToCloseMobs), a caster buffs an ally of its
+/// faction in sight 1% of the time and itself 3% of the time with its two buffs, when they are missing.
+/// FLEE_RATIO and NPC_BUFF_RANGE, missing from the legacy headers, are taken as 1.5 and 200 units.
 /// </summary>
 public sealed partial class ZoneInstance
 {
@@ -92,6 +93,12 @@ public sealed partial class ZoneInstance
                 npc.NextCredit += CreditSeconds;
                 if (npc.SpellCredit > 0 && _random.Next(1000) < (npc.TargetId is not null ? 75 : 150))
                     npc.SpellCredit--;
+            }
+            if (npc.TargetId is null && npc.Cast is null && !Incapacitated(npc) && _time >= npc.NextIdle)
+            {
+                npc.NextIdle = _time + AggroRules.ScanSeconds;
+                IdleBuffs(npc, set);
+                continue;
             }
             if (npc.TargetId is not int targetId || npc.Cast is not null || Incapacitated(npc) || !_entities.TryGetValue(targetId, out var victim))
                 continue;
@@ -147,6 +154,28 @@ public sealed partial class ZoneInstance
             NpcCast(npc, id, victim);
             return;
         }
+    }
+
+    /// <summary>The out-of-combat buffs: an ally of its faction nearby (1%), else itself (3%).</summary>
+    private void IdleBuffs(Entity npc, NpcSpellSet set)
+    {
+        int[] buffs = [set.Buff1, set.Buff2];
+        if (buffs.All(b => b < 0))
+            return;
+        foreach (var ally in _entities.Values.Where(a => a != npc && !a.IsPlayer && !a.IsCorpse && npc.Npc!.PrimaryFaction > 0
+                     && a.Npc?.PrimaryFaction == npc.Npc.PrimaryFaction && Distance2D(a.Position, npc.Position) <= NpcBuffRange).ToList())
+        {
+            if (_random.Next(1000) >= 10 || Mesh is not null && !Mesh.LineOfSight(Eye(npc.Position), Eye(ally.Position)))
+                continue;
+            if (buffs.FirstOrDefault(b => b >= 0 && SpellById(b) is { IsBuff: true } && ally.BuffList.All(x => x.Spell.Id != b), -1) is var allyBuff and >= 0)
+            {
+                NpcCast(npc, allyBuff, ally);
+                return;
+            }
+        }
+        if (_random.Next(1000) < 30
+            && buffs.FirstOrDefault(b => b >= 0 && SpellById(b) is { IsBuff: true } && npc.BuffList.All(x => x.Spell.Id != b), -1) is var own and >= 0)
+            NpcCast(npc, own, npc);
     }
 
     /// <summary>An NPC begins a spell (no fizzles for NPCs, no mana); it stands still and does not swing while casting.</summary>

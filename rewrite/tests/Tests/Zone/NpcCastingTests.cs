@@ -61,4 +61,18 @@ public class NpcCastingTests
         Assert.NotNull(zone.NpcSpells!.For(10, 12));
         Assert.Null(zone.NpcSpells.For(1, 12)); // warriors
     }
+
+    [Fact]
+    public void Idle_casters_buff_themselves()
+    {
+        const int Courage = 202;
+        var cleric = new NpcTemplate(1, "a_priest", 1, 0, 20, 6f) { Combat = new NpcCombatStats(2, 500, 1, 3) };
+        var spells = new InMemoryNpcSpellSource();
+        spells.Rows.Add(new NpcSpellSet(2, 0, Courage, -1, -1, -1, [-1, -1, -1, -1]));
+        var zone = new ZoneInstance(new ZoneData("qeynos2", [new SpawnPoint(1, new Vec3(0, 0, 0), 0, 0, [(cleric, 100)], 600, 0)], new Dictionary<int, Grid>()),
+            seed: 3) { Spells = SpellRulesTests.File(), NpcSpells = spells };
+        Run(zone, 300f);
+        var npc = zone.Entities.Single();
+        Assert.Contains(npc.Buffs, b => b.Spell.Id == Courage);
+    }
 }
