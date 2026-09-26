@@ -23,6 +23,10 @@ namespace EQClassic.Unity
         public Texture2D Strips { get; private set; }
         /// <summary>The items' icons: dragitem01.bmp to dragitem04.bmp (the last in bmpwad2.s3d).</summary>
         public Texture2D[] ItemIcons { get; private set; }
+        /// <summary>main9.bmp (general column, bank vault, merchant, SELL), main6.bmp (trade), main5.bmp (social editor, the corpse's cells).</summary>
+        public Texture2D Commerce { get; private set; }
+        public Texture2D Trading { get; private set; }
+        public Texture2D Social { get; private set; }
 
         public static Rect SpellIconUv(int icon)
         {
@@ -59,6 +63,9 @@ namespace EQClassic.Unity
                 return new ClassicSkin
                 {
                     Persona = Optional("main3.bmp"),
+                    Commerce = Optional("main9.bmp"),
+                    Trading = Optional("main6.bmp"),
+                    Social = Optional("main5.bmp"),
                     Strips = Optional("main4.bmp"),
                     ItemIcons = new[] { Optional("dragitem01.bmp"), Optional("dragitem02.bmp"), Optional("dragitem03.bmp"), Optional("dragitem04.bmp") },
                     Frame = Texture(frame), Gems = Texture(gems),

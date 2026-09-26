@@ -52,6 +52,8 @@ namespace UnityEngine
 
     public struct Bounds
     {
+        public Vector3 size => default;
+        public Vector3 center => default;
         public Vector3 min => default;
         public Vector3 max => default;
     }

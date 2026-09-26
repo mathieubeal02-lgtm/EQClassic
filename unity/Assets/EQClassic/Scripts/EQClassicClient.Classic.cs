@@ -75,7 +75,13 @@ namespace EQClassic.Unity
             float W = Screen.width, H = Screen.height, sx = W / ClassicSkin.Width, sy = H / ClassicSkin.Height;
             Rect R(float x, float y, float w, float h) => new Rect(x * sx, y * sy, w * sx, h * sy);
             EnsureClassicStyles(sy);
-            // PERSONA takes the whole screen, as in the Trilogy client.
+            // The merchant, the bank, a trade and PERSONA take the whole screen, as in the Trilogy client.
+            if (_client.Merchant is { } merchant && DrawMerchantArt(skin, merchant))
+                return;
+            if (_client.Bank is { } bank && DrawBankArt(skin, bank))
+                return;
+            if (_client.Trade is { } trade && DrawTradeArt(skin, trade))
+                return;
             if (_layout.IsOpen(HudLayout.Inventory) && DrawPersona(skin))
                 return;
             // The view: the magenta hole of the frame (119, 0) to (518, 319).
@@ -128,6 +134,8 @@ namespace EQClassic.Unity
                 ViewBox(new Rect(view.xMax - 230, view.y + 4, 226, Mathf.Min(260f, 40f + 18f * Mathf.Max(1, _client.Buffs?.Buffs.Count ?? 0))), "Effects", BuffsPanel);
             if (_classicPopup != null)
                 ClassicPopup(new Rect(view.xMax - 250, view.y + view.height * 0.3f, 240, 200));
+            if (_client.LootingCorpse is int corpse && skin.Social != null)
+                DrawLootArt(skin, corpse);
         }
 
         /// <summary>An invisible button over the art (lit under the mouse).</summary>
@@ -368,7 +376,7 @@ namespace EQClassic.Unity
                 main.Add(("Bank", r => BankPanel(r, bank)));
             if (_client.Trade is { } trade)
                 main.Add(($"Trading with {trade.Partner}", r => TradePanel(r, trade)));
-            if (_client.LootingCorpse is int corpse)
+            if (_client.LootingCorpse is int corpse && Skin?.Social == null)
                 main.Add((_client.Zone?.Get(corpse)?.DisplayName ?? "Corpse", LootPanel));
             if (_layout.IsOpen(HudLayout.Inventory))
                 main.Add(("Persona - inventory", InventoryPanel));

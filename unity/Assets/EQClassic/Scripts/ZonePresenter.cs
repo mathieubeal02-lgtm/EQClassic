@@ -298,6 +298,9 @@ namespace EQClassic.Unity
             return File.Exists(path) ? ZoneRegions.Load(path) : null;
         }
 
+        /// <summary>EQC_DEBUG_MODELS=1: every character model is described in the log (active renderers, bounds).</summary>
+        private static readonly bool DebugModels = System.Environment.GetEnvironmentVariable("EQC_DEBUG_MODELS") == "1";
+
         /// <summary>
         /// The model's armour and helmet. A helmet the model has no mesh for makes Lantern's variant
         /// handlers hide the bare head (or, on one-mesh models like the Qeynos guards, the whole body):
@@ -359,6 +362,14 @@ namespace EQClassic.Unity
                 model.transform.localPosition = new Vector3(0f, FeetOffset(model), 0f);
                 // The armour and helmet the server gives (NPC texture / helmtexture, a player's chest and head material).
                 ApplyVariant(model, entity.Spawn.Texture, entity.Spawn.Helm);
+                if (DebugModels)
+                {
+                    var renderers = model.GetComponentsInChildren<Renderer>(false);
+                    var all = model.GetComponentsInChildren<Renderer>(true);
+                    string bounds = renderers.Length == 0 ? "none" : string.Join(" ", System.Linq.Enumerable.Select(renderers, r => $"{r.name}:{r.bounds.size}@{r.bounds.center}"));
+                    Debug.Log($"EQClassic model {entity.Spawn.Name} race {entity.Spawn.Race} code {entity.ModelCode} size {entity.Spawn.Size} tex {entity.Spawn.Texture}/{entity.Spawn.Helm} " +
+                        $"scale {model.transform.localScale} active {renderers.Length}/{all.Length} at {go.transform.position} bounds {bounds}");
+                }
                 var controller = model.GetComponentInChildren<CharacterAnimationController>();
                 if (entity.Spawn.IsCorpse)
                 {
