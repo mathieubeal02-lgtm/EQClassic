@@ -63,6 +63,12 @@ public static class ProfileTemplate
     public static void SetExp(byte[] p, uint exp) => BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(PlayerProfile.ExpOffset), exp);
     public static void SetCurHp(byte[] p, int hp) => BinaryPrimitives.WriteInt16LittleEndian(p.AsSpan(PlayerProfile.CurHpOffset), (short)Math.Clamp(hp, 0, short.MaxValue));
 
+    public static void SetStamina(byte[] p, int hunger, int thirst)
+    {
+        BinaryPrimitives.WriteInt32LittleEndian(p.AsSpan(PlayerProfile.HungerOffset), hunger);
+        BinaryPrimitives.WriteInt32LittleEndian(p.AsSpan(PlayerProfile.ThirstOffset), thirst);
+    }
+
     public static void SetMana(byte[] p, int mana) => BinaryPrimitives.WriteInt16LittleEndian(p.AsSpan(PlayerProfile.ManaOffset), (short)Math.Clamp(mana, 0, short.MaxValue));
 
     /// <summary>The spell book and the memorised gems (−1: empty, stored as 0xFFFF).</summary>

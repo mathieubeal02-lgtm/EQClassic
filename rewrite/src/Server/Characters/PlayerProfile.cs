@@ -31,6 +31,8 @@ public sealed record PlayerProfile(
     public const int CoinsOffset = 2460;
     private const int SkillsOffset = 2508, SkillCount = 74;
     // mana (int16) at 70, INT 127, WIS 129; spell_book[256] and spell_memory[8] (int16, 0xFFFF: empty).
+    /// <summary>hungerlevel and thirstlevel (int32): 0 starving, up to 32000.</summary>
+    public const int HungerOffset = 2812, ThirstOffset = 2816;
     public const int ManaOffset = 70, IntOffset = 127, WisOffset = 129;
     public const int SpellBookOffset = 1878, SpellBookSlots = 256, SpellGemsOffset = 2390, SpellGems = 8;
     // buffs[15] at 648, SpellBuff_Struct of 10 bytes: caster level at +1, spell id (0xFFFF: none) at +4, tics at +6.
@@ -67,6 +69,9 @@ public sealed record PlayerProfile(
     public int Int { get; init; }
     public int Wis { get; init; }
     public int Mana { get; init; }
+    /// <summary>Food and drink levels: 0 starving or parched, 6000 full (a truncated profile reads full).</summary>
+    public int Hunger { get; init; } = 6000;
+    public int Thirst { get; init; } = 6000;
     /// <summary>Spell ids by spell book page slot, −1 for an empty slot.</summary>
     public IReadOnlyList<int> SpellBook { get; init; } = Array.Empty<int>();
     /// <summary>Spell ids memorised in the 8 gems, −1 for an empty gem.</summary>
@@ -114,6 +119,8 @@ public sealed record PlayerProfile(
             Int = profile[IntOffset],
             Wis = profile[WisOffset],
             Mana = BinaryPrimitives.ReadInt16LittleEndian(profile[ManaOffset..]),
+            Hunger = profile.Length >= ThirstOffset + 4 ? BinaryPrimitives.ReadInt32LittleEndian(profile[HungerOffset..]) : 6000,
+            Thirst = profile.Length >= ThirstOffset + 4 ? BinaryPrimitives.ReadInt32LittleEndian(profile[ThirstOffset..]) : 6000,
             SpellBook = ReadSpells(profile, SpellBookOffset, SpellBookSlots),
             SpellGemIds = ReadSpells(profile, SpellGemsOffset, SpellGems),
             Buffs = ReadBuffs(profile),

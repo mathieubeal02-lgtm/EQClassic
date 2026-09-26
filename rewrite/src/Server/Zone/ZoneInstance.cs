@@ -107,6 +107,10 @@ public sealed partial class ZoneInstance
         /// <summary>Players: deity (faction modifiers) and their values with each faction (faction_values).</summary>
         public int Deity { get; internal set; } = FactionRules.AgnosticDeity;
         internal readonly Dictionary<int, int> FactionValues = new();
+        /// <summary>Players: food and drink levels (0 starving, 6000 full, up to 32000) and fatigue (0 to 100).</summary>
+        public int Hunger { get; internal set; } = FullStamina;
+        public int Thirst { get; internal set; } = FullStamina;
+        public int Fatigue { get; internal set; }
         public int FactionValue(int factionId) => FactionValues.GetValueOrDefault(factionId);
         internal void SetFactionValue(int factionId, int value) => FactionValues[factionId] = value;
         /// <summary>NPC casters: their spells (npc_spells), spell credits spent, and when they next consider casting.</summary>
@@ -380,6 +384,8 @@ public sealed partial class ZoneInstance
         foreach (var (id, value) in progress?.Factions ?? new Dictionary<int, int>())
             player.FactionValues[id] = value;
         player.Bind = progress?.Bind ?? default;
+        player.Hunger = progress?.Hunger ?? FullStamina;
+        player.Thirst = progress?.Thirst ?? FullStamina;
         SetUpMagic(player, progress?.Magic);
         return player;
     }
@@ -396,6 +402,9 @@ public sealed partial class ZoneInstance
         public int Str { get; init; } = 75;
         /// <summary>faction_values of the character.</summary>
         public IReadOnlyDictionary<int, int>? Factions { get; init; }
+        /// <summary>Food and drink levels (hungerlevel, thirstlevel).</summary>
+        public int Hunger { get; init; } = FullStamina;
+        public int Thirst { get; init; } = FullStamina;
     }
 
     private static Combatant DefaultPlayer(int level) =>
@@ -922,6 +931,7 @@ public sealed partial class ZoneInstance
         CheckTrades();
         CheckBanks();
         CheckQuestTimers();
+        TickStamina();
         if (_time >= _nextRegen)
             TickBuffs(); // before the regeneration below moves _nextRegen: same 6 s tic
         Regenerate();
@@ -1138,7 +1148,7 @@ public sealed partial class ZoneInstance
         _nextRegen += RegenSeconds;
         foreach (var e in _entities.Values.Where(e => !e.IsCorpse).ToList())
         {
-            if (e.IsPlayer)
+            if (e.IsPlayer && e.Hunger > 0 && e.Thirst > 0) // no mana while starving or parched (Client::Process)
                 RegenerateMana(e);
             if (e.Hp >= e.Fighter.MaxHp || e.Hp <= 0)
                 continue;

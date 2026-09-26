@@ -77,4 +77,6 @@ public enum MessageType : byte
     PetCommand = 69,
     BankCommand = 70,
     BankContents = 71,
+    PlayerStamina = 72,
+    ConsumeItem = 73,
 }

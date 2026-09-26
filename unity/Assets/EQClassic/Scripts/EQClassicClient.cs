@@ -330,6 +330,8 @@ namespace EQClassic.Unity
             GUILayout.BeginHorizontal();
             if (item.Name.StartsWith("Spell: ") && GUILayout.Button("Scribe", GUILayout.Width(60)))
                 _client.Scribe(slot);
+            if ((item.ItemType == 14 || item.ItemType == 15) && GUILayout.Button(item.ItemType == 14 ? "Eat" : "Drink", GUILayout.Width(60)))
+                _client.Consume(slot);
             if (_client.Merchant != null && item.ItemId != 0
                 && GUILayout.Button("Sell " + MerchantRules.Coins(MerchantRules.SellPrice(item.Price)), GUILayout.Width(90)))
                 _client.Sell(slot);
@@ -648,6 +650,9 @@ namespace EQClassic.Unity
                     $"{_client.Hp} / {_client.MaxHp}" + (_client.AutoAttacking ? "  attacking" : "") + (_client.Sitting ? "  sitting" : ""));
                 if (_client.MaxMana > 0)
                     DrawBar(new Rect(10, 52, 220, 12), (float)_client.Mana / _client.MaxMana, new Color(0.2f, 0.3f, 0.9f), $"{_client.Mana} / {_client.MaxMana}");
+                if (_client.Stamina is { } stamina)
+                    DrawBar(new Rect(232, 52, 80, 12), (100 - stamina.Fatigue) / 100f, new Color(0.9f, 0.6f, 0.1f),
+                        stamina.Hunger == 0 ? "hungry" : stamina.Thirst == 0 ? "thirsty" : "stamina");
                 if (_client.Experience is { } xp)
                     DrawBar(new Rect(10, 66, 220, 8), xp.Fraction, new Color(0.9f, 0.8f, 0.2f), "");
                 if (_client.Experience is { } lvl)

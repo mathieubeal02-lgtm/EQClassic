@@ -226,6 +226,16 @@ namespace EQClassic.ClientCore
                 _connection?.Send(new MemorizeSpell(gem, spellId));
         }
 
+        /// <summary>Eats or drinks the item of an inventory slot.</summary>
+        public void Consume(int slot)
+        {
+            if (_state == GameState.InZone)
+                _connection?.Send(new ConsumeItem(slot));
+        }
+
+        /// <summary>Food, drink (0 starving, 6000 full) and fatigue (0 to 100) from the server; null before the first update.</summary>
+        public PlayerStamina? Stamina { get; private set; }
+
         /// <summary>Scribes the spell scroll of an inventory slot into the book.</summary>
         public void Scribe(int slot)
         {
@@ -641,6 +651,9 @@ namespace EQClassic.ClientCore
                     break;
                 case MerchantGoods goods:
                     Merchant = goods.NpcId == 0 ? null : goods;
+                    break;
+                case PlayerStamina stamina:
+                    Stamina = stamina;
                     break;
                 case PlayerMana mana:
                     Mana = mana.Mana;

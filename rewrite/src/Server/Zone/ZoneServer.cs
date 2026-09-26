@@ -156,6 +156,7 @@ public sealed partial class ZoneServer : IDisposable
                         Send(peer, InventoryOf(me), DeliveryMethod.ReliableOrdered);
                         Send(peer, SpellBookOf(entered.Instance, me), DeliveryMethod.ReliableOrdered);
                         Send(peer, new PlayerMana(me.Mana, me.MaxMana), DeliveryMethod.ReliableOrdered);
+                        Send(peer, new PlayerStamina(me.Hunger, me.Thirst, me.Fatigue), DeliveryMethod.ReliableOrdered);
                         Send(peer, BuffsOf(me), DeliveryMethod.ReliableOrdered);
                         Send(peer, SkillsOf(me), DeliveryMethod.ReliableOrdered);
                         Send(peer, GroupOf(entered.Ticket.CharacterName), DeliveryMethod.ReliableOrdered);
@@ -217,6 +218,9 @@ public sealed partial class ZoneServer : IDisposable
                 Broadcast(memorizer.Instance, memorizer.Instance.DrainEvents());
                 break;
 
+            case ConsumeItem consume when _players.TryGetValue(peer, out var eater):
+                eater.Instance.ConsumeItem(eater.EntityId, consume.Slot);
+                break;
             case ScribeScroll scribe when _players.TryGetValue(peer, out var scriber):
                 scriber.Instance.ScribeScroll(scriber.EntityId, scribe.Slot);
                 Broadcast(scriber.Instance, scriber.Instance.DrainEvents());
@@ -345,6 +349,8 @@ public sealed partial class ZoneServer : IDisposable
                 Skills = skills,
                 Str = profile.Str,
                 Factions = FactionValues?.Load(ticket.CharacterName),
+                Hunger = profile.Hunger,
+                Thirst = profile.Thirst,
             };
         var entity = instance.AddPlayer(ticket.CharacterName, ticket.Race, ticket.Gender, profile?.Level ?? ticket.Level, ticket.Position,
             profile?.Heading ?? 0, null, profile?.CurHp, progress);
@@ -462,6 +468,9 @@ public sealed partial class ZoneServer : IDisposable
                     break;
                 case ZoneInstance.BankChanged bankChanged when PeerOf(instance, bankChanged.PlayerId) is { } bankPeer && instance.Get(bankChanged.PlayerId) is { } banking:
                     Send(bankPeer, BankOf(banking), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.StaminaChanged stamina when PeerOf(instance, stamina.PlayerId) is { } staminaPeer && instance.Get(stamina.PlayerId) is { } eater:
+                    Send(staminaPeer, new PlayerStamina(eater.Hunger, eater.Thirst, eater.Fatigue), DeliveryMethod.ReliableOrdered);
                     break;
                 case ZoneInstance.TradeChanged traded when PeerOf(instance, traded.PlayerId) is { } tradePeer && instance.Get(traded.PlayerId) is { } tradingPlayer:
                     Send(tradePeer, TradeWindowOf(instance, tradingPlayer), DeliveryMethod.ReliableOrdered);
@@ -727,7 +736,7 @@ public sealed partial class ZoneServer : IDisposable
     }
 
     private ItemView View(int itemId, int charges) =>
-        itemId == 0 ? new(0, "", charges) : Items?.Get(itemId) is { } item ? new(itemId, item.Name, charges, item.Price, item.IsContainer ? item.BagSlots : 0)
+        itemId == 0 ? new(0, "", charges) : Items?.Get(itemId) is { } item ? new(itemId, item.Name, charges, item.Price, item.IsContainer ? item.BagSlots : 0, item.ItemType)
             : new(itemId, $"item #{itemId}", charges);
 
     private PlayerInventory InventoryOf(ZoneInstance.Entity p)
@@ -774,6 +783,7 @@ public sealed partial class ZoneServer : IDisposable
                 Buffs = ZoneInstance.SaveBuffs(now).Select(b => (b.SpellId, b.CasterLevel, b.TicsLeft)).ToArray(),
                 BindZone = now.BindZone, BindX = now.Bind.X, BindY = now.Bind.Y, BindZ = now.Bind.Z,
                 Skills = now.Skills.ToArray(),
+                Hunger = now.Hunger, Thirst = now.Thirst,
             }
             : player.Ticket.Profile;
         var ticket = player.Ticket with { Zone = crossed.Line.TargetZone, Position = d, Level = now?.Level ?? player.Ticket.Level, Profile = profile };
@@ -807,7 +817,10 @@ public sealed partial class ZoneServer : IDisposable
             Characters?.SaveBank(player.Ticket.CharacterName, inventory.BankItems, inventory.BankCharges, inventory.BankBagItems, inventory.BankBagCharges, inventory.BankCoins);
         }
         if (player.Ticket.Profile is not null && state is not null)
+        {
             Characters?.SaveSkills(player.Ticket.CharacterName, state.Skills);
+            Characters?.SaveStamina(player.Ticket.CharacterName, state.Hunger, state.Thirst);
+        }
         if (player.Ticket.Profile is not null && state is not null)
             Characters?.SaveSpells(player.Ticket.CharacterName, state.Book, state.Gems, state.Mana,
                 ZoneInstance.SaveBuffs(state).Select(b => (b.SpellId, b.CasterLevel, b.TicsLeft)).ToList());

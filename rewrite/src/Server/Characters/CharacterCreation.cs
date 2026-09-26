@@ -63,6 +63,7 @@ public sealed class CharacterCreation
         ProfileTemplate.SetRace(p, r.Race);
         ProfileTemplate.SetClass(p, r.Class);
         ProfileTemplate.SetLevel(p, 1);
+        ProfileTemplate.SetStamina(p, 6000, 6000); // fed and watered
         ProfileTemplate.SetFace(p, r.Face);
         ProfileTemplate.SetStats(p, r.Stats.Str, r.Stats.Sta, r.Stats.Cha, r.Stats.Dex, r.Stats.Int, r.Stats.Agi, r.Stats.Wis);
         ProfileTemplate.SetZone(p, r.StartZone);

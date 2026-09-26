@@ -500,7 +500,8 @@ namespace EQClassic.Shared.Zone
 
     /// <summary>An item as the client shows it: id, name, charges (0 when not stackable).</summary>
     /// <summary>An item as the windows show it; Price is its value in copper (items' price), which merchants multiply.</summary>
-    public sealed record ItemView(int ItemId, string Name, int Charges, int Price = 0, int BagSlots = 0);
+    /// <summary>An item as windows show it; ItemType is the item table's (14 food, 15 drink, 20 spell scroll...).</summary>
+    public sealed record ItemView(int ItemId, string Name, int Charges, int Price = 0, int BagSlots = 0, int ItemType = 0);
 
     internal static class ItemViews
     {
@@ -514,6 +515,7 @@ namespace EQClassic.Shared.Zone
                 writer.Put((short)i.Charges);
                 writer.Put(i.Price);
                 writer.Put((byte)i.BagSlots);
+                writer.Put((byte)i.ItemType);
             }
         }
 
@@ -522,7 +524,7 @@ namespace EQClassic.Shared.Zone
             int count = reader.GetUShort();
             var list = new List<ItemView>(count);
             for (int n = 0; n < count; n++)
-                list.Add(new ItemView(reader.GetInt(), reader.GetString(), reader.GetShort(), reader.GetInt(), reader.GetByte()));
+                list.Add(new ItemView(reader.GetInt(), reader.GetString(), reader.GetShort(), reader.GetInt(), reader.GetByte(), reader.GetByte()));
             return list;
         }
     }
@@ -710,6 +712,32 @@ namespace EQClassic.Shared.Zone
         }
 
         public static PlayerMana ReadFields(NetDataReader reader) => new PlayerMana(reader.GetInt(), reader.GetInt());
+    }
+
+    /// <summary>
+    /// Zone server to the player (legacy OP_Stamina): food and drink levels (0 starving, 6000 full,
+    /// up to 32000) and fatigue (0 to 100): the stamina bar is 100 − fatigue.
+    /// </summary>
+    public sealed record PlayerStamina(int Hunger, int Thirst, int Fatigue) : IMessage
+    {
+        public MessageType Type => MessageType.PlayerStamina;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put((ushort)Hunger);
+            writer.Put((ushort)Thirst);
+            writer.Put((byte)Fatigue);
+        }
+
+        public static PlayerStamina ReadFields(NetDataReader reader) => new PlayerStamina(reader.GetUShort(), reader.GetUShort(), reader.GetByte());
+    }
+
+    /// <summary>Client to zone server: eat or drink the item of an inventory slot (legacy OP_ConsumeFoodDrink).</summary>
+    public sealed record ConsumeItem(int Slot) : IMessage
+    {
+        public MessageType Type => MessageType.ConsumeItem;
+        public void WriteFields(NetDataWriter writer) => writer.Put((ushort)Slot);
+        public static ConsumeItem ReadFields(NetDataReader reader) => new ConsumeItem(reader.GetUShort());
     }
 
     /// <summary>Client to zone server: scribe the spell scroll of an inventory slot into the book.</summary>

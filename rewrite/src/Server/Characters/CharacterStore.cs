@@ -36,6 +36,9 @@ public interface ICharacterStore
 
     /// <summary>Spell book, memorised gems, current mana and buffs, into the profile.</summary>
     void SaveSpells(string name, IReadOnlyList<int> book, IReadOnlyList<int> gems, int mana, IReadOnlyList<(int SpellId, int CasterLevel, int Tics)> buffs);
+
+    /// <summary>Food and drink levels (hungerlevel, thirstlevel).</summary>
+    void SaveStamina(string name, int hunger, int thirst);
 }
 
 public static class CharacterStoreExtensions
@@ -134,6 +137,17 @@ public sealed class InMemoryCharacterStore : ICharacterStore
         };
         if (Profiles.TryGetValue(name, out var raw))
             ProfileTemplate.SetBank(raw, items, charges, bagItems, bagCharges, coins);
+    }
+
+    public void SaveStamina(string name, int hunger, int thirst)
+    {
+        int i = _characters.FindIndex(c => string.Equals(c.Profile.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (i < 0)
+            return;
+        var c = _characters[i];
+        _characters[i] = c with { Profile = c.Profile with { Hunger = hunger, Thirst = thirst } };
+        if (Profiles.TryGetValue(name, out var raw) && raw.Length >= PlayerProfile.ThirstOffset + 4)
+            ProfileTemplate.SetStamina(raw, hunger, thirst);
     }
 
     public void SaveSkills(string name, IReadOnlyList<int> skills)
@@ -265,6 +279,9 @@ public sealed class MySqlCharacterStore : ICharacterStore
 
     public void SaveSkills(string name, IReadOnlyList<int> skills) =>
         Update(name, profile => ProfileTemplate.SetSkills(profile, skills));
+
+    public void SaveStamina(string name, int hunger, int thirst) =>
+        Update(name, profile => { if (profile.Length >= PlayerProfile.ThirstOffset + 4) ProfileTemplate.SetStamina(profile, hunger, thirst); });
 
     public void SaveSpells(string name, IReadOnlyList<int> book, IReadOnlyList<int> gems, int mana, IReadOnlyList<(int SpellId, int CasterLevel, int Tics)> buffs) =>
         Update(name, profile => InMemoryCharacterStore.WriteSpells(profile, book, gems, mana, buffs));
