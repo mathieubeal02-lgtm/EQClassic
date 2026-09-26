@@ -193,15 +193,37 @@ Step("spells: scribe, memorise, cast", () =>
 {
     Chat("#scribespells 10");
     if (!Run(() => client.SpellBook?.Spells.Count > 0, 8)) return (false, "the book stayed empty");
-    var spell = client.SpellBook!.Spells.FirstOrDefault(s => s.Beneficial && s.Mana <= client.MaxMana) ?? client.SpellBook.Spells[0];
+    // Inner Fire (a shaman's first buff) when known: it must then show among the buffs.
+    var spell = client.SpellBook!.Spells.FirstOrDefault(s => s.Name == "Inner Fire")
+        ?? client.SpellBook.Spells.FirstOrDefault(s => s.Beneficial && s.Mana <= client.MaxMana) ?? client.SpellBook.Spells[0];
     client.Memorize(0, spell.SpellId);
     if (!Run(() => client.GemSpell(0)?.SpellId == spell.SpellId, 8)) return (false, $"{spell.Name} not memorised");
-    Chat("#mana");
-    client.SetTarget(client.Zone!.YourEntityId);
-    int before = client.Mana;
-    client.Cast(0);
-    bool cast = Heard(l => l.StartsWith("You begin casting") || l.Contains("fizzle"), 5) && Run(() => client.Casting == null, 15);
-    return (cast, $"{spell.Name}: mana {before} -> {client.Mana}; {Last(3)}");
+    // The spell must land: its mana spent, not interrupted nor fizzled (a wandering NPC may hit us: up to three tries).
+    string outcome = "";
+    for (int attempt = 1; attempt <= 3; attempt++)
+    {
+        Chat("#mana");
+        Run(() => client.Mana == client.MaxMana, 3);
+        client.SetTarget(client.Zone!.YourEntityId);
+        int before = client.Mana;
+        int from;
+        lock (heard) from = heard.Count;
+        List<string> Said() { lock (heard) return heard.Skip(from).ToList(); }
+        client.Cast(0);
+        if (!Run(() => Said().Any(l => l.StartsWith("You begin casting")), 5)) { outcome = $"did not start; {Last(2)}"; continue; }
+        Run(() => client.Casting == null, 15);
+        Run(() => false, 1);
+        var said = Said();
+        bool failed = said.Any(l => l.Contains("interrupted") || l.Contains("fizzle"));
+        bool spent = client.Mana <= before - spell.Mana + 5;
+        bool buffed = client.Buffs?.Buffs.Any(b => b.SpellId == spell.SpellId) == true;
+        outcome = $"{spell.Name} (try {attempt}): mana {before} -> {client.Mana}{(buffed ? ", buff on" : "")}";
+        if (!failed && spent && (buffed || spell.Name != "Inner Fire"))
+            return (true, outcome);
+        outcome += "; " + string.Join(" | ", said.Where(l => l.Contains("interrupted") || l.Contains("fizzle")));
+        Run(() => false, 3);
+    }
+    return (false, outcome);
 });
 Step("GM: #summonitem, eat", () =>
 {
