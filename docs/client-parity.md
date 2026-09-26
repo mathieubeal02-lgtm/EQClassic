@@ -19,7 +19,8 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Animations | Walk, run, idle, combat, damage, death, social | Partial: idle/walk/run, attack, flinch | 2 |
 | Sky, day and night | Sky dome, sun/moon, day/night light from the server clock | Todo | 2 |
 | Weather | Rain, snow | Todo | 4 |
-| Fog and clip plane | Per zone (zone table) | Todo | 2 |
+| Fog and clip plane | Per zone (legacy cfg/<zone>.cfg: fog colour and distances, clip) | Written (linear fog, far clip, fog-coloured background), to check in Unity | 2 |
+| Underworld | Falling below the zone's floor returns you to the safe point | Done (server, from the zone header) | — |
 | Water and lava | Surfaces, swimming, underwater tint | Todo | 2 |
 | Light sources | Torches and lanterns in hand, zone lights | Partial: one light around the player | 3 |
 | Particles | Spell effects | Todo (with spells) | 3 |

@@ -79,12 +79,13 @@ namespace EQClassic.Unity.Editor
             PlayerSettings.SetScriptingBackend(BuildTargetGroup.Standalone, ScriptingImplementation.Mono2x);
             PlayerSettings.productName = "EQClassic"; // window title and settings folder
             PlayerSettings.companyName = "EQClassic";
-            if (!File.Exists(Scene))
-            {
-                // The client builds itself at start-up (EQClassicBoot): an empty scene is enough.
-                var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
-                EditorSceneManager.SaveScene(scene, Scene);
-            }
+            // The client builds itself at start-up (EQClassicBoot): an empty scene is enough. Linear fog
+            // is on in it so the build keeps the fog shader variants the zones use (Unity strips the
+            // fog modes no scene uses).
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            EditorSceneManager.SaveScene(scene, Scene);
             var output = Environment.GetEnvironmentVariable("EQC_PLAYER_DIR");
             if (string.IsNullOrEmpty(output))
                 output = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "unity-player", folder));

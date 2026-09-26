@@ -127,6 +127,8 @@ public sealed class ZoneServer : IDisposable
                 if (response.Accepted && _players.TryGetValue(peer, out var entered))
                 {
                     Send(peer, DoorsOf(entered.Instance), DeliveryMethod.ReliableOrdered); // after the entry: same channel, in order
+                    if (entered.Instance.Info is { } info)
+                        Send(peer, info, DeliveryMethod.ReliableOrdered);
                     if (entered.Instance.Get(entered.EntityId) is { } me)
                     {
                         Send(peer, new PlayerHealth(me.Hp, me.Fighter.MaxHp), DeliveryMethod.ReliableOrdered);

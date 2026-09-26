@@ -108,8 +108,23 @@ namespace UnityEngine
         public RuntimeInitializeOnLoadMethodAttribute(RuntimeInitializeLoadType loadType) { }
     }
 
+    public enum FogMode { Linear = 1, Exponential = 2, ExponentialSquared = 3 }
+    public enum CameraClearFlags { Skybox = 1, SolidColor = 2 }
+
+    public static class RenderSettings
+    {
+        public static bool fog { get; set; }
+        public static FogMode fogMode { get; set; }
+        public static Color fogColor { get; set; }
+        public static float fogStartDistance { get; set; }
+        public static float fogEndDistance { get; set; }
+    }
+
     public sealed class Camera : Behaviour
     {
+        public float farClipPlane { get; set; }
+        public CameraClearFlags clearFlags { get; set; }
+        public Color backgroundColor { get; set; }
         public Vector3 WorldToScreenPoint(Vector3 position) => default;
         public static Camera main => null;
     }

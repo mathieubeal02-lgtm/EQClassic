@@ -427,4 +427,54 @@ namespace EQClassic.Shared.Zone
         /// <summary>Progress through the level, 0 to 1.</summary>
         public float Fraction => NextLevel > LevelStart ? (float)((double)(Exp - System.Math.Min(Exp, LevelStart)) / (NextLevel - LevelStart)) : 0f;
     }
+
+    /// <summary>
+    /// Zone server to the client after entering: what the legacy OP_NewZone told the Trilogy client
+    /// (cfg/&lt;zone&gt;.cfg): long name, fog colour and distances, sky, safe point, the underworld
+    /// depth (below it you are returned to the safe point) and the view distance limits.
+    /// </summary>
+    public sealed record ZoneInfo(string LongName, byte FogRed, byte FogGreen, byte FogBlue, float FogMin, float FogMax, byte Sky,
+        float SafeX, float SafeY, float SafeZ, float Underworld, float MinClip, float MaxClip, byte ZoneType) : IMessage
+    {
+        public MessageType Type => MessageType.ZoneInfo;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(LongName);
+            writer.Put(FogRed);
+            writer.Put(FogGreen);
+            writer.Put(FogBlue);
+            writer.Put(FogMin);
+            writer.Put(FogMax);
+            writer.Put(Sky);
+            writer.Put(SafeX);
+            writer.Put(SafeY);
+            writer.Put(SafeZ);
+            writer.Put(Underworld);
+            writer.Put(MinClip);
+            writer.Put(MaxClip);
+            writer.Put(ZoneType);
+        }
+
+        public static ZoneInfo ReadFields(NetDataReader reader) =>
+            new ZoneInfo(reader.GetString(), reader.GetByte(), reader.GetByte(), reader.GetByte(), reader.GetFloat(), reader.GetFloat(),
+                reader.GetByte(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat(),
+                reader.GetByte());
+
+        /// <summary>
+        /// Reads a legacy cfg/&lt;zone&gt;.cfg (Zone::SaveZoneCFG: short name[20], long name[180], then the
+        /// NewZone_Struct from its byte 230, so a field at struct offset n is at n - 30). Null when too short.
+        /// </summary>
+        public static ZoneInfo? FromLegacyCfg(byte[] cfg)
+        {
+            const int shift = -30;
+            if (cfg.Length < 372 + shift)
+                return null;
+            float F(int offset) => System.BitConverter.ToSingle(cfg, offset + shift);
+            int end = System.Array.IndexOf(cfg, (byte)0, 20);
+            string longName = System.Text.Encoding.GetEncoding("ISO-8859-1").GetString(cfg, 20, (end < 20 || end > 200 ? 200 : end) - 20);
+            return new ZoneInfo(longName, cfg[231 + shift], cfg[235 + shift], cfg[239 + shift], F(244), F(260), cfg[330 + shift],
+                F(344), F(348), F(352), F(360), F(364), F(368), cfg[230 + shift]);
+        }
+    }
 }

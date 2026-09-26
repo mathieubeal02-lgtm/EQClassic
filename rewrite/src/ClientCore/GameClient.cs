@@ -56,6 +56,9 @@ namespace EQClassic.ClientCore
         public int Hp { get; private set; }
         /// <summary>Experience, level and progress through the level (0-1), from the server.</summary>
         public PlayerExperience? Experience { get; private set; }
+        /// <summary>The legacy zone header of the current zone (fog, clip, safe point), when the server has it.</summary>
+        public ZoneInfo? ZoneInfo { get; private set; }
+        public event Action<ZoneInfo>? ZoneInfoReceived;
         public int MaxHp { get; private set; }
         /// <summary>A melee swing near the player (for animations; the text goes to <see cref="MessageReceived"/>).</summary>
         public event Action<CombatEvent>? CombatReceived;
@@ -352,6 +355,10 @@ namespace EQClassic.ClientCore
                 case EntityAppearance appearance:
                     Zone?.Apply(appearance);
                     break;
+                case ZoneInfo info:
+                    ZoneInfo = info;
+                    ZoneInfoReceived?.Invoke(info);
+                    break;
                 case PlayerExperience experience:
                     Experience = experience;
                     break;
@@ -360,6 +367,7 @@ namespace EQClassic.ClientCore
                     MaxHp = health.MaxHp;
                     break;
                 case ZoneChange change:
+                    ZoneInfo = null;
                     Zone = null;
                     Player = null;
                     TargetId = null;

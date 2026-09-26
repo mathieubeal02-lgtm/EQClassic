@@ -258,6 +258,7 @@ namespace EQClassic.Unity
             _client = new GameClient(string.IsNullOrWhiteSpace(_fingerprint) ? null : _fingerprint.Trim());
             _client.ZoneEntered += zone => _presenter.Enter(zone);
             _client.CombatReceived += _presenter.OnCombat;
+            _client.ZoneInfoReceived += _presenter.ApplyZoneInfo;
             _client.MessageReceived += AddMessage;
             _client.Connect(_host, int.TryParse(_port, out var p) ? p : 5999);
         }

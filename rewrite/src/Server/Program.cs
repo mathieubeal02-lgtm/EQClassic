@@ -1,3 +1,4 @@
+using EQClassic.Shared.Zone;
 using System.Security.Cryptography;
 using EQClassic.Server.Accounts;
 using EQClassic.Server.Characters;
@@ -25,6 +26,7 @@ string? lantern = null;
 string? db = null;
 string keyPath = "login-key.pem";
 bool allowPlaintext = false;
+string? zoneCfg = null;
 for (int i = 0; i < args.Length; i++)
 {
     string? next = i + 1 < args.Length ? args[i + 1] : null;
@@ -38,8 +40,12 @@ for (int i = 0; i < args.Length; i++)
         case "--db" when next is not null: db = next; i++; break;
         case "--key" when next is not null: keyPath = next; i++; break;
         case "--allow-plaintext": allowPlaintext = true; break;
+        case "--zone-cfg" when next is not null: zoneCfg = next; i++; break;
     }
 }
+
+// The legacy zone headers (fog, sky, safe point, underworld, clip): runtime/cfg in the repository by default.
+zoneCfg ??= new[] { "runtime/cfg", "../runtime/cfg", "../../runtime/cfg" }.FirstOrDefault(Directory.Exists);
 
 var rsa = RSA.Create(2048);
 if (File.Exists(keyPath))
@@ -73,7 +79,9 @@ using var zones = new ZoneServer(zoneKeys, name =>
         return null;
     var meshPath = lantern is null ? null : Path.Combine(lantern, name, "Zone", "Meshes", name + "_collision.txt");
     var mesh = meshPath is not null && File.Exists(meshPath) ? ZoneCollisionMesh.LoadLanternZone(lantern!, name) : null;
-    return new ZoneInstance(data, mesh);
+    var cfg = zoneCfg is null ? null : Path.Combine(zoneCfg, name + ".cfg");
+    var info = cfg is not null && File.Exists(cfg) ? ZoneInfo.FromLegacyCfg(File.ReadAllBytes(cfg)) : null;
+    return new ZoneInstance(data, mesh) { Info = info };
 }) { Log = server.Log, Characters = characters, PublicAddress = worldAddress, Items = db is null ? null : new EQClassic.Server.Combat.MySqlItemSource(db) };
 zones.Start(zonePort);
 

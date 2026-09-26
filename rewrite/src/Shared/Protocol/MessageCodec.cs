@@ -71,6 +71,7 @@ public static class MessageCodec
                 MessageType.ChatMessage => ChatMessage.ReadFields(reader),
                 MessageType.WhoRequest => new WhoRequest(),
                 MessageType.PlayerExperience => PlayerExperience.ReadFields(reader),
+                MessageType.ZoneInfo => ZoneInfo.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

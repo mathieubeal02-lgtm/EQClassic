@@ -223,6 +223,27 @@ namespace EQClassic.Unity
         }
 
         /// <summary>
+        /// The zone's fog and view distance (legacy cfg): linear fog in the zone's colour from its
+        /// fog start to its fog end, nothing drawn beyond the larger of the fog end and the zone's
+        /// clip distance, and the fog colour behind everything, as the Trilogy client showed it.
+        /// </summary>
+        public void ApplyZoneInfo(ZoneInfo info)
+        {
+            var colour = new Color(info.FogRed / 255f, info.FogGreen / 255f, info.FogBlue / 255f);
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogColor = colour;
+            RenderSettings.fogStartDistance = info.FogMin * Scale;
+            RenderSettings.fogEndDistance = info.FogMax * Scale;
+            EnsureCamera();
+            if (_camera == null)
+                return;
+            _camera.farClipPlane = Mathf.Max(Mathf.Max(info.FogMax, info.MaxClip), 100f) * Scale + 5f;
+            _camera.clearFlags = CameraClearFlags.SolidColor;
+            _camera.backgroundColor = colour;
+        }
+
+        /// <summary>
         /// Name plates above the entities near the camera (not our own): white until considered,
         /// then in the consider colour; the target's name in brackets.
         /// </summary>

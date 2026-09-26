@@ -122,6 +122,9 @@ public sealed class ZoneInstance
     public string ShortName { get; }
     public ZoneCollisionMesh? Mesh { get; }
     public IFactionStandings Factions { get; set; } = new IndifferentFactions();
+    /// <summary>The legacy zone header (cfg/&lt;zone&gt;.cfg), when known: sent to clients, and its underworld depth applies.</summary>
+    public ZoneInfo? Info { get; init; }
+    public const string UnderworldReason = "underworld";
     public uint TickCount { get; private set; }
     public IEnumerable<Entity> Entities => _entities.Values;
     public IEnumerable<(Door Door, bool Open)> Doors => _doors.Values.Select(d => (d.Data, d.Open));
@@ -302,6 +305,14 @@ public sealed class ZoneInstance
         float distance = MathF.Sqrt(Distance2(player.Position, to));
         if (distance > MaxPlayerSpeed * elapsed + MoveTolerance)
             return $"moved {distance:0} units in {elapsed:0.00} s";
+        if (Info is { } info && to.Z < info.Underworld)
+        {
+            // Fell through the world: back to the zone's safe point, as the Trilogy client did.
+            player.Position = new Vec3(info.SafeX, info.SafeY, info.SafeZ);
+            player.LastMoveTime = _time;
+            player.Moved = true;
+            return UnderworldReason;
+        }
         if (player.Sitting && Distance2(player.Position, to) > 0.01f)
             SetSitting(id, false); // walking stands you up
         player.Position = to;
