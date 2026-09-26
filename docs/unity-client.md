@@ -39,6 +39,12 @@ cd rewrite && dotnet run --project src/Server -- \
    account (for example `bot` / `bot`), pick the world and a character. You then walk with
    WASD or the arrows and turn with Q/E. The NPCs follow their paths as the server moves them.
 
+8. For a standalone client, run **EQClassic > Build Linux Player** (or **Build Windows Player**,
+   which needs Unity's Windows build support module). It writes asset bundles of the imported
+   zones and characters plus the zones' collision meshes to `Assets/StreamingAssets/EQClassic`,
+   then the player (Mono backend) to `build/unity-player/linux/EQClassic.x86_64`. Copy that
+   folder to play elsewhere; nothing else is needed on the player's machine.
+
 `setup-client.sh` can be run again at any time, for example after changing the scripts or the
 libraries. It never touches Unity's `Library/` cache or the imported assets
 (`Assets/Content/AssetBundleContent`).
@@ -47,6 +53,7 @@ Scripted sessions (what the test below used), from the repository root:
 
 ```sh
 Unity -projectPath build/unity-client -executeMethod EQClassic.Unity.Editor.EQClassicBatch.ImportAll -quit
+Unity -projectPath build/unity-client -executeMethod EQClassic.Unity.Editor.EQClassicBuild.BuildLinux -quit
 EQC_HOST=127.0.0.1 EQC_PORT=5999 EQC_FINGERPRINT=<printed by the server> EQC_USER=bot \
   Unity -projectPath build/unity-client -executeMethod EQClassic.Unity.Editor.EQClassicBatch.Play
 ```
@@ -72,7 +79,8 @@ the editor.
 
 | Works (tested) | Not yet |
 |---|---|
-| Login, world and zone connection chain, zone changes (`GameClientTests`) | Player builds: prefabs load in the Editor only; asset bundles are the next step |
+| Login, world and zone connection chain, zone changes (`GameClientTests`) | A Windows player build (needs the Windows build support module; not tried) |
+| Standalone Linux build (173 MB with Qeynos and 64 character models) played against the rewrite server: login, world, zone, models from the asset bundles | Connection settings are typed each time in a player build (only the Editor's Play entry point prefills them) |
 | Played in Unity 2021.3.18f1 on Linux against the rewrite server and the live database: login, world, character list, Qeynos drawn with its textures and the citizens' models, 182 entities, walking | Races missing from `ModelCodes` or from the exports draw a capsule |
 | Entities drawn at interpolated positions, the local player moved from input on the zone's collision mesh (ground, steps up to 6 units, walls at waist height, edge of the zone) | Doors and objects do not block (not in the collision mesh); no jumping or swimming |
 | Race → Lantern model code for the races checked in the exports (`ModelCodes`), player races from `global_chr`; models stand on the ground (lifted by their bounds) | Equipment, nameplates, chat, combat animations |

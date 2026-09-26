@@ -215,7 +215,10 @@ namespace EQClassic.Unity
         /// </summary>
         private static ZoneCollisionMesh LoadCollision(string zone)
         {
+            // Editor: the Lantern export; standalone builds: the copy next to the asset bundles.
             var path = Path.Combine(Application.dataPath, "EQAssets", zone, "Zone", "Meshes", zone + "_collision.txt");
+            if (!File.Exists(path))
+                path = Path.Combine(ClientBundles.Directory, zone + "_collision.txt");
             if (File.Exists(path))
                 return ZoneCollisionMesh.LoadLantern(path);
             Debug.LogWarning($"EQClassic: no collision mesh at {path}; the player will not follow the ground.");
@@ -236,15 +239,15 @@ namespace EQClassic.Unity
         }
 
         /// <summary>
-        /// Editor play mode loads the imported prefabs directly. Player builds need the asset bundles
-        /// LanternUnityTools builds (EQ > Assets > Build Asset Bundles), not wired yet (M4 follow-up).
+        /// Editor play mode loads the imported prefabs directly; standalone builds read them from
+        /// the asset bundles (EQClassic > Build Linux Player / Build Windows Player).
         /// </summary>
         private GameObject LoadPrefab(string path)
         {
 #if UNITY_EDITOR
             return UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path);
 #else
-            return null;
+            return ClientBundles.Load(path);
 #endif
         }
     }

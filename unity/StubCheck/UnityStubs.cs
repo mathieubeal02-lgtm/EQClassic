@@ -32,6 +32,12 @@ namespace UnityEngine
         public T GetComponentInChildren<T>() => default;
     }
 
+    public sealed class AssetBundle : Object
+    {
+        public static AssetBundle LoadFromFile(string path) => null;
+        public T LoadAsset<T>(string name) where T : Object => default;
+    }
+
     public class Renderer : Component
     {
         public Bounds bounds => default;
@@ -115,6 +121,7 @@ namespace UnityEngine
     public static class Application
     {
         public static string dataPath => "Assets";
+        public static string streamingAssetsPath => "Assets/StreamingAssets";
     }
 
     public static class PlayerPrefs
