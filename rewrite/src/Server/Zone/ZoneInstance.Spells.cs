@@ -79,7 +79,7 @@ public sealed partial class ZoneInstance
         SpellEffect.Invisibility, SpellEffect.InvisVsUndead, SpellEffect.Stun, SpellEffect.BindAffinity, SpellEffect.Gate, SpellEffect.Mez,
         SpellEffect.SummonItem, SpellEffect.Levitate, SpellEffect.Teleport, SpellEffect.Root, WipeHateList, SummonPetEffect, NecPetEffect,
         SpellEffect.DamageShield, SpellEffect.Rune, SpellEffect.Stamina, SpellEffect.CancelMagic, SpellEffect.Fear,
-        SpellEffect.Lull, SpellEffect.FrenzyRadius, SpellEffect.Harmony, SpellEffect.Succor, SpellEffect.Illusion,
+        SpellEffect.Lull, SpellEffect.FrenzyRadius, SpellEffect.Harmony, SpellEffect.Succor, SpellEffect.Illusion, SpellEffect.Charm,
     ];
 
     private const int WipeHateList = 63, SummonPetEffect = 33, NecPetEffect = 71;
@@ -458,9 +458,48 @@ public sealed partial class ZoneInstance
             RemoveBuffs(target, [buff]);
     }
 
+    /// <summary>
+    /// Mob::GetCharmLevelCap and GetMezLevelCap (SpellData.cpp): the highest level each charm and
+    /// mez spell works on. The legacy zone returned 0 for the spells missing from its lists, so they
+    /// never landed; the rewrite leaves those uncapped.
+    /// </summary>
+    public static int? LevelCap(Spell spell) => spell.Id switch
+    {
+        184 or 198 or 750 => 51, 142 or 1817 => 49, 245 => 24, 182 or 725 => 37, 141 => 43, 753 => 25, 197 or 183 => 46,
+        1706 or 1705 or 1553 or 1624 => 53, 300 => 25, 260 => 33, 1707 => 58, 196 => 32, 841 or 912 or 2009 => 999, 1629 => 55,
+        923 => 0, 1822 or 1556 => 35,
+        1813 or 549 or 190 or 187 or 188 or 1690 or 986 or 1808 or 307 or 292 or 1268 or 1753 => 55, 1691 => 57, 1692 => 61,
+        724 => 30, 741 => 45,
+        _ => null,
+    };
+
+    private static bool IsCharm(Spell spell) => spell.Effect.Contains((byte)SpellEffect.Charm);
+
+    /// <summary>What keeps a charm or mez from being tried at all (spells.cpp before the resist roll), or null.</summary>
+    private string? CharmOrMezRefusal(Entity caster, Entity target, Spell spell)
+    {
+        bool charm = IsCharm(spell), mez = spell.Effect.Contains((byte)SpellEffect.Mez);
+        if (!charm && !mez)
+            return null;
+        if (LevelCap(spell) is int cap && target.Level > cap)
+            return charm ? "Your target is too high of a level for your charm spell." : "Your target is too high of a level for your mez spell.";
+        if (charm && (target.IsPlayer || target.OwnerId is not null || target == caster))
+            return "You cannot charm that.";
+        if (charm && caster.PetId is int pet && _entities.ContainsKey(pet))
+            return AlreadyHavePetMessage;
+        return null;
+    }
+
     /// <summary>SpellOnTarget + SpellEffect: resist, buff, then the instant effects.</summary>
     private CastOutcome SpellOnTarget(Entity caster, Entity target, Spell spell)
     {
+        if (CharmOrMezRefusal(caster, target, spell) is { } refusal)
+        {
+            _events.Add(new Told(caster.Id, refusal));
+            if (refusal != AlreadyHavePetMessage)
+                AfterHarm(caster, target, 0);
+            return CastOutcome.Resisted;
+        }
         // Calming and dispelling an NPC are resisted like harm (spells.cpp: IsDetrimentalSpell() || IsUtilitySpell()).
         bool hostile = (!spell.Beneficial || IsUtility(spell) && !target.IsPlayer) && target != caster;
         if (hostile)
@@ -485,7 +524,7 @@ public sealed partial class ZoneInstance
         if (!_entities.ContainsKey(target.Id))
             return CastOutcome.Finished;
         _events.Add(new SpellLanded(caster.Id, target.Id, spell.Id, target.Hp - before));
-        if (hostile && (before != target.Hp || !IsUtility(spell)))
+        if (hostile && (before != target.Hp || !IsUtility(spell) && !IsCharm(spell)))
             AfterHarm(caster, target, before - target.Hp);
         else if (target.IsPlayer && target.Hp != before)
             _events.Add(new HealthChanged(target.Id, target.Hp, target.Fighter.MaxHp));
@@ -555,6 +594,9 @@ public sealed partial class ZoneInstance
                     return;
                 case SpellEffect.CancelMagic:
                     CancelMagic(caster, target, spell.Base[i]);
+                    break;
+                case SpellEffect.Charm when !target.IsPlayer && target.OwnerId is null:
+                    Charm(caster, target);
                     break;
                 case SpellEffect.Stamina when target.IsPlayer:
                     // The legacy zone left endurance to the client: here it takes fatigue away (or adds it).
@@ -647,7 +689,10 @@ public sealed partial class ZoneInstance
     private void UpdateBonuses(Entity e)
     {
         int looked = e.LooksLike;
+        bool wasCharmed = e.Bonuses.Charmed;
         e.Bonuses = StatBonuses.From(e.BuffList);
+        if (wasCharmed && !e.Bonuses.Charmed)
+            ReleaseCharm(e);
         if (e.LooksLike != looked)
             _events.Add(new IllusionChanged(e.Id)); // SendIllusionPacket, when an illusion lands or fades
         RebuildFighter(e);

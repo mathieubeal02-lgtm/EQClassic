@@ -44,6 +44,40 @@ public sealed partial class ZoneInstance
         _events.Add(new Spawned(pet));
     }
 
+    /// <summary>SE_Charm: the NPC becomes the caster's pet, forgetting its foes, for as long as the spell lasts.</summary>
+    private void Charm(Entity caster, Entity npc)
+    {
+        Disengage(npc);
+        foreach (var other in _entities.Values.Where(n => n.TargetId == npc.Id && !n.IsPlayer).ToList())
+            Disengage(other);
+        npc.OwnerId = caster.Id;
+        caster.PetId = npc.Id;
+    }
+
+    /// <summary>The charm fades (BuffFadeBySlot SE_Charm): the NPC is itself again and turns on its charmer.</summary>
+    private void ReleaseCharm(Entity npc)
+    {
+        if (npc.OwnerId is not int ownerId)
+            return;
+        npc.OwnerId = null;
+        if (_entities.TryGetValue(ownerId, out var owner))
+        {
+            if (owner.PetId == npc.Id)
+                owner.PetId = null;
+            if (!owner.IsCorpse && owner.IsPlayer)
+            {
+                npc.TargetId = owner.Id;
+                _events.Add(new Engaged(npc.Id, owner.Id));
+                return;
+            }
+        }
+        Disengage(npc);
+    }
+
+    /// <summary>Breaks a charm by taking the spell off (dismissed, the charmer gone or dead).</summary>
+    private void BreakCharm(Entity npc) =>
+        RemoveBuffs(npc, npc.BuffList.Where(b => b.Spell.Effect.Contains((byte)SpellEffect.Charm)).ToList());
+
     /// <summary>/pet attack, back off, get lost.</summary>
     public void CommandPet(int ownerId, PetOrder order)
     {
@@ -70,6 +104,12 @@ public sealed partial class ZoneInstance
 
     private void RemovePet(Entity owner)
     {
+        if (owner.PetId is int charmedId && _entities.TryGetValue(charmedId, out var charmed) && charmed.Bonuses.Charmed)
+        {
+            BreakCharm(charmed); // a charmed NPC is let go, not unmade
+            owner.PetId = null;
+            return;
+        }
         if (owner.PetId is int petId && _entities.Remove(petId))
         {
             _events.Add(new Removed(petId));
@@ -84,6 +124,11 @@ public sealed partial class ZoneInstance
     {
         if (!_entities.TryGetValue(pet.OwnerId!.Value, out var owner) || owner.IsCorpse)
         {
+            if (pet.Bonuses.Charmed)
+            {
+                BreakCharm(pet);
+                return;
+            }
             _entities.Remove(pet.Id);
             _events.Add(new Removed(pet.Id));
             return;

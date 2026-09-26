@@ -169,6 +169,44 @@ public class SpellEffectTests
         Assert.Equal(1, player.ToSpawn().Race);
     }
 
+    private const int Beguile = 182; // charm up to level 37
+
+    [Fact]
+    public void A_charmed_npc_serves_until_let_go_then_turns_on_its_charmer()
+    {
+        var (zone, player) = Setup(npcs: [(new Vec3(20, 0, 0), Orc()), (new Vec3(-20, 0, 0), Orc())]);
+        var orc = Npc(zone);
+        zone.SetTarget(player.Id, orc.Id);
+        CastUntil(zone, player, Beguile, () => orc.OwnerId == player.Id);
+        orc.TargetId = null; // resisted tries angered it; a landed charm forgives
+        Assert.Equal(orc.Id, player.PetId);
+
+        var other = Npc(zone, 1);
+        zone.SetTarget(player.Id, other.Id);
+        zone.CommandPet(player.Id, ZoneInstance.PetOrder.Attack);
+        Assert.Equal(other.Id, orc.TargetId);
+
+        zone.CommandPet(player.Id, ZoneInstance.PetOrder.GetLost);
+        Assert.Null(orc.OwnerId);
+        Assert.Null(player.PetId);
+        Assert.NotNull(zone.Get(orc.Id)); // let go, not unmade
+        Assert.Equal(player.Id, orc.TargetId);
+    }
+
+    [Fact]
+    public void Charm_and_mez_have_level_caps()
+    {
+        var (zone, player) = Setup(npcs: [(new Vec3(20, 0, 0), Orc(level: 40)), (new Vec3(-20, 0, 0), Orc(level: 60))]);
+        zone.SetTarget(player.Id, Npc(zone).Id);
+        var events = Cast(zone, player, Beguile);
+        Assert.Contains(new ZoneInstance.Told(player.Id, "Your target is too high of a level for your charm spell."), events);
+        Assert.Null(Npc(zone).OwnerId);
+        zone.SetTarget(player.Id, Npc(zone, 1).Id);
+        events = Cast(zone, player, Mesmerize);
+        Assert.Contains(new ZoneInstance.Told(player.Id, "Your target is too high of a level for your mez spell."), events);
+        Assert.Equal(55, ZoneInstance.LevelCap(SpellRulesTests.File()[Mesmerize]));
+    }
+
     [Fact]
     public void A_rooted_npc_does_not_chase()
     {

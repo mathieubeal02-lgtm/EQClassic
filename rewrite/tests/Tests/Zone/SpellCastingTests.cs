@@ -136,7 +136,7 @@ public class SpellCastingTests
     {
         var (zone, player, rat) = Setup();
         zone.SetTarget(player.Id, rat.Id);
-        player.Gems[2] = 182; // Beguile: not written yet (charm)
+        player.Gems[2] = 500; // Bind Sight: not written yet
         zone.CastSpell(player.Id, 2);
         Assert.Contains(new ZoneInstance.Told(player.Id, ZoneInstance.NotYetMessage), zone.DrainEvents());
         Assert.Equal(player.MaxMana, player.Mana);
