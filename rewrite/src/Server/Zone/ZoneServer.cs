@@ -146,6 +146,8 @@ public sealed class ZoneServer : IDisposable
                         Send(peer, new PlayerHealth(me.Hp, me.Fighter.MaxHp), DeliveryMethod.ReliableOrdered);
                         Send(peer, ExperienceOf(me), DeliveryMethod.ReliableOrdered);
                         Send(peer, InventoryOf(me), DeliveryMethod.ReliableOrdered);
+                        Send(peer, SpellBookOf(entered.Instance, me), DeliveryMethod.ReliableOrdered);
+                        Send(peer, new PlayerMana(me.Mana, me.MaxMana), DeliveryMethod.ReliableOrdered);
                     }
                 }
                 break;
@@ -198,6 +200,21 @@ public sealed class ZoneServer : IDisposable
                 Broadcast(attacker.Instance, attacker.Instance.DrainEvents());
                 break;
 
+            case MemorizeSpell memorize when _players.TryGetValue(peer, out var memorizer):
+                memorizer.Instance.MemorizeSpell(memorizer.EntityId, memorize.Gem, memorize.SpellId);
+                Broadcast(memorizer.Instance, memorizer.Instance.DrainEvents());
+                break;
+
+            case ScribeScroll scribe when _players.TryGetValue(peer, out var scriber):
+                scriber.Instance.ScribeScroll(scriber.EntityId, scribe.Slot);
+                Broadcast(scriber.Instance, scriber.Instance.DrainEvents());
+                break;
+
+            case CastSpell cast when _players.TryGetValue(peer, out var caster):
+                caster.Instance.CastSpell(caster.EntityId, cast.Gem);
+                Broadcast(caster.Instance, caster.Instance.DrainEvents());
+                break;
+
             case ClickDoor click when _players.TryGetValue(peer, out var clicker):
                 clicker.Instance.ClickDoor(clicker.EntityId, click.DoorId);
                 Broadcast(clicker.Instance, clicker.Instance.DrainEvents());
@@ -243,7 +260,8 @@ public sealed class ZoneServer : IDisposable
             new Vec3(profile.BindX, profile.BindY, profile.BindZ),
             // The fighter reads the inventory as it is when rebuilt (level up, equipment change).
             level => EQClassic.Server.Combat.Combatant.ForPlayer(profile with { Level = level, Inventory = inventory!.Items.ToArray() }, Items),
-            inventory);
+            inventory,
+            new ZoneInstance.PlayerMagic(profile.Wis, profile.Int, profile.Skills, profile.SpellBook, profile.SpellGemIds, profile.Mana));
         var entity = instance.AddPlayer(ticket.CharacterName, ticket.Race, ticket.Gender, profile?.Level ?? ticket.Level, ticket.Position,
             profile?.Heading ?? 0, null, profile?.CurHp, progress);
         _players[peer] = new Player { Instance = instance, EntityId = entity.Id, Ticket = ticket };
@@ -305,6 +323,28 @@ public sealed class ZoneServer : IDisposable
                     break;
                 case ZoneInstance.Slain slain:
                     AnnounceDeath(instance, slain);
+                    break;
+                case ZoneInstance.CastStarted started when instance.Get(started.CasterId) is { } startedBy:
+                    SendNear(instance, startedBy.Position, new SpellCast(started.CasterId, started.SpellId, started.SpellName, started.CastMs, SpellPhase.Begin));
+                    break;
+                case ZoneInstance.CastEnded ended when instance.Get(ended.CasterId) is { } endedBy:
+                    SendNear(instance, endedBy.Position, new SpellCast(ended.CasterId, ended.SpellId, instance.SpellById(ended.SpellId)?.Name ?? "", 0,
+                        ended.Outcome switch
+                        {
+                            ZoneInstance.CastOutcome.Fizzled => SpellPhase.Fizzled,
+                            ZoneInstance.CastOutcome.Interrupted => SpellPhase.Interrupted,
+                            ZoneInstance.CastOutcome.Resisted => SpellPhase.Resisted,
+                            _ => SpellPhase.Finished,
+                        }));
+                    break;
+                case ZoneInstance.SpellLanded landed:
+                    AnnounceSpell(instance, landed);
+                    break;
+                case ZoneInstance.ManaChanged mana when PeerOf(instance, mana.PlayerId) is { } casterPeer:
+                    Send(casterPeer, new PlayerMana(mana.Mana, mana.MaxMana), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.GemsChanged gems when PeerOf(instance, gems.PlayerId) is { } memPeer && instance.Get(gems.PlayerId) is { } memorizer:
+                    Send(memPeer, SpellBookOf(instance, memorizer), DeliveryMethod.ReliableOrdered);
                     break;
             }
         }
@@ -391,6 +431,38 @@ public sealed class ZoneServer : IDisposable
         }
     }
 
+    /// <summary>
+    /// A spell took effect: the target reads the spell's "cast on you" line, the players around its
+    /// "cast on other" line after the target's name; the caster of a damage spell reads the damage
+    /// (the Trilogy client's "... was hit by non-melee for N points of damage.").
+    /// </summary>
+    private void AnnounceSpell(ZoneInstance instance, ZoneInstance.SpellLanded landed)
+    {
+        if (instance.SpellById(landed.SpellId) is not { } spell || instance.Get(landed.TargetId) is not { } target)
+            return;
+        string targetName = DisplayName(target.Name);
+        foreach (var (peer, player) in _players)
+        {
+            if (player.Instance != instance || instance.Get(player.EntityId) is not { } p || Distance2(p.Position, target.Position) > CombatHearingRange * CombatHearingRange)
+                continue;
+            string? text = player.EntityId == landed.TargetId ? spell.CastOnYou
+                : spell.CastOnOther.Length > 0 ? targetName + spell.CastOnOther : null;
+            if (!string.IsNullOrEmpty(text))
+                Send(peer, new ZoneMessage(text), DeliveryMethod.ReliableOrdered);
+            if (player.EntityId == landed.CasterId && landed.Amount < 0 && landed.TargetId != landed.CasterId)
+                Send(peer, new ZoneMessage($"{targetName} was hit by non-melee for {-landed.Amount} points of damage."), DeliveryMethod.ReliableOrdered);
+        }
+    }
+
+    private static SpellBook SpellBookOf(ZoneInstance instance, ZoneInstance.Entity p)
+    {
+        var spells = p.Book.Distinct().Select(instance.SpellById).OfType<EQClassic.Server.Spells.Spell>()
+            .Select(s => new SpellView(s.Id, s.Name, s.LevelFor(p.Fighter.Class) ?? 0, s.Mana, s.CastTimeMs, s.Beneficial, s.MemIcon))
+            .OrderBy(v => v.Level).ThenBy(v => v.Name, StringComparer.Ordinal)
+            .ToList();
+        return new SpellBook(spells, p.Gems);
+    }
+
     /// <summary>NPC names as the client shows them: "a_rat01" → "a rat", digits dropped anywhere.</summary>
     public static string DisplayName(string name) => new string(name.Where(c => !char.IsAsciiDigit(c)).ToArray()).Replace('_', ' ').Trim();
 
@@ -440,6 +512,7 @@ public sealed class ZoneServer : IDisposable
                 Level = now.Level, Exp = now.Exp, CurHp = now.Hp, Zone = crossed.Line.TargetZone, X = d.X, Y = d.Y, Z = d.Z,
                 Inventory = now.Inventory?.Items.ToArray() ?? p.Inventory, Charges = now.Inventory?.Charges.ToArray() ?? p.Charges,
                 Coins = now.Inventory?.Coins ?? p.Coins,
+                Mana = now.Mana, SpellBook = now.Book, SpellGemIds = now.Gems.ToArray(),
             }
             : player.Ticket.Profile;
         var ticket = player.Ticket with { Zone = crossed.Line.TargetZone, Position = d, Level = now?.Level ?? player.Ticket.Level, Profile = profile };
@@ -467,6 +540,8 @@ public sealed class ZoneServer : IDisposable
             player.Ticket.Profile is null ? null : state?.Exp, player.Ticket.Profile is null ? null : state?.Level);
         if (player.Ticket.Profile is not null && state?.Inventory is { } inventory)
             Characters?.SaveInventory(player.Ticket.CharacterName, inventory.Items, inventory.Charges, inventory.Coins);
+        if (player.Ticket.Profile is not null && state is not null && state.Book.Length > 0)
+            Characters?.SaveSpells(player.Ticket.CharacterName, state.Book, state.Gems, state.Mana);
         player.Instance.RemovePlayer(player.EntityId);
         foreach (var (other, p) in _players)
             if (p.Instance == player.Instance)

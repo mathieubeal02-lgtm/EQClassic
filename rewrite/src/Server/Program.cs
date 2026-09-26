@@ -12,7 +12,7 @@ using EQClassic.Shared.Protocol;
 // Login, World and zone servers of the rewrite, in one process.
 //   EQClassic.Server [--port N] [--world-port N] [--zone-port N] [--public-address A]
 //                    [--db "<MySqlConnector connection string>"] [--lantern build/lantern-work/Exports]
-//                    [--key login-key.pem] [--allow-plaintext]
+//                    [--key login-key.pem] [--allow-plaintext] [--zone-cfg runtime/cfg] [--spells runtime/spdat.eff]
 // --lantern: LanternExtractor exports; a zone uses its collision mesh (with its solid objects) when
 // <zone>/Zone/Meshes/<zone>_collision.txt exists.
 // Without --db, only the runbook's test account (test / test) exists (in memory), with no characters.
@@ -27,6 +27,7 @@ string? db = null;
 string keyPath = "login-key.pem";
 bool allowPlaintext = false;
 string? zoneCfg = null;
+string? spellFile = null;
 for (int i = 0; i < args.Length; i++)
 {
     string? next = i + 1 < args.Length ? args[i + 1] : null;
@@ -41,11 +42,15 @@ for (int i = 0; i < args.Length; i++)
         case "--key" when next is not null: keyPath = next; i++; break;
         case "--allow-plaintext": allowPlaintext = true; break;
         case "--zone-cfg" when next is not null: zoneCfg = next; i++; break;
+        case "--spells" when next is not null: spellFile = next; i++; break;
     }
 }
 
 // The legacy zone headers (fog, sky, safe point, underworld, clip): runtime/cfg in the repository by default.
 zoneCfg ??= new[] { "runtime/cfg", "../runtime/cfg", "../../runtime/cfg" }.FirstOrDefault(Directory.Exists);
+// The client's spell file, as the legacy zone reads it (spdat.eff in the working directory; runtime/ in the repository).
+spellFile ??= new[] { "spdat.eff", "runtime/spdat.eff", "../runtime/spdat.eff", "../../runtime/spdat.eff" }.FirstOrDefault(File.Exists);
+IReadOnlyList<EQClassic.Server.Spells.Spell>? spells = spellFile is null ? null : EQClassic.Server.Spells.Spell.ReadFile(File.ReadAllBytes(spellFile));
 
 var rsa = RSA.Create(2048);
 if (File.Exists(keyPath))
@@ -83,7 +88,7 @@ using var zones = new ZoneServer(zoneKeys, name =>
     var mesh = meshPath is not null && File.Exists(meshPath) ? ZoneCollisionMesh.LoadLanternZone(lantern!, name) : null;
     var cfg = zoneCfg is null ? null : Path.Combine(zoneCfg, name + ".cfg");
     var info = cfg is not null && File.Exists(cfg) ? ZoneInfo.FromLegacyCfg(File.ReadAllBytes(cfg)) : null;
-    return new ZoneInstance(data, mesh) { Info = info, Loot = loot, Items = items };
+    return new ZoneInstance(data, mesh) { Info = info, Loot = loot, Items = items, Spells = spells };
 }) { Log = server.Log, Characters = characters, PublicAddress = worldAddress, Items = items };
 zones.Start(zonePort);
 if (db is not null && ReadTimeOfDay(db) is { } tod)
@@ -100,6 +105,7 @@ using var world = new WorldServer(1, worlds, worldAccounts, characters, creation
 world.Start(worldPort);
 Console.WriteLine($"World on UDP {world.Port}, zones on UDP {zones.Port}, announced as {worldAddress}.");
 Console.WriteLine($"Login server listening on UDP {server.Port} (protocol {ProtocolInfo.ConnectionKey}), accounts: {(db is null ? "test account only" : "database")}.");
+Console.WriteLine(spells is null ? "No spdat.eff found: nobody can cast." : $"{spells.Count} spells read from {spellFile}.");
 Console.WriteLine($"Server key fingerprint: {server.Fingerprint}");
 Console.WriteLine("Ctrl+C to stop.");
 

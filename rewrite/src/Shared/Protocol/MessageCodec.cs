@@ -81,6 +81,12 @@ public static class MessageCodec
                 MessageType.LootContents => LootContents.ReadFields(reader),
                 MessageType.PlayerInventory => PlayerInventory.ReadFields(reader),
                 MessageType.MoveItem => MoveItem.ReadFields(reader),
+                MessageType.SpellBook => SpellBook.ReadFields(reader),
+                MessageType.MemorizeSpell => MemorizeSpell.ReadFields(reader),
+                MessageType.CastSpell => CastSpell.ReadFields(reader),
+                MessageType.SpellCast => SpellCast.ReadFields(reader),
+                MessageType.PlayerMana => PlayerMana.ReadFields(reader),
+                MessageType.ScribeScroll => ScribeScroll.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

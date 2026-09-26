@@ -26,11 +26,17 @@ public sealed record NpcTemplate(int Id, string Name, int Race, int Gender, int 
 /// <summary>
 /// The npc_types_without columns melee combat reads (NPC::NPC, Mob::Combat*): class, hit points,
 /// min/max damage, AC, ATK, accuracy, avoidance bonus, attack speed (percent: delay = 2 s × (100 +
-/// speed) / 100, negative is faster) and STR.
+/// speed) / 100, negative is faster) and STR; the resists spells read (MR, CR, DR, FR, PR).
 /// </summary>
 public sealed record NpcCombatStats(int Class, int Hp, int MinDamage, int MaxDamage, int AC = 0, int Atk = 0, int Accuracy = 0,
     int Avoidance = 0, int AttackSpeed = 0, int Str = 75)
 {
+    public int MR { get; init; }
+    public int CR { get; init; }
+    public int DR { get; init; }
+    public int FR { get; init; }
+    public int PR { get; init; }
+
     public static NpcCombatStats Default(int level) => new(1, Math.Max(1, level * 10 + 6), 1, Math.Max(2, level * 2 + 2));
 
     /// <summary>Seconds between swings (Mob::Mob: 2000 ms × (100 + attack_speed) / 100).</summary>
@@ -121,7 +127,8 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
             cmd.CommandText = $"""
                 SELECT s.id, s.x, s.y, s.z, s.heading, s.pathgrid, n.id, n.name, n.race, n.gender, n.level, n.size, e.chance,
                        s.respawntime, s.variance, n.runspeed, n.bodytype, n.npc_faction_id,
-                       n.class, n.hp, n.mindmg, n.maxdmg, n.AC, n.ATK, n.Accuracy, n.avoidance, n.attack_speed, n.STR, n.loottable_id
+                       n.class, n.hp, n.mindmg, n.maxdmg, n.AC, n.ATK, n.Accuracy, n.avoidance, n.attack_speed, n.STR, n.loottable_id,
+                       n.MR, n.CR, n.DR, n.FR, n.PR
                 FROM `{_p}spawn2` s
                 JOIN `{_p}spawnentry` e ON e.spawngroupID = s.spawngroupID
                 JOIN `{_p}npc_types_without` n ON n.id = e.npcID
@@ -145,7 +152,10 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
                     PrimaryFaction: Convert.ToInt32(r.GetValue(17)))
                 {
                     Combat = new NpcCombatStats(Int(r, 18), Math.Max(1, Int(r, 19)), Int(r, 20), Int(r, 21), Int(r, 22), Int(r, 23),
-                        Int(r, 24), Int(r, 25), Int(r, 26), Int(r, 27)),
+                        Int(r, 24), Int(r, 25), Int(r, 26), Int(r, 27))
+                    {
+                        MR = Int(r, 29), CR = Int(r, 30), DR = Int(r, 31), FR = Int(r, 32), PR = Int(r, 33),
+                    },
                     LoottableId = Int(r, 28),
                 };
                 spawn.Candidates.Add((npc, Convert.ToInt32(r.GetValue(12))));

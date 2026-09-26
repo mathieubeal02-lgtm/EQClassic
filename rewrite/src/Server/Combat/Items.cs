@@ -6,6 +6,10 @@ namespace EQClassic.Server.Combat;
 /// <summary>What melee combat reads of an item: weapon damage and delay (tenths of a second), item type and AC.</summary>
 public sealed record ItemStats(int Id, string Name, int Damage, int Delay, int ItemType, int AC, int Slots = 0, int Classes = 65535, int Races = 65535)
 {
+    /// <summary>Spell scrolls (item type 20): the spell scribing teaches (scrolleffect).</summary>
+    public int ScrollSpell { get; init; }
+    public const int SpellScroll = 20;
+
     /// <summary>Whether it can be worn in this worn slot (0-21): bit <c>slot</c> of the slots bitmask.</summary>
     public bool FitsSlot(int slot) => slot is >= 0 and < 22 && (Slots & (1 << slot)) != 0;
 
@@ -67,12 +71,12 @@ public sealed class MySqlItemSource : IItemSource
         using var connection = new MySqlConnection(_connectionString);
         connection.Open();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT id, Name, damage, delay, itemtype, ac, slots, classes, races FROM `{_table}` WHERE id = @id";
+        cmd.CommandText = $"SELECT id, Name, damage, delay, itemtype, ac, slots, classes, races, scrolleffect FROM `{_table}` WHERE id = @id";
         cmd.Parameters.AddWithValue("@id", id);
         using var r = cmd.ExecuteReader();
         if (!r.Read())
             return null;
         int I(int i) => r.IsDBNull(i) ? 0 : Convert.ToInt32(r.GetValue(i));
-        return new ItemStats(I(0), r.IsDBNull(1) ? "" : r.GetString(1), I(2), I(3), I(4), I(5), I(6), I(7), I(8));
+        return new ItemStats(I(0), r.IsDBNull(1) ? "" : r.GetString(1), I(2), I(3), I(4), I(5), I(6), I(7), I(8)) { ScrollSpell = I(9) };
     }
 }

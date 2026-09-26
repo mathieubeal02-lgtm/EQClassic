@@ -484,6 +484,13 @@ namespace EQClassic.Unity
                 defender.Controller.PlayOneShotAnimation(AnimationType.Damage1);
         }
 
+        /// <summary>A caster near you begins a spell: the hands animation (t05, general casting) when the model has it.</summary>
+        public void OnSpellCast(SpellCast cast)
+        {
+            if (cast.Phase == SpellPhase.Begin && _animated.TryGetValue(cast.CasterId, out var caster) && caster.Controller.HasAnimation("t05"))
+                caster.Controller.PlayOneShotAnimation(AnimationType.SpellCastGeneral);
+        }
+
         /// <summary>
         /// Stand, walk or run from the speed between frames, smoothed so that a late server update
         /// does not make the model stop for one frame. Missing clips are ignored by the controller.

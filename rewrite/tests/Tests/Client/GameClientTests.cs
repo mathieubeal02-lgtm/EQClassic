@@ -43,7 +43,9 @@ public sealed class GameClientTests : IDisposable
         loot.Drops[1] = [(13071, 1, 1)];
         var items = new EQClassic.Server.Combat.InMemoryItemSource();
         items.Items[13071] = new EQClassic.Server.Combat.ItemStats(13071, "Rat Whiskers", 0, 0, 11, 0);
-        _zones = new ZoneServer(keys, n => zoneData.Load(n) is { } d ? new ZoneInstance(d) { Loot = loot, Items = items } : null)
+        items.Items[9993] = new EQClassic.Server.Combat.ItemStats(9993, "Spell: Minor Healing*", 0, 0, EQClassic.Server.Combat.ItemStats.SpellScroll, 0) { ScrollSpell = 200 };
+        var spells = EQClassic.Tests.Combat.SpellRulesTests.File();
+        _zones = new ZoneServer(keys, n => zoneData.Load(n) is { } d ? new ZoneInstance(d) { Loot = loot, Items = items, Spells = spells } : null)
         {
             Characters = _characters, Items = items,
         };
@@ -57,6 +59,12 @@ public sealed class GameClientTests : IDisposable
         _world.Start(0);
         directory.Register(new WorldServerInfo(1, "EverQuest Classic", "127.0.0.1", _world.Port, 0, WorldStatus.Up));
         _characters.Add(ProfileBuilder.Record(15, 24, "Qbot", 9, 10, 1, "grobb", x: 10, y: 10, z: 4));
+        // A troll shaman with its starting scroll (Minor Healing) in the first general slot, WIS 95.
+        var caster = ProfileBuilder.Build("Qcaster", 9, 10, 1, "grobb", x: 10, y: 10, z: 4);
+        ProfileTemplate.SetStats(caster, 108, 119, 45, 75, 52, 83, 95);
+        ProfileTemplate.SetItem(caster, 22, 9993, 1);
+        ProfileTemplate.SetMana(caster, 21);
+        _characters.Add(new CharacterRecord(16, 24, PlayerProfile.Read(caster)!));
         _login = new LoginServer(new LoginService(new InMemoryAccountStore([new LoginAccount(16, "bot", PasswordHash.Sha1Hex("bot"))])), directory, Key);
         _login.Start(0);
     }
@@ -289,6 +297,29 @@ public sealed class GameClientTests : IDisposable
         Assert.True(Run(() => client.State == GameState.InZone && client.Zone?.Zone == "innothule"));
         Assert.Equal(["innothule"], entered);
         Assert.Equal(-612.29f, client.Player!.Position.X, precision: 2);
+    }
+
+    [Fact]
+    public void Scribes_memorises_and_casts_a_spell()
+    {
+        var client = InZone("Qcaster");
+        var lines = new List<string>();
+        client.MessageReceived += lines.Add;
+        Assert.True(Run(() => client.SpellBook is not null && client.MaxMana > 0));
+        Assert.Equal((95 / 5 + 2) * 1, client.MaxMana);
+        Assert.Empty(client.SpellBook!.Spells);
+
+        client.Scribe(22);
+        Assert.True(Run(() => client.SpellBook!.Spells.Any(s => s.Name == "Minor Healing")), string.Join(" | ", lines));
+        Assert.Contains("You have finished scribing Minor Healing.", lines);
+        Assert.True(Run(() => client.Inventory!.Slots[22].ItemId == 0));
+
+        client.Memorize(0, 200);
+        Assert.True(Run(() => client.GemSpell(0)?.Name == "Minor Healing"));
+        client.Cast(0);
+        // Begins (then lands after 1 s), or fizzles: either way the mana goes.
+        Assert.True(Run(() => client.Mana == client.MaxMana - 10), string.Join(" | ", lines));
+        Assert.True(lines.Contains("You begin casting Minor Healing.") || lines.Contains("Your spell fizzles!"), string.Join(" | ", lines));
     }
 
     private static void SetHeading(LocalPlayer p, float heading)

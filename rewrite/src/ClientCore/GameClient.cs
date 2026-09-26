@@ -124,10 +124,65 @@ namespace EQClassic.ClientCore
                     _campFrom = Player.Position;
                     MessageReceived?.Invoke("It will take you about 30 seconds to prepare your camp.");
                     break;
+                case ChatAction.Cast:
+                    if (int.TryParse(parsed.Target, out int gem) && gem >= 1 && gem <= GemCount)
+                        Cast(gem - 1);
+                    else
+                        MessageReceived?.Invoke("Usage: /cast <spell gem 1-8>");
+                    break;
                 case ChatAction.Unknown:
                     MessageReceived?.Invoke(parsed.Text);
                     break;
             }
+        }
+
+        public const int GemCount = 8;
+        public int Mana { get; private set; }
+        public int MaxMana { get; private set; }
+        /// <summary>The spell book and the memorised gems (spell ids, −1 when empty), from the server.</summary>
+        public SpellBook? SpellBook { get; private set; }
+        /// <summary>The spell being cast (casting bar) and when it started, or null.</summary>
+        public SpellCast? Casting { get; private set; }
+        public double CastingSince { get; private set; }
+        /// <summary>Any caster near you starting or ending a spell (the hands animation, particles).</summary>
+        public event Action<SpellCast>? SpellCastReceived;
+
+        /// <summary>0 to 1: how far the current cast is (the casting bar).</summary>
+        public float CastProgress => Casting is { } c && c.CastMs > 0 ? (float)Math.Min(1.0, (Now - CastingSince) * 1000.0 / c.CastMs) : 0f;
+
+        public SpellView? GemSpell(int gem)
+        {
+            if (SpellBook is not { } book || gem < 0 || gem >= book.Gems.Count || book.Gems[gem] < 0)
+                return null;
+            int id = book.Gems[gem];
+            return book.Spells.FirstOrDefault(s => s.SpellId == id);
+        }
+
+        /// <summary>Casts the spell of a gem (keys 1-8) at the target; the server checks mana, range and fizzles.</summary>
+        public void Cast(int gem)
+        {
+            if (_state != GameState.InZone)
+                return;
+            if (GemSpell(gem) == null)
+            {
+                MessageReceived?.Invoke("You do not have a spell memorized in that gem.");
+                return;
+            }
+            _connection?.Send(new CastSpell(gem));
+        }
+
+        /// <summary>Memorises a spell of the book in a gem (−1 forgets it).</summary>
+        public void Memorize(int gem, int spellId)
+        {
+            if (_state == GameState.InZone)
+                _connection?.Send(new MemorizeSpell(gem, spellId));
+        }
+
+        /// <summary>Scribes the spell scroll of an inventory slot into the book.</summary>
+        public void Scribe(int slot)
+        {
+            if (_state == GameState.InZone)
+                _connection?.Send(new ScribeScroll(slot));
         }
 
         private void UpdateCamp(float seconds)
@@ -428,12 +483,32 @@ namespace EQClassic.ClientCore
                 case PlayerExperience experience:
                     Experience = experience;
                     break;
+                case PlayerMana mana:
+                    Mana = mana.Mana;
+                    MaxMana = mana.MaxMana;
+                    break;
+                case SpellBook book:
+                    SpellBook = book;
+                    break;
+                case SpellCast cast:
+                    if (Zone != null && cast.CasterId == Zone.YourEntityId)
+                    {
+                        Casting = cast.Phase == SpellPhase.Begin && cast.CastMs > 0 ? cast : null;
+                        CastingSince = Now;
+                        if (cast.Phase == SpellPhase.Begin)
+                            MessageReceived?.Invoke($"You begin casting {cast.SpellName}.");
+                    }
+                    else if (cast.Phase == SpellPhase.Begin && Zone?.Get(cast.CasterId) is { } other)
+                        MessageReceived?.Invoke($"{other.DisplayName} begins to cast a spell.");
+                    SpellCastReceived?.Invoke(cast);
+                    break;
                 case PlayerHealth health:
                     Hp = health.Hp;
                     MaxHp = health.MaxHp;
                     break;
                 case ZoneChange change:
                     LootingCorpse = null;
+                    Casting = null;
                     ZoneInfo = null;
                     Zone = null;
                     Player = null;

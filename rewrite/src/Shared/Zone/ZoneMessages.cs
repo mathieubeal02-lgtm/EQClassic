@@ -599,4 +599,114 @@ namespace EQClassic.Shared.Zone
 
         public static MoveItem ReadFields(NetDataReader reader) => new MoveItem(reader.GetByte(), reader.GetByte());
     }
+
+    /// <summary>A spell as the client shows it in the book and the gems.</summary>
+    public sealed record SpellView(int SpellId, string Name, int Level, int Mana, int CastMs, bool Beneficial, int Icon);
+
+    /// <summary>
+    /// Zone server to the player: the spells of their book (with their level for the player's class)
+    /// and the 8 memorised gems (spell ids, −1 when empty). Sent on entry and when the gems change.
+    /// </summary>
+    public sealed record SpellBook(IReadOnlyList<SpellView> Spells, IReadOnlyList<int> Gems) : IMessage
+    {
+        public MessageType Type => MessageType.SpellBook;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put((ushort)Spells.Count);
+            foreach (var s in Spells)
+            {
+                writer.Put(s.SpellId);
+                writer.Put(s.Name);
+                writer.Put((byte)s.Level);
+                writer.Put(s.Mana);
+                writer.Put(s.CastMs);
+                writer.Put(s.Beneficial);
+                writer.Put((ushort)s.Icon);
+            }
+            writer.Put((byte)Gems.Count);
+            foreach (int g in Gems)
+                writer.Put(g);
+        }
+
+        public static SpellBook ReadFields(NetDataReader reader)
+        {
+            int count = reader.GetUShort();
+            var spells = new List<SpellView>(count);
+            for (int n = 0; n < count; n++)
+                spells.Add(new SpellView(reader.GetInt(), reader.GetString(), reader.GetByte(), reader.GetInt(), reader.GetInt(), reader.GetBool(), reader.GetUShort()));
+            int gems = reader.GetByte();
+            var list = new List<int>(gems);
+            for (int n = 0; n < gems; n++)
+                list.Add(reader.GetInt());
+            return new SpellBook(spells, list);
+        }
+    }
+
+    /// <summary>Client to zone server: memorise a spell of the book in a gem (−1 forgets the gem).</summary>
+    public sealed record MemorizeSpell(int Gem, int SpellId) : IMessage
+    {
+        public MessageType Type => MessageType.MemorizeSpell;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put((byte)Gem);
+            writer.Put(SpellId);
+        }
+
+        public static MemorizeSpell ReadFields(NetDataReader reader) => new MemorizeSpell(reader.GetByte(), reader.GetInt());
+    }
+
+    /// <summary>Client to zone server: cast the spell of a gem at the current target (legacy OP_CastSpell).</summary>
+    public sealed record CastSpell(int Gem) : IMessage
+    {
+        public MessageType Type => MessageType.CastSpell;
+        public void WriteFields(NetDataWriter writer) => writer.Put((byte)Gem);
+        public static CastSpell ReadFields(NetDataReader reader) => new CastSpell(reader.GetByte());
+    }
+
+    public enum SpellPhase : byte { Begin = 0, Finished = 1, Fizzled = 2, Interrupted = 3, Resisted = 4 }
+
+    /// <summary>
+    /// Zone server to the players near a caster: a cast begins (with its time, for the casting bar
+    /// and the hands animation, legacy OP_BeginCast) or ends.
+    /// </summary>
+    public sealed record SpellCast(int CasterId, int SpellId, string SpellName, int CastMs, SpellPhase Phase) : IMessage
+    {
+        public MessageType Type => MessageType.SpellCast;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(CasterId);
+            writer.Put(SpellId);
+            writer.Put(SpellName);
+            writer.Put(CastMs);
+            writer.Put((byte)Phase);
+        }
+
+        public static SpellCast ReadFields(NetDataReader reader) =>
+            new SpellCast(reader.GetInt(), reader.GetInt(), reader.GetString(), reader.GetInt(), (SpellPhase)reader.GetByte());
+    }
+
+    /// <summary>Zone server to the player: current and maximum mana (legacy OP_ManaChange).</summary>
+    public sealed record PlayerMana(int Mana, int MaxMana) : IMessage
+    {
+        public MessageType Type => MessageType.PlayerMana;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(Mana);
+            writer.Put(MaxMana);
+        }
+
+        public static PlayerMana ReadFields(NetDataReader reader) => new PlayerMana(reader.GetInt(), reader.GetInt());
+    }
+
+    /// <summary>Client to zone server: scribe the spell scroll of an inventory slot into the book.</summary>
+    public sealed record ScribeScroll(int Slot) : IMessage
+    {
+        public MessageType Type => MessageType.ScribeScroll;
+        public void WriteFields(NetDataWriter writer) => writer.Put((byte)Slot);
+        public static ScribeScroll ReadFields(NetDataReader reader) => new ScribeScroll(reader.GetByte());
+    }
 }

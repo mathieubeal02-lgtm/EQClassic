@@ -10,7 +10,7 @@ namespace EQClassic.Server.Zone;
 /// reused for another zone, on stale globals). Spawns, deaths and zone line crossings are queued
 /// as events for the server to broadcast (<see cref="DrainEvents"/>).
 /// </summary>
-public sealed class ZoneInstance
+public sealed partial class ZoneInstance
 {
     /// <summary>Fastest a player may move, units per second (EverQuest run speed with haste and SoW stays well under).</summary>
     public const float MaxPlayerSpeed = 70f;
@@ -87,6 +87,13 @@ public sealed class ZoneInstance
         internal CorpseData? Corpse;
         /// <summary>Players: what they carry (from the profile; saved when they leave).</summary>
         public PlayerInventory? Inventory { get; internal set; }
+        /// <summary>Players: mana, spell book (spell ids), memorised gems (−1: empty), and the spell being cast.</summary>
+        public int Mana { get; internal set; }
+        public int MaxMana { get; internal set; }
+        public int[] Book { get; internal set; } = Array.Empty<int>();
+        public int[] Gems { get; internal set; } = Array.Empty<int>();
+        public Casting? Cast { get; internal set; }
+        internal PlayerMagic? Magic;
     }
 
     public abstract record ZoneEvent;
@@ -216,11 +223,13 @@ public sealed class ZoneInstance
         player.Fighter = fighter ?? progress?.FighterAt?.Invoke(level) ?? DefaultPlayer(level);
         player.Hp = hp is int h && h > 0 && h <= player.Fighter.MaxHp ? h : player.Fighter.MaxHp;
         player.EntryPosition = position;
+        SetUpMagic(player, progress?.Magic);
         return player;
     }
 
     /// <summary>What a player brings besides position: experience, bind point, and their fighter at any level.</summary>
-    public sealed record PlayerProgress(uint Exp, string BindZone, Vec3 Bind, Func<int, Combatant>? FighterAt, PlayerInventory? Inventory = null);
+    public sealed record PlayerProgress(uint Exp, string BindZone, Vec3 Bind, Func<int, Combatant>? FighterAt, PlayerInventory? Inventory = null,
+        PlayerMagic? Magic = null);
 
     private static Combatant DefaultPlayer(int level) =>
         new(true, level, CombatFormulas.Warrior, CombatFormulas.ClientBaseHp(level, CombatFormulas.Warrior, 75),
@@ -653,6 +662,7 @@ public sealed class ZoneInstance
                 e.PauseLeft = Math.Max(e.Grid.Waypoints[waypoint].PauseSeconds, 0);
         }
 
+        AdvanceCasting();
         Fight(seconds);
         Regenerate();
         RotCorpses();
@@ -713,22 +723,34 @@ public sealed class ZoneInstance
         var result = Melee.Swing(attacker.Fighter, defender.Fighter, _random, defender.Sitting);
         attacker.LastCombatTime = defender.LastCombatTime = _time;
         if (result.Hit)
-        {
             defender.Hp -= result.Damage;
-            if (attacker.IsPlayer && !defender.IsPlayer)
-            {
-                defender.DamageBy ??= new Dictionary<int, int>();
-                defender.DamageBy[attacker.Id] = defender.DamageBy.GetValueOrDefault(attacker.Id) + result.Damage;
-            }
-        }
         _events.Add(new Swung(attacker.Id, defender.Id, result.Hit ? result.Damage : 0, defender.HpPercent));
-        if (!defender.IsPlayer && defender.TargetId is null)
+        AfterHarm(attacker, defender, result.Hit ? result.Damage : 0);
+    }
+
+    /// <summary>
+    /// What follows damage (or a hostile spell) from <paramref name="attacker"/>: an NPC counts the
+    /// damage and fights back, a player sees their health and may lose their spell, and whoever
+    /// reaches 0 hit points dies.
+    /// </summary>
+    private void AfterHarm(Entity attacker, Entity defender, int damage)
+    {
+        if (damage > 0 && attacker.IsPlayer && !defender.IsPlayer)
+        {
+            defender.DamageBy ??= new Dictionary<int, int>();
+            defender.DamageBy[attacker.Id] = defender.DamageBy.GetValueOrDefault(attacker.Id) + damage;
+        }
+        if (!defender.IsPlayer && defender.TargetId is null && attacker.IsPlayer)
         {
             defender.TargetId = attacker.Id; // hit by a player: it fights back
             _events.Add(new Engaged(defender.Id, attacker.Id));
         }
-        if (defender.IsPlayer && result.Hit)
+        if (defender.IsPlayer && damage > 0)
+        {
             _events.Add(new HealthChanged(defender.Id, Math.Max(defender.Hp, 0), defender.Fighter.MaxHp));
+            if (defender.Hp > 0)
+                CheckChanneling(defender);
+        }
         if (defender.Hp > 0)
             return;
         _events.Add(new Slain(defender.Id, defender.Name, attacker.Id, attacker.Name));
@@ -784,6 +806,7 @@ public sealed class ZoneInstance
                 player.Hp = Math.Min(player.Hp, player.Fighter.MaxHp);
                 _events.Add(new HealthChanged(player.Id, player.Hp, player.Fighter.MaxHp));
             }
+            RecalculateMana(player);
         }
         _events.Add(new ExperienceChanged(player.Id, player.Exp, player.Level));
     }
@@ -800,6 +823,7 @@ public sealed class ZoneInstance
         player.AutoAttack = false;
         player.PlayerTargetId = null;
         player.Sitting = false;
+        player.Cast = null;
         uint loss = Experience.DeathLoss(player.Level, player.Exp);
         if (loss > 0)
             SetExperience(player, player.Exp - loss);
@@ -820,15 +844,17 @@ public sealed class ZoneInstance
     /// <summary>
     /// Every 6 s, players out of combat for a tic regain hit points: 1 per 10 levels (at least 1),
     /// twice that sitting. A simplification of Client::CalcHPRegen, without items or race bonuses.
+    /// Mana comes back every tic, in combat or not (Mob::DoManaRegen).
     /// </summary>
     private void Regenerate()
     {
         if (_time < _nextRegen)
             return;
         _nextRegen += RegenSeconds;
-        foreach (var p in _entities.Values)
+        foreach (var p in _entities.Values.Where(e => e.IsPlayer).ToList())
         {
-            if (!p.IsPlayer || p.Hp >= p.Fighter.MaxHp || _time - p.LastCombatTime < RegenSeconds)
+            RegenerateMana(p);
+            if (p.Hp >= p.Fighter.MaxHp || _time - p.LastCombatTime < RegenSeconds)
                 continue;
             int amount = Math.Max(1, p.Level / 10) * (p.Sitting ? 2 : 1);
             p.Hp = Math.Min(p.Fighter.MaxHp, p.Hp + amount);

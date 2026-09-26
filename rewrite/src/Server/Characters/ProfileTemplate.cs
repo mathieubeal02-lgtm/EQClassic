@@ -63,6 +63,17 @@ public static class ProfileTemplate
     public static void SetExp(byte[] p, uint exp) => BinaryPrimitives.WriteUInt32LittleEndian(p.AsSpan(PlayerProfile.ExpOffset), exp);
     public static void SetCurHp(byte[] p, int hp) => BinaryPrimitives.WriteInt16LittleEndian(p.AsSpan(PlayerProfile.CurHpOffset), (short)Math.Clamp(hp, 0, short.MaxValue));
 
+    public static void SetMana(byte[] p, int mana) => BinaryPrimitives.WriteInt16LittleEndian(p.AsSpan(PlayerProfile.ManaOffset), (short)Math.Clamp(mana, 0, short.MaxValue));
+
+    /// <summary>The spell book and the memorised gems (−1: empty, stored as 0xFFFF).</summary>
+    public static void SetSpells(byte[] p, IReadOnlyList<int> book, IReadOnlyList<int> gems)
+    {
+        for (int i = 0; i < Math.Min(book.Count, PlayerProfile.SpellBookSlots); i++)
+            BinaryPrimitives.WriteUInt16LittleEndian(p.AsSpan(PlayerProfile.SpellBookOffset + 2 * i), book[i] < 0 ? (ushort)0xFFFF : (ushort)book[i]);
+        for (int i = 0; i < Math.Min(gems.Count, PlayerProfile.SpellGems); i++)
+            BinaryPrimitives.WriteUInt16LittleEndian(p.AsSpan(PlayerProfile.SpellGemsOffset + 2 * i), gems[i] < 0 ? (ushort)0xFFFF : (ushort)gems[i]);
+    }
+
     public static void SetStats(byte[] p, int str, int sta, int cha, int dex, int @int, int agi, int wis)
     {
         p[123] = (byte)str; p[124] = (byte)sta; p[125] = (byte)cha; p[126] = (byte)dex;

@@ -23,7 +23,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Underworld | Falling below the zone's floor returns you to the safe point | Done (server, from the zone header) | — |
 | Water and lava | Surfaces, swimming, underwater tint | Todo | 2 |
 | Light sources | Torches and lanterns in hand, zone lights | Partial: one light around the player | 3 |
-| Particles | Spell effects | Todo (with spells) | 3 |
+| Particles | Spell effects | Todo (casting works, no particles yet) | 3 |
 | Name plates | Names above heads, consider colours | Written (con colour after considering, target in brackets), to check in Unity | 1 |
 | Loading screen | Between zones | Todo | 3 |
 
@@ -47,17 +47,17 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Feature | Trilogy client | Status | Priority |
 |---|---|---|---|
 | Chat window | Say, shout, OOC, tells, group, guild, emotes, channels, scrolling | Partial: Enter to type; say, shout, OOC, auction, tells (across zones), emotes; last 12 lines on screen. No group/guild channels, no scrolling back | 1 |
-| Slash commands | /who, /loc, /sit, /camp, /con, /target... | Partial: /say /shout /ooc /auction /tell /em /who /loc /sit /stand /camp /con /target | 1 |
-| Player window | HP, mana, stamina, experience bars | Partial: HP and experience bars, level; no mana or stamina yet | 1 |
+| Slash commands | /who, /loc, /sit, /camp, /con, /target... | Partial: /say /shout /ooc /auction /tell /em /who /loc /sit /stand /camp /con /target /cast | 1 |
+| Player window | HP, mana, stamina, experience bars | Partial: HP, mana and experience bars, level; no stamina yet | 1 |
 | Target window | Name, health, consider colour | Written (name in con colour, health bar), to check in Unity | 1 |
 | Consider (C) | Con colour and faction message | Done (faction always indifferent until the faction port) | — |
 | Inventory | Worn slots, bags, weight, money | Partial: window (I) with every worn and general slot and money; click an item then a slot to move or equip it (server checks slot, class, race, two-handed; armour and weapon apply to combat); saved in the profile. No bags, weight or icons | 2 |
 | Loot | Corpse window | Done: NPCs leave corpses with their loot table's items and coins (legacy rolls, rot timers, killer's rights then free for all), L opens the loot window, Take / Done | — |
 | Merchants, bank, trade | | Todo | 3 |
-| Spell book, spell gems, casting bar | | Todo (server: spells) | 2 |
+| Spell book, spell gems, casting bar | Book pages, 8 gems, memorising, scribing scrolls, casting bar | Partial: book window (B, memorise by gem number), 8 gems (keys 1-8 or click, /cast N), casting bar, Scribe button on scrolls in the inventory, casting animation (t05). Direct damage and heals only; no icons, no memorising time, no spell particles | 2 |
 | Hot buttons, abilities, skills window | | Todo | 2 |
 | Group and guild windows | | Todo | 3 |
-| Buff window | | Todo | 3 |
+| Buff window | | Todo (buff spells are refused until the server applies them) | 3 |
 | Options, key bindings | | Todo | 3 |
 | Login and server select | | Done (IMGUI, to restyle) | — |
 | Character select and creation | 3D models, race/class/deity/city choices, stat points | Partial: race, gender, class, deity, city among the start_zones combinations, bonus points, name; no 3D preview, no face choice | 2 |

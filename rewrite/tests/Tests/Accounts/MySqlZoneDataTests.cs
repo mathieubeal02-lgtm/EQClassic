@@ -22,10 +22,10 @@ public sealed class MySqlZoneDataTests : IDisposable
         Execute(cs, $"CREATE TABLE `{_prefix}spawnentry` (spawngroupID int, npcID int, chance int)");
         Execute(cs, $"INSERT INTO `{_prefix}spawnentry` VALUES (100, 2007, 100), (101, 1, 50), (101, 2, 50), (102, 1, 100)");
         Execute(cs, $"CREATE TABLE `{_prefix}npc_types_without` (id int, name varchar(64), race int, gender int, level int, size float, runspeed float, bodytype int, npc_faction_id int, " +
-                    "class int, hp int, mindmg int, maxdmg int, AC smallint, ATK int, Accuracy int, avoidance int, attack_speed float, STR int, loottable_id int)");
+                    "class int, hp int, mindmg int, maxdmg int, AC smallint, ATK int, Accuracy int, avoidance int, attack_speed float, STR int, loottable_id int, MR int, CR int, DR int, FR int, PR int)");
         Execute(cs, $"INSERT INTO `{_prefix}npc_types_without` VALUES " +
-                    "(2007, 'Guard_Hewet', 71, 0, 10, 6, 1.25, 1, 219, 1, 350, 1, 12, 15, 0, 0, 0, -25, 90, 0), " +
-                    "(1, 'a_rat', 36, 2, 1, -1, 1.3, 21, 0, 1, 16, 1, 4, 5, 0, 0, 0, 0, 75, 137), (2, 'a_snake', 37, 2, 2, 3, 0, 3, 0, 1, 32, 1, 6, 8, 0, 0, 0, 0, 75, 0)");
+                    "(2007, 'Guard_Hewet', 71, 0, 10, 6, 1.25, 1, 219, 1, 350, 1, 12, 15, 0, 0, 0, -25, 90, 0, 30, 31, 32, 33, 34), " +
+                    "(1, 'a_rat', 36, 2, 1, -1, 1.3, 21, 0, 1, 16, 1, 4, 5, 0, 0, 0, 0, 75, 137, 0, 0, 0, 0, 0), (2, 'a_snake', 37, 2, 2, 3, 0, 3, 0, 1, 32, 1, 6, 8, 0, 0, 0, 0, 75, 0, 0, 0, 0, 0, 0)");
         Execute(cs, $"CREATE TABLE `{_prefix}zone_points` (id int, zone varchar(16), x float, y float, z float, target_zone varchar(16), target_x float, target_y float, target_z float, Zrange int, keepX int, keepY int)");
         Execute(cs, $"INSERT INTO `{_prefix}zone_points` VALUES (977, 'qeynos2', 2.66, -148.38, 2.13, 'qeynos', -410.68, 456.42, 2.13, 8, 0, 0), (7, 'qeynos2', 73, 1350, 2.5, 'qeytoqrg', 95, -380, 0, 5, 1, 0), (1, 'qeynos', 0, 0, 0, 'qeynos2', 0, 0, 0, 5, 0, 0)");
         // Same types as the live doors table (dest_zone may be NULL).
@@ -64,7 +64,7 @@ public sealed class MySqlZoneDataTests : IDisposable
         Assert.Equal((1200, 10), (guard.RespawnSeconds, guard.Variance));
         var hewet = Assert.Single(guard.Candidates).Npc;
         Assert.Equal((1.25f, false, 219), (hewet.RunSpeed, hewet.Undead, hewet.PrimaryFaction));
-        Assert.Equal(new NpcCombatStats(1, 350, 1, 12, 15, 0, 0, 0, -25, 90), hewet.Combat);
+        Assert.Equal(new NpcCombatStats(1, 350, 1, 12, 15, 0, 0, 0, -25, 90) { MR = 30, CR = 31, DR = 32, FR = 33, PR = 34 }, hewet.Combat);
         Assert.Equal(1.5f, hewet.Combat.DelaySeconds); // 2 s × (100 - 25) / 100
         var snake = data.Spawns.Single(s => s.Id == 11).Candidates.Single(c => c.Npc.Name == "a_snake").Npc;
         Assert.Equal((1.25f, true), (snake.RunSpeed, snake.Undead)); // runspeed 0 → default; bodytype 3 = undead

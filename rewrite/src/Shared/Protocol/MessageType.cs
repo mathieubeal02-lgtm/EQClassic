@@ -55,4 +55,10 @@ public enum MessageType : byte
     LootContents = 47,
     PlayerInventory = 48,
     MoveItem = 49,
+    SpellBook = 50,
+    MemorizeSpell = 51,
+    CastSpell = 52,
+    SpellCast = 53,
+    PlayerMana = 54,
+    ScribeScroll = 55,
 }

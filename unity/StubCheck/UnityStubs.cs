@@ -103,6 +103,7 @@ namespace UnityEngine
     {
         Tab = 9, Escape = 27, Space = 32, Q = 113, C = 99, E = 101, F = 102, I = 105, L = 108, R = 114, T = 116, U = 117, X = 120, Numlock = 300, RightShift = 303, LeftShift = 304,
         Home = 278, PageUp = 280, PageDown = 281, F9 = 290, Return = 13, KeypadEnter = 271, Slash = 47,
+        B = 98, Alpha1 = 49, Alpha2 = 50, Alpha3 = 51, Alpha4 = 52, Alpha5 = 53, Alpha6 = 54, Alpha7 = 55, Alpha8 = 56,
     }
     public enum RuntimeInitializeLoadType { AfterSceneLoad, BeforeSceneLoad }
 
@@ -272,16 +273,22 @@ namespace UnityEngine
         public static void Box(Rect position, string text) { }
         public static GUISkin skin => null;
         public static void Label(Rect position, string text) { }
+        public static bool Button(Rect position, string text) => false;
     }
+
+    public sealed class GUILayoutOption { }
 
     public static class GUILayout
     {
         public static void BeginArea(Rect screenRect, GUIStyle style) { }
         public static void EndArea() { }
-        public static void Label(string text) { }
+        public static void Label(string text, params GUILayoutOption[] options) { }
         public static string TextField(string text) => text;
         public static string PasswordField(string password, char maskChar) => password;
-        public static bool Button(string text) => false;
+        public static bool Button(string text, params GUILayoutOption[] options) => false;
+        public static GUILayoutOption Width(float width) => new GUILayoutOption();
+        public static Vector2 BeginScrollView(Vector2 scrollPosition, params GUILayoutOption[] options) => scrollPosition;
+        public static void EndScrollView() { }
         public static void Space(float pixels) { }
         public static int SelectionGrid(int selected, string[] texts, int xCount) => selected;
         public static int Toolbar(int selected, string[] texts) => selected;
@@ -305,6 +312,7 @@ namespace Lantern.EQ.Animation
     {
         CombatKick = 1, CombatPiercing = 2, Combat2HSlash = 3, Combat2HBlunt = 4, Combat1HSlash = 5, CombatHandToHand = 8,
         Damage1 = 12, LocomotionWalk = 17, LocomotionRun = 18, PassiveStand = 32, PassiveSitting = 38,
+        SpellCastDefense = 42, SpellCastGeneral = 43, SpellCastMissile = 44,
     }
 
     public class CharacterAnimationController : UnityEngine.MonoBehaviour

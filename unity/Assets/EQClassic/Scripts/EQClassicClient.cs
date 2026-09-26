@@ -25,6 +25,8 @@ namespace EQClassic.Unity
         private readonly System.Collections.Generic.List<string> _messages = new System.Collections.Generic.List<string>();
         private bool _chatOpen;
         private bool _inventoryOpen;
+        private bool _bookOpen;
+        private Vector2 _bookScroll;
 
         private static readonly string[] SlotNames =
         {
@@ -99,6 +101,11 @@ namespace EQClassic.Unity
                     _client.Loot();
                 if (Input.GetKeyDown(KeyCode.I))
                     _inventoryOpen = !_inventoryOpen;
+                if (Input.GetKeyDown(KeyCode.B))
+                    _bookOpen = !_bookOpen;
+                for (int gem = 0; gem < GameClient.GemCount; gem++)
+                    if (Input.GetKeyDown(KeyCode.Alpha1 + gem))
+                        _client.Cast(gem);
                 if (Input.GetKeyDown(KeyCode.Escape))
                     _client.SetTarget(null);
                 _presenter.Present(_client, Time.deltaTime);
@@ -213,7 +220,12 @@ namespace EQClassic.Unity
                 var item = inventory.Slots[slot];
                 string where = slot < SlotNames.Length ? SlotNames[slot] : $"General {slot - SlotNames.Length + 1}";
                 string what = item.ItemId == 0 ? "-" : item.Charges > 1 ? $"{item.Name} ({item.Charges})" : item.Name;
-                if (GUILayout.Button($"{where}: {what}"))
+                GUILayout.BeginHorizontal();
+                if (item.Name.StartsWith("Spell: ") && GUILayout.Button("Scribe", GUILayout.Width(60)))
+                    _client.Scribe(slot);
+                bool clicked = GUILayout.Button($"{where}: {what}");
+                GUILayout.EndHorizontal();
+                if (clicked)
                 {
                     if (_heldSlot is int from)
                     {
@@ -228,6 +240,53 @@ namespace EQClassic.Unity
                 }
             }
             GUILayout.Label($"{inventory.Platinum} pp  {inventory.Gold} gp  {inventory.Silver} sp  {inventory.Copper} cp");
+            GUILayout.EndArea();
+        }
+
+        /// <summary>
+        /// The spell gems (keys 1-8, or click): the memorised spells with their mana cost, dimmed while
+        /// casting or short of mana.
+        /// </summary>
+        private void DrawGems()
+        {
+            if (_client.SpellBook == null || _client.MaxMana <= 0 && _client.SpellBook.Spells.Count == 0)
+                return;
+            for (int gem = 0; gem < GameClient.GemCount; gem++)
+            {
+                var spell = _client.GemSpell(gem);
+                var colour = GUI.color;
+                if (spell != null && (spell.Mana > _client.Mana || _client.Casting != null))
+                    GUI.color = new Color(1f, 1f, 1f, 0.5f);
+                if (GUI.Button(new Rect(10, 100 + 26 * gem, 190, 22), spell == null ? $"{gem + 1}  -" : $"{gem + 1}  {spell.Name} ({spell.Mana})") && spell != null)
+                    _client.Cast(gem);
+                GUI.color = colour;
+            }
+        }
+
+        /// <summary>The spell book (B): every scribed spell by level; a gem button memorises it there.</summary>
+        private void DrawBook()
+        {
+            GUILayout.BeginArea(new Rect(Screen.width / 2 - 260, 80, 520, Screen.height - 200), GUI.skin.box);
+            GUILayout.Label("Spell book - click a gem number to memorize");
+            var book = _client.SpellBook;
+            if (book == null || book.Spells.Count == 0)
+                GUILayout.Label(book == null ? "(not received yet)" : "No spells scribed. Scribe a scroll from the inventory (I).");
+            else
+            {
+                _bookScroll = GUILayout.BeginScrollView(_bookScroll);
+                foreach (var spell in book.Spells)
+                {
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label($"{spell.Level,2}  {spell.Name}  - {spell.Mana} mana, {spell.CastMs / 1000f:0.#} s", GUILayout.Width(300));
+                    for (int gem = 0; gem < GameClient.GemCount; gem++)
+                        if (GUILayout.Button((gem + 1).ToString(), GUILayout.Width(22)))
+                            _client.Memorize(gem, spell.SpellId);
+                    GUILayout.EndHorizontal();
+                }
+                GUILayout.EndScrollView();
+            }
+            if (GUILayout.Button("Close"))
+                _bookOpen = false;
             GUILayout.EndArea();
         }
 
@@ -300,16 +359,21 @@ namespace EQClassic.Unity
             var state = _client?.State ?? GameState.Disconnected;
             if (state == GameState.InZone)
             {
-                GUI.Label(new Rect(10, 10, 1200, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows move, Q/E turn, R autorun, Shift walk, Space jump, X sit, right mouse look, wheel zoom, F9 view, U door, Tab target, T face, C consider, F attack, L loot, I inventory");
+                GUI.Label(new Rect(10, 10, 1200, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows move, Q/E turn, R autorun, Shift walk, Space jump, X sit, right mouse look, wheel zoom, F9 view, U door, Tab target, T face, C consider, F attack, L loot, I inventory, B spell book, 1-8 cast");
                 if (_presenter.MissingZone != null)
                     GUI.Box(new Rect(Screen.width / 2 - 300, 80, 600, 44),
                         $"The zone '{_presenter.MissingZone}' is not installed in this client (not imported from Lantern).\nYou are there for the server, but nothing can be drawn.");
                 DrawBar(new Rect(10, 34, 220, 16), _client.MaxHp > 0 ? (float)_client.Hp / _client.MaxHp : 0f, new Color(0.8f, 0.1f, 0.1f),
                     $"{_client.Hp} / {_client.MaxHp}" + (_client.AutoAttacking ? "  attacking" : "") + (_client.Sitting ? "  sitting" : ""));
+                if (_client.MaxMana > 0)
+                    DrawBar(new Rect(10, 52, 220, 12), (float)_client.Mana / _client.MaxMana, new Color(0.2f, 0.3f, 0.9f), $"{_client.Mana} / {_client.MaxMana}");
                 if (_client.Experience is { } xp)
-                    DrawBar(new Rect(10, 54, 220, 8), xp.Fraction, new Color(0.9f, 0.8f, 0.2f), "");
+                    DrawBar(new Rect(10, 66, 220, 8), xp.Fraction, new Color(0.9f, 0.8f, 0.2f), "");
                 if (_client.Experience is { } lvl)
-                    GUI.Label(new Rect(10, 62, 220, 20), $"Level {lvl.Level}  {(int)(lvl.Fraction * 100)}%");
+                    GUI.Label(new Rect(10, 74, 220, 20), $"Level {lvl.Level}  {(int)(lvl.Fraction * 100)}%");
+                if (_client.Casting is { } casting)
+                    DrawBar(new Rect(Screen.width / 2 - 150, Screen.height - 320, 300, 16), _client.CastProgress, new Color(0.7f, 0.3f, 0.9f), casting.SpellName);
+                DrawGems();
                 if (_client.TargetId is int target && _client.Zone?.Get(target) is { } t)
                 {
                     var colour = GUI.color;
@@ -323,6 +387,8 @@ namespace EQClassic.Unity
                     DrawLoot(corpse);
                 if (_inventoryOpen)
                     DrawInventory();
+                if (_bookOpen)
+                    DrawBook();
                 return;
             }
 
@@ -399,6 +465,7 @@ namespace EQClassic.Unity
             _client = new GameClient(string.IsNullOrWhiteSpace(_fingerprint) ? null : _fingerprint.Trim());
             _client.ZoneEntered += zone => _presenter.Enter(zone);
             _client.CombatReceived += _presenter.OnCombat;
+            _client.SpellCastReceived += _presenter.OnSpellCast;
             _client.ZoneInfoReceived += _presenter.ApplyZoneInfo;
             _client.MessageReceived += AddMessage;
             _client.Connect(_host, int.TryParse(_port, out var p) ? p : 5999);

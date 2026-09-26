@@ -68,6 +68,7 @@ public sealed class CharacterCreation
         ProfileTemplate.SetZone(p, r.StartZone);
         ProfileTemplate.SetLanguages(p, CreationRules.Languages(r.Race));
         ProfileTemplate.SetCurHp(p, EQClassic.Server.Combat.CombatFormulas.ClientBaseHp(1, r.Class, r.Stats.Sta));
+        ProfileTemplate.SetMana(p, EQClassic.Server.Spells.SpellRules.MaxMana(r.Class, 1, r.Stats.Wis, r.Stats.Int));
         if (_data.StartPosition(r.StartZone, r.Race, r.Class) is var (x, y, z))
         {
             ProfileTemplate.SetPosition(p, x, y, z);

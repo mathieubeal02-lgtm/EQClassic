@@ -22,6 +22,9 @@ public interface ICharacterStore
 
     /// <summary>The 30 inventory slots (item ids and charges) and the money, into the profile.</summary>
     void SaveInventory(string name, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins);
+
+    /// <summary>Spell book, memorised gems and current mana, into the profile.</summary>
+    void SaveSpells(string name, IReadOnlyList<int> book, IReadOnlyList<int> gems, int mana);
 }
 
 public static class CharacterStoreExtensions
@@ -82,6 +85,23 @@ public sealed class InMemoryCharacterStore : ICharacterStore
         _characters[i] = c with { Profile = c.Profile with { Inventory = items.ToArray(), Charges = charges.ToArray(), Coins = coins } };
         if (Profiles.TryGetValue(name, out var raw))
             WriteInventory(raw, items, charges, coins);
+    }
+
+    public void SaveSpells(string name, IReadOnlyList<int> book, IReadOnlyList<int> gems, int mana)
+    {
+        int i = _characters.FindIndex(c => string.Equals(c.Profile.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (i < 0)
+            return;
+        var c = _characters[i];
+        _characters[i] = c with { Profile = c.Profile with { SpellBook = book.ToArray(), SpellGemIds = gems.ToArray(), Mana = mana } };
+        if (Profiles.TryGetValue(name, out var raw))
+            WriteSpells(raw, book, gems, mana);
+    }
+
+    internal static void WriteSpells(byte[] profile, IReadOnlyList<int> book, IReadOnlyList<int> gems, int mana)
+    {
+        ProfileTemplate.SetSpells(profile, book, gems);
+        ProfileTemplate.SetMana(profile, mana);
     }
 
     internal static void WriteInventory(byte[] profile, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins)
@@ -168,6 +188,9 @@ public sealed class MySqlCharacterStore : ICharacterStore
 
     public void SaveInventory(string name, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins) =>
         Update(name, profile => InMemoryCharacterStore.WriteInventory(profile, items, charges, coins));
+
+    public void SaveSpells(string name, IReadOnlyList<int> book, IReadOnlyList<int> gems, int mana) =>
+        Update(name, profile => InMemoryCharacterStore.WriteSpells(profile, book, gems, mana));
 
     /// <summary>Read-modify-write of one profile in a transaction.</summary>
     private void Update(string name, Action<byte[]> change)

@@ -30,6 +30,9 @@ public sealed record PlayerProfile(
     private const int ItemPropertiesOffset = 348, ItemPropertiesSize = 10;
     public const int CoinsOffset = 2460;
     private const int SkillsOffset = 2508, SkillCount = 74;
+    // mana (int16) at 70, INT 127, WIS 129; spell_book[256] and spell_memory[8] (int16, 0xFFFF: empty).
+    public const int ManaOffset = 70, IntOffset = 127, WisOffset = 129;
+    public const int SpellBookOffset = 1878, SpellBookSlots = 256, SpellGemsOffset = 2390, SpellGems = 8;
 
     // Combat fields (zone server). Empty arrays when the profile is too short to hold them.
     public int CurHp { get; init; }
@@ -46,6 +49,14 @@ public sealed record PlayerProfile(
     public IReadOnlyList<int> Skills { get; init; } = Array.Empty<int>();
 
     public int Skill(int id) => id < Skills.Count ? Skills[id] : 0;
+
+    public int Int { get; init; }
+    public int Wis { get; init; }
+    public int Mana { get; init; }
+    /// <summary>Spell ids by spell book page slot, −1 for an empty slot.</summary>
+    public IReadOnlyList<int> SpellBook { get; init; } = Array.Empty<int>();
+    /// <summary>Spell ids memorised in the 8 gems, −1 for an empty gem.</summary>
+    public IReadOnlyList<int> SpellGemIds { get; init; } = Array.Empty<int>();
 
     public uint Exp { get; init; }
     /// <summary>Where death sends the character (bind point, slot 0); empty zone when unknown.</summary>
@@ -84,6 +95,11 @@ public sealed record PlayerProfile(
             Sta = profile[StaOffset],
             Dex = profile[DexOffset],
             Agi = profile[AgiOffset],
+            Int = profile[IntOffset],
+            Wis = profile[WisOffset],
+            Mana = BinaryPrimitives.ReadInt16LittleEndian(profile[ManaOffset..]),
+            SpellBook = ReadSpells(profile, SpellBookOffset, SpellBookSlots),
+            SpellGemIds = ReadSpells(profile, SpellGemsOffset, SpellGems),
             Inventory = ReadInventory(profile),
             Charges = ReadCharges(profile),
             Coins = new EQClassic.Server.Zone.Coins(
@@ -101,6 +117,14 @@ public sealed record PlayerProfile(
         for (int i = 0; i < InventorySlots; i++)
             slots[i] = BinaryPrimitives.ReadUInt16LittleEndian(profile[(InventoryOffset + 2 * i)..]) is var id && id != 0xFFFF ? id : 0; // 0xFFFF: empty
         return slots;
+    }
+
+    private static int[] ReadSpells(ReadOnlySpan<byte> profile, int offset, int count)
+    {
+        var spells = new int[count];
+        for (int i = 0; i < count; i++)
+            spells[i] = BinaryPrimitives.ReadUInt16LittleEndian(profile[(offset + 2 * i)..]) is var id && id is not (0xFFFF or 0) ? id : -1; // 0 is no spell either
+        return spells;
     }
 
     private static int[] ReadCharges(ReadOnlySpan<byte> profile)
