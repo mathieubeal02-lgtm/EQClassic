@@ -16,8 +16,10 @@ local movement), tested without Unity. The Unity project only draws: three scrip
 ## Steps
 
 ```sh
-# 1. Export the zones you want (characters come with each zone's _chr file)
+# 1. Export the zones you want (their creatures come with each zone's _chr file), and the
+#    player races, which live in the global character archives
 tools/lantern/extract.sh ~/eq-client qeynos2 grobb permafrost
+tools/lantern/extract.sh ~/eq-client global_chr.s3d global2_chr.s3d global3_chr.s3d global4_chr.s3d
 
 # 2. Assemble the Unity project in build/unity-client (LanternUnityTools + our scripts and DLLs + exports)
 tools/unity/setup-client.sh
@@ -71,7 +73,8 @@ the editor.
 | Works (tested) | Not yet |
 |---|---|
 | Login, world and zone connection chain, zone changes (`GameClientTests`) | Player builds: prefabs load in the Editor only; asset bundles are the next step |
-| Played in Unity 2021.3.18f1 on Linux against the rewrite server and the live database: login, world, character list, Qeynos drawn with its textures and the citizens' models, 182 entities, walking | Player race models (`hum`, `trm`...): they are in `global_chr`, not in the zone exports; players and some NPCs are capsules |
+| Played in Unity 2021.3.18f1 on Linux against the rewrite server and the live database: login, world, character list, Qeynos drawn with its textures and the citizens' models, 182 entities, walking | Races missing from `ModelCodes` or from the exports draw a capsule |
 | Entities drawn at interpolated positions, the local player moved from input on the zone's collision mesh (ground, steps up to 6 units, walls at waist height, edge of the zone) | Doors and objects do not block (not in the collision mesh); no jumping or swimming |
-| Race → Lantern model code for the races checked in the exports (`ModelCodes`) | Animations (idle pose only), equipment, nameplates, chat, combat |
+| Race → Lantern model code for the races checked in the exports (`ModelCodes`), player races from `global_chr`; models stand on the ground (lifted by their bounds) | Equipment, nameplates, chat, combat animations |
+| Stand, walk and run animations from each entity's speed (Lantern's `CharacterAnimationController`); the camera comes closer when a wall of the collision mesh hides the player | Zone objects (crates, barrels, lamp posts) are not solid: most have no collision mesh in the Trilogy data, the others are not loaded yet |
 | EverQuest ↔ Unity coordinates with Lantern's 0.5 world scale (`Coordinates`) | The full model code table (unknown races draw the fallback model) |

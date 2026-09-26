@@ -33,12 +33,14 @@ namespace EQClassic.ClientCore
             [71] = ("qcm", "qcf"),
         };
 
-        // Only codes checked against this project's Lantern exports of Qeynos and Permafrost (plus the
-        // skeleton of the global character file), matched with the races the database spawns there.
+        // Codes present in this project's Lantern exports (Qeynos, Permafrost and the global_chr
+        // archives), matched with the races the database spawns.
         // Complete it from build/lantern-work/Exports/characters/Skeletons when more zones are exported.
         private static readonly Dictionary<int, string> Others = new Dictionary<int, string>
         {
+            [14] = "wer",  // werewolves
             [18] = "gia",  // giants (Permafrost)
+            [21] = "eye",  // evil eyes
             [22] = "bet",  // beetles
             [24] = "fis",  // fish (a_Koalindl)
             [34] = "bat",
@@ -49,9 +51,13 @@ namespace EQClassic.ClientCore
             [40] = "gob",
             [42] = "wol",
             [43] = "bea",
+            [46] = "imp",
             [49] = "dra",  // Lady Vox
+            [54] = "orc",
             [60] = "ske",
             [68] = "ten",  // icy terrors (Tentacle)
+            [70] = "zom",
+            [75] = "ele",  // elementals
         };
 
         public static string For(int race, int gender)

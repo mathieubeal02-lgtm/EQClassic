@@ -28,6 +28,18 @@ namespace UnityEngine
         public string tag { get; set; }
         public T AddComponent<T>() where T : Component => default;
         public static GameObject CreatePrimitive(PrimitiveType type) => null;
+        public T[] GetComponentsInChildren<T>() => System.Array.Empty<T>();
+        public T GetComponentInChildren<T>() => default;
+    }
+
+    public class Renderer : Component
+    {
+        public Bounds bounds => default;
+    }
+
+    public struct Bounds
+    {
+        public Vector3 min => default;
     }
 
     public class Transform : Component
@@ -141,5 +153,17 @@ namespace UnityEditor
     public static class AssetDatabase
     {
         public static T LoadAssetAtPath<T>(string assetPath) where T : UnityEngine.Object => default;
+    }
+}
+
+// LanternUnityTools (Assets/Scripts/Lantern/EQ/Animation), the members the client uses.
+namespace Lantern.EQ.Animation
+{
+    public enum AnimationType { LocomotionWalk = 17, LocomotionRun = 18, PassiveStand = 32 }
+
+    public class CharacterAnimationController : UnityEngine.MonoBehaviour
+    {
+        public void Initialize(AnimationType initialAnimation) { }
+        public void SetNewConstantState(AnimationType animationType, int priority, float speed = 1f) { }
     }
 }

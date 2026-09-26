@@ -4,6 +4,7 @@
 #
 #   tools/lantern/extract.sh <everquest dir> <zone|all> [zone...]
 #   e.g. tools/lantern/extract.sh ~/eq-client permafrost qeynos2
+#   player race models: tools/lantern/extract.sh ~/eq-client global_chr.s3d global2_chr.s3d global3_chr.s3d global4_chr.s3d
 #
 # Needs the .NET SDK (8+; the project targets net6.0 and is built for net10.0 here) and, on Linux,
 # libgdiplus for the texture conversion (System.Drawing): sudo apt install libgdiplus.

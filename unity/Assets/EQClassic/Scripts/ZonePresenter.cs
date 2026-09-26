@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using EQClassic.ClientCore;
 using EQClassic.Shared.World;
+using Lantern.EQ.Animation;
 using UnityEngine;
 
 namespace EQClassic.Unity
@@ -17,7 +18,21 @@ namespace EQClassic.Unity
         private const string ContentRoot = "Assets/Content/AssetBundleContent/";
 
         private readonly Dictionary<int, GameObject> _objects = new Dictionary<int, GameObject>();
+        private readonly Dictionary<int, Animated> _animated = new Dictionary<int, Animated>();
         private readonly HashSet<string> _missingModels = new HashSet<string>();
+
+        // Speeds (EverQuest units per second) above which a model walks, then runs. NPCs walk at about
+        // 6 u/s and run at about 20; players run at 45.
+        private const float WalkAbove = 1.5f;
+        private const float RunAbove = 14f;
+
+        /// <summary>An imported model's animation controller, with the speed measured from its positions.</summary>
+        private sealed class Animated
+        {
+            public CharacterAnimationController Controller;
+            public Vec3 Last;
+            public float Speed;
+        }
         private GameObject _zoneRoot;
         private ZoneCollisionMesh _mesh;
         private Camera _camera;
@@ -73,13 +88,17 @@ namespace EQClassic.Unity
                 var (x, y, z) = Coordinates.ToUnity(position, Scale);
                 pair.Value.transform.position = new Vector3(x, y, z);
                 pair.Value.transform.rotation = Quaternion.Euler(0f, Coordinates.HeadingToUnityYaw(heading), 0f);
+                if (_animated.TryGetValue(pair.Key, out var animated))
+                    Animate(animated, position, deltaTime);
             }
 
             if (_objects.TryGetValue(player.EntityId, out var me) && _camera != null)
             {
                 var back = me.transform.rotation * new Vector3(0f, 0f, -1f);
-                _camera.transform.position = me.transform.position + back * 12f + new Vector3(0f, 6f, 0f);
-                _camera.transform.LookAt(me.transform.position + new Vector3(0f, 2f, 0f));
+                var head = me.transform.position + new Vector3(0f, 2f, 0f);
+                float distance = CameraDistance(head, back);
+                _camera.transform.position = head + (back * 12f + new Vector3(0f, 4f, 0f)) * distance;
+                _camera.transform.LookAt(head);
             }
         }
 
@@ -91,7 +110,19 @@ namespace EQClassic.Unity
             GameObject go;
             if (prefab != null)
             {
-                go = Instantiate(prefab); // imported character prefabs keep the importer's own scale
+                // Imported character prefabs keep the importer's own scale. Their origin is not at the
+                // feet (EverQuest models are centred), while entity positions are on the ground: lift
+                // the model under an empty parent so the bottom of its bounds touches the ground.
+                go = new GameObject("entity");
+                var model = Instantiate(prefab);
+                model.transform.SetParent(go.transform, false);
+                model.transform.localPosition = new Vector3(0f, FeetOffset(model), 0f);
+                var controller = model.GetComponentInChildren<CharacterAnimationController>();
+                if (controller != null)
+                {
+                    controller.Initialize(AnimationType.PassiveStand);
+                    _animated[entity.Id] = new Animated { Controller = controller, Last = new Vec3(entity.Spawn.X, entity.Spawn.Y, entity.Spawn.Z) };
+                }
             }
             else
             {
@@ -109,6 +140,54 @@ namespace EQClassic.Unity
             _objects[entity.Id] = go;
         }
 
+        /// <summary>
+        /// Fraction (0.05 to 1) of the full camera distance that keeps the camera on the player's
+        /// side of the walls: the view line from the head is tested on the collision mesh.
+        /// </summary>
+        private float CameraDistance(Vector3 head, Vector3 back)
+        {
+            if (_mesh == null)
+                return 1f;
+            var from = Coordinates.FromUnity(head.x, head.y, head.z, Scale);
+            for (float f = 1f; f > 0.05f; f -= 0.05f)
+            {
+                var cam = head + (back * 12f + new Vector3(0f, 4f, 0f)) * f;
+                if (_mesh.LineOfSight(from, Coordinates.FromUnity(cam.x, cam.y, cam.z, Scale)))
+                    return f;
+            }
+            return 0.05f;
+        }
+
+        /// <summary>
+        /// Stand, walk or run from the speed between frames, smoothed so that a late server update
+        /// does not make the model stop for one frame. Missing clips are ignored by the controller.
+        /// </summary>
+        private static void Animate(Animated animated, Vec3 position, float deltaTime)
+        {
+            if (deltaTime <= 0f)
+                return;
+            float dx = position.X - animated.Last.X, dy = position.Y - animated.Last.Y;
+            float speed = (float)System.Math.Sqrt(dx * dx + dy * dy) / deltaTime;
+            animated.Last = position;
+            animated.Speed += (speed - animated.Speed) * System.Math.Min(1f, deltaTime * 8f);
+            var state = animated.Speed > RunAbove ? AnimationType.LocomotionRun
+                : animated.Speed > WalkAbove ? AnimationType.LocomotionWalk
+                : AnimationType.PassiveStand;
+            animated.Controller.SetNewConstantState(state, 0);
+        }
+
+        /// <summary>Height from the lowest point of the model's renderers up to its origin.</summary>
+        private static float FeetOffset(GameObject model)
+        {
+            var renderers = model.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0)
+                return 0f;
+            float lowest = float.MaxValue;
+            foreach (var r in renderers)
+                lowest = System.Math.Min(lowest, r.bounds.min.y);
+            return model.transform.position.y - lowest;
+        }
+
         private void RemoveEntity(int id)
         {
             if (_objects.TryGetValue(id, out var go))
@@ -116,6 +195,7 @@ namespace EQClassic.Unity
                 Destroy(go);
                 _objects.Remove(id);
             }
+            _animated.Remove(id);
         }
 
         private void Clear()
@@ -123,6 +203,7 @@ namespace EQClassic.Unity
             foreach (var go in _objects.Values)
                 Destroy(go);
             _objects.Clear();
+            _animated.Clear();
             if (_zoneRoot != null)
                 Destroy(_zoneRoot);
             _zoneRoot = null;
