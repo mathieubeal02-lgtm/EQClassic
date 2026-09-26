@@ -66,8 +66,8 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 
 | Feature | Trilogy client | Status | Priority |
 |---|---|---|---|
-| Zone music | XMI tracks (LanternUnityTools reads them) | Todo | 3 |
-| Ambient and 3D sounds | Zone sound emitters (in the Lantern export) | Todo | 3 |
+| Zone music | XMI tracks (LanternUnityTools reads them) | Written (music regions with day and night tracks of the zone's XMI, synthesized at run time with MeltySynth and Lantern's soundfont), to check | 3 |
+| Ambient and 3D sounds | Zone sound emitters (in the Lantern export) | Written (ambient loops by region, day and night; positional emitters; the client's WAV sounds), to check | 3 |
 | Combat and spell sounds | | Todo | 3 |
 
 ## Order of work

@@ -51,6 +51,7 @@ namespace EQClassic.Unity
         private readonly CameraRig _rig = new CameraRig(Scale);
         private readonly SkyPresenter _sky = new SkyPresenter();
         private readonly WeatherPresenter _weather = new WeatherPresenter();
+        private ZoneAudio _audio;
         private bool _autorun;
         private float _eyeHeight = 2.5f; // Unity units above the feet; measured from the player's model
         private bool _playerHidden;
@@ -86,6 +87,10 @@ namespace EQClassic.Unity
 
         public void Enter(ZoneView zone)
         {
+            if (_audio == null)
+                _audio = gameObject.AddComponent<ZoneAudio>();
+            _audio.Scale = Scale;
+            _audio.Enter(zone.Zone);
             _playerId = zone.YourEntityId;
             _zone = zone;
             _playerHidden = false;
@@ -182,6 +187,9 @@ namespace EQClassic.Unity
                     SetVisible(me, !(_playerHidden = first)); // first person: do not look out from inside our own model
                 _rig.Place(_camera, me.transform.position, me.transform.rotation, _eyeHeight, _mesh);
                 Underwater(_camera.transform.position);
+                // Music and ambient sounds by region; Norrath's day is 7:00 to 21:00.
+                float hours = client.Clock != null ? (float)client.Clock.HoursAt(client.Now) : 12f;
+                _audio?.Listen(_camera.transform.position, hours >= EqClock.DayStart && hours < EqClock.NightStart);
             }
         }
 
@@ -605,6 +613,7 @@ namespace EQClassic.Unity
                 return;
             var go = new GameObject("EQClassic camera");
             _camera = go.AddComponent<Camera>();
+            go.AddComponent<AudioListener>();
             go.tag = "MainCamera";
             var light = new GameObject("EQClassic light").AddComponent<Light>();
             light.type = LightType.Directional;

@@ -79,6 +79,8 @@ namespace UnityEngine
         public static Vector3 operator +(Vector3 a, Vector3 b) => a;
         public static Vector3 operator *(Vector3 a, float d) => a;
         public static Vector3 operator *(float d, Vector3 a) => a;
+        public static Vector3 operator /(Vector3 a, float d) => a;
+        public static float Distance(Vector3 a, Vector3 b) => 0f;
     }
 
     public struct Quaternion
@@ -240,8 +242,14 @@ namespace UnityEngine
         public static Vector2 mouseScrollDelta => default;
     }
 
+    public static class Random
+    {
+        public static float value => 0f;
+    }
+
     public static class Time
     {
+        public static float time => 0f;
         public static float deltaTime => 0;
         public static int frameCount => 0;
     }
@@ -415,3 +423,79 @@ namespace Lantern.EQ.Environment
         public void UpdateTimeLate(float deltaTime, float currentTime) { }
     }
 }
+
+// Audio (zone music and sounds).
+namespace UnityEngine
+{
+    public enum AudioRolloffMode { Logarithmic, Linear, Custom }
+
+    public sealed class AudioClip : Object
+    {
+        public static AudioClip Create(string name, int lengthSamples, int channels, int frequency, bool stream) => null;
+        public bool SetData(float[] data, int offsetSamples) => true;
+    }
+
+    public sealed class AudioSource : Behaviour
+    {
+        public AudioClip clip { get; set; }
+        public float volume { get; set; }
+        public float spatialBlend { get; set; }
+        public bool loop { get; set; }
+        public bool isPlaying => false;
+        public float minDistance { get; set; }
+        public float maxDistance { get; set; }
+        public AudioRolloffMode rolloffMode { get; set; }
+        public void Play() { }
+        public void Stop() { }
+        public void PlayOneShot(AudioClip clip, float volumeScale) { }
+    }
+
+    public sealed class AudioListener : Behaviour { }
+
+    public static class AudioSettings
+    {
+        public static int outputSampleRate => 48000;
+    }
+}
+
+// LanternUnityTools' runtime MeltySynth and XMI reader (Assets/Scripts/Infrastructure/EQ/MeltySynth, Lantern/EQ/Audio/Xmi).
+namespace Infrastructure.EQ.MeltySynth
+{
+    public sealed class Synthesizer
+    {
+        public Synthesizer(string soundFontPath, int sampleRate) { }
+        public float MasterVolume { get; set; }
+    }
+
+    public sealed class MidiFile
+    {
+        public MidiFile(System.IO.Stream stream) { }
+    }
+
+    public sealed class MidiFileSequencer
+    {
+        public MidiFileSequencer(Synthesizer synthesizer) { }
+        public void Play(MidiFile midiFile, bool loop) { }
+        public void Stop() { }
+        public void Render(System.Span<float> left, System.Span<float> right) { }
+    }
+}
+
+namespace Lantern.EQ.Audio.Xmi
+{
+    public sealed class FormChunk { }
+
+    public sealed class XmiFile
+    {
+        public FormChunk[] XmidiTracks => System.Array.Empty<FormChunk>();
+        public System.IO.Stream WriteMidiTrack(int trackNumber) => new System.IO.MemoryStream();
+    }
+
+    public sealed class XmiFileReader : System.IDisposable
+    {
+        public XmiFileReader(System.IO.Stream stream) { }
+        public XmiFile ReadXmiFile() => new XmiFile();
+        public void Dispose() { }
+    }
+}
+

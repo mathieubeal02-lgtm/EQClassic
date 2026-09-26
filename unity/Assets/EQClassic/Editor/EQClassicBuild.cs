@@ -48,6 +48,12 @@ namespace EQClassic.Unity.Editor
                 var instances = Path.Combine(ClientPaths.Exports, zone, "Zone", "object_instances.txt");
                 if (File.Exists(instances))
                     File.Copy(instances, Path.Combine(StreamingDir, zone + "_objects.txt"), overwrite: true);
+                foreach (var (list, suffix) in new[] { ("music_instances.txt", "_music.txt"), ("sound2d_instances.txt", "_sound2d.txt"), ("sound3d_instances.txt", "_sound3d.txt") })
+                {
+                    var from = Path.Combine(ClientPaths.Exports, zone, "Zone", list);
+                    if (File.Exists(from))
+                        File.Copy(from, Path.Combine(StreamingDir, zone + suffix), overwrite: true); // music and sounds by region
+                }
                 var bsp = Path.Combine(ClientPaths.Exports, zone, "Zone", "bsp_tree.txt");
                 if (File.Exists(bsp))
                     File.Copy(bsp, Path.Combine(StreamingDir, zone + "_bsp.txt"), overwrite: true); // water and lava
@@ -59,6 +65,17 @@ namespace EQClassic.Unity.Editor
                     using var writer = new StreamWriter(Path.Combine(StreamingDir, zone + "_collision.txt"));
                     mesh.WriteLantern(writer);
                 }
+            }
+            // The client's music (XMI) and sounds (WAV), as LanternExtractor exported them (tools/lantern/extract.sh <client> sounds music).
+            foreach (var folder in new[] { "music", "sounds" })
+            {
+                var from = Path.Combine(ClientPaths.Exports, folder);
+                if (!Directory.Exists(from))
+                    continue;
+                var to = Path.Combine(StreamingDir, folder);
+                Directory.CreateDirectory(to);
+                foreach (var file in Directory.GetFiles(from))
+                    File.Copy(file, Path.Combine(to, Path.GetFileName(file)), overwrite: true);
             }
             if (File.Exists(Content + "Sky/Sky.prefab"))
                 builds.Add(new AssetBundleBuild { assetBundleName = ClientBundles.SkyBundle, assetNames = new[] { Content + "Sky/Sky.prefab" } });
