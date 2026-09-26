@@ -47,6 +47,7 @@ namespace UnityEngine
     public class Renderer : Component
     {
         public bool enabled { get; set; }
+        public Material[] sharedMaterials { get; set; }
         public Bounds bounds => default;
     }
 
@@ -155,6 +156,14 @@ namespace UnityEngine
     {
         public Material(Shader shader) { }
         public Color color { get; set; }
+        public Texture mainTexture { get; set; }
+    }
+
+    public enum AnisotropicFiltering { Disable, Enable, ForceEnable }
+
+    public static class QualitySettings
+    {
+        public static AnisotropicFiltering anisotropicFiltering { get; set; }
     }
 
     // Particle systems (weather).
@@ -275,7 +284,12 @@ namespace UnityEngine
         public static void LogWarning(object message) { }
     }
 
-    public class Texture : Object { }
+    public class Texture : Object
+    {
+        public FilterMode filterMode { get; set; }
+        public int anisoLevel { get; set; }
+        public static void SetGlobalAnisotropicFilteringLimits(int forcedMin, int globalMax) { }
+    }
 
     public enum TextureFormat { RGBA32 = 4 }
     public enum FilterMode { Point, Bilinear, Trilinear }
@@ -286,7 +300,6 @@ namespace UnityEngine
         public Texture2D(int width, int height) { }
         public Texture2D(int width, int height, TextureFormat format, bool mipChain) { }
         public void LoadRawTextureData(byte[] data) { }
-        public FilterMode filterMode { get; set; }
         public TextureWrapMode wrapMode { get; set; }
         public int width => 0;
         public int height => 0;

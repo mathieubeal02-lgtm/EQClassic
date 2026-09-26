@@ -106,6 +106,8 @@ namespace EQClassic.Unity
             Clear();
             var zonePrefab = LoadPrefab(ContentRoot + "Zones/" + zone.Zone + "/" + zone.Zone + ".prefab");
             _zoneRoot = zonePrefab != null ? Instantiate(zonePrefab) : null; // the prefab carries the 0.5 world scale
+            if (_zoneRoot != null)
+                Sharpen(_zoneRoot);
             MissingZone = _zoneRoot == null ? zone.Zone : null;
             if (_zoneRoot == null)
             {
@@ -298,6 +300,25 @@ namespace EQClassic.Unity
             return File.Exists(path) ? ZoneRegions.Load(path) : null;
         }
 
+        private static readonly HashSet<Texture> Sharpened = new HashSet<Texture>();
+
+        /// <summary>
+        /// Finer textures at a slant: trilinear filtering and 8× anisotropy on the textures of the zone and
+        /// the models (they come with mipmaps from the import, but filtered for a flat look).
+        /// </summary>
+        private static void Sharpen(GameObject root)
+        {
+            QualitySettings.anisotropicFiltering = AnisotropicFiltering.ForceEnable;
+            Texture.SetGlobalAnisotropicFilteringLimits(8, 16);
+            foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+                foreach (var material in renderer.sharedMaterials)
+                    if (material != null && material.mainTexture is { } texture && Sharpened.Add(texture))
+                    {
+                        texture.filterMode = FilterMode.Trilinear;
+                        texture.anisoLevel = 8;
+                    }
+        }
+
         /// <summary>EQC_DEBUG_MODELS=1: every character model is described in the log (active renderers, bounds).</summary>
         private static readonly bool DebugModels = System.Environment.GetEnvironmentVariable("EQC_DEBUG_MODELS") == "1";
 
@@ -362,6 +383,7 @@ namespace EQClassic.Unity
                 model.transform.localPosition = new Vector3(0f, FeetOffset(model), 0f);
                 // The armour and helmet the server gives (NPC texture / helmtexture, a player's chest and head material).
                 ApplyVariant(model, entity.Spawn.Texture, entity.Spawn.Helm);
+                Sharpen(model);
                 if (DebugModels)
                 {
                     var renderers = model.GetComponentsInChildren<Renderer>(false);
