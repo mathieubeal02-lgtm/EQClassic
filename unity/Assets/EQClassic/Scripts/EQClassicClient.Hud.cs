@@ -87,6 +87,8 @@ namespace EQClassic.Unity
         private void DrawHud()
         {
             EnsureStyles();
+            WorldClick(); // with last frame's interface rectangles
+            _uiRects.Clear();
             // Windows the game opens by itself bring the inventory with them.
             if (_client.Merchant != null || _client.Trade != null || _client.Bank != null)
                 _layout.SetOpen(HudLayout.Inventory, true);
@@ -222,9 +224,41 @@ namespace EQClassic.Unity
                 ClassicPopup(new Rect(W - side - 300, H * 0.35f, 290, 220));
         }
 
+        /// <summary>Where the interface was drawn over the 3D view last frame: clicks there are not world clicks.</summary>
+        private readonly List<Rect> _uiRects = new List<Rect>();
+
+        /// <summary>A left click in the 3D view, not on the interface: targets the character under the mouse.</summary>
+        private void WorldClick()
+        {
+            var e = Event.current;
+            if (e == null || e.type != EventType.MouseDown || e.button != 0 || _editingHotButton != null)
+                return;
+            var p = e.mousePosition;
+            var vp = _presenter.Viewport;
+            var view = new Rect(vp.x * Screen.width, (1f - vp.y - vp.height) * Screen.height, vp.width * Screen.width, vp.height * Screen.height);
+            if (!view.Contains(p))
+                return;
+            foreach (var r in _uiRects)
+                if (r.Contains(p))
+                    return;
+            if (_layout.Mode == UiMode.Windows)
+                foreach (var w in _layout.Windows)
+                    if (w.Open && new Rect(w.X, w.Y, w.Width, w.Height).Contains(p))
+                        return;
+            foreach (var r in _transientWindows.Values)
+                if (r.Contains(p))
+                    return;
+            if (_presenter.PickAt(p) is int id)
+            {
+                _client.SetTarget(id);
+                e.Use();
+            }
+        }
+
         /// <summary>A dark box in the 3D view with a title, the module inside.</summary>
         private void ViewBox(Rect r, string title, System.Action<Rect> draw)
         {
+            _uiRects.Add(r);
             Fill(r, new Color(0.1f, 0.1f, 0.12f, 0.85f));
             GUI.Label(new Rect(r.x + 8, r.y + 4, r.width - 16, 22), title, _heading);
             draw(new Rect(r.x + 8, r.y + 28, r.width - 16, r.height - 34));

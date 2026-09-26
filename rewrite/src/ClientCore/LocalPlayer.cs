@@ -49,7 +49,8 @@ namespace EQClassic.ClientCore
         {
             if (degrees == 0)
                 return;
-            Heading = ((Heading + degrees) % 360f + 360f) % 360f;
+            // Positive turns right on screen: the world is drawn mirrored, so the heading goes down.
+            Heading = ((Heading - degrees) % 360f + 360f) % 360f;
             _dirty = true;
         }
 
@@ -164,12 +165,12 @@ namespace EQClassic.ClientCore
             _dirty = true;
         }
 
-        /// <summary>forward/strafe in [-1, 1], turn in [-1, 1] (positive = clockwise).</summary>
+        /// <summary>forward/strafe in [-1, 1], turn in [-1, 1] (positive = to the right as the player sees it).</summary>
         public void Move(float forward, float strafe, float turn, float seconds, Func<float, float, float, float>? groundZ = null)
         {
             if (turn != 0)
             {
-                Heading = (Heading + turn * TurnDegreesPerSecond * seconds + 360f) % 360f;
+                Heading = ((Heading - turn * TurnDegreesPerSecond * seconds) % 360f + 360f) % 360f; // positive: right on screen
                 _dirty = true;
             }
             if (forward == 0 && strafe == 0)

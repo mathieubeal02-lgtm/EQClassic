@@ -163,7 +163,7 @@ public sealed class GameClientTests : IDisposable
         client.MessageReceived += messages.Add;
         Run(() => client.Zone!.Doors.Count == 2);
         var player = client.Player!;
-        player.Move(0, 0, turn: -1, seconds: player.Heading / LocalPlayer.TurnDegreesPerSecond); // face north (heading 0)
+        player.Move(0, 0, turn: 1, seconds: player.Heading / LocalPlayer.TurnDegreesPerSecond); // face north (heading 0)
         for (int i = 0; i < 10; i++)                                                           // 22.5 units in 0.5 s, next to the cell door
         {
             player.Move(forward: 1, strafe: 0, turn: 0, seconds: 0.05f);
@@ -372,7 +372,7 @@ public sealed class GameClientTests : IDisposable
     private static void SetHeading(LocalPlayer p, float heading)
     {
         float turn = ((heading - p.Heading) % 360f + 540f) % 360f - 180f;
-        p.Move(0, 0, turn / (LocalPlayer.TurnDegreesPerSecond * 1f), 1f);
+        p.Move(0, 0, -turn / (LocalPlayer.TurnDegreesPerSecond * 1f), 1f); // a positive turn lowers the heading
     }
 
     private GameClient InZone(string character)

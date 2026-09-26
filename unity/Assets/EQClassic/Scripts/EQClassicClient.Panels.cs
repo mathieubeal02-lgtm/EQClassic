@@ -352,6 +352,7 @@ namespace EQClassic.Unity
         private void ChatPanel(Rect r, Rect screen, bool parchment = false)
         {
             _chatScreenRect = screen;
+            _uiRects.Add(screen);
             float input = _chatOpen ? 26f : 0f;
             _chatLinesShown = Mathf.Max(1, (int)((r.height - input) / 18f));
             var lines = _chat.Visible(_chatLinesShown);

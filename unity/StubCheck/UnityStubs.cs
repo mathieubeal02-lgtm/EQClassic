@@ -24,6 +24,7 @@ namespace UnityEngine
     public sealed class GameObject : Object
     {
         public GameObject(string name) { }
+        public void SetActive(bool value) { }
         public Transform transform => null;
         public string tag { get; set; }
         public T AddComponent<T>() where T : Component => default;
@@ -229,8 +230,9 @@ namespace UnityEngine
 
     public struct Color
     {
-        public Color(float r, float g, float b) { }
-        public Color(float r, float g, float b, float a) { }
+        public float r, g, b, a;
+        public Color(float r, float g, float b) { this.r = r; this.g = g; this.b = b; a = 1f; }
+        public Color(float r, float g, float b, float a) { this.r = r; this.g = g; this.b = b; this.a = a; }
         public static Color white => default;
         public static Color black => default;
         public static Color Lerp(Color a, Color b, float t) => a;
@@ -328,6 +330,8 @@ namespace UnityEngine
         public static float Clamp(float value, float min, float max) => value;
         public static float Max(float a, float b) => a;
         public static float Min(float a, float b) => a;
+        public static float Abs(float f) => f;
+        public static float Lerp(float a, float b, float t) => a;
         public static int RoundToInt(float f) => 0;
         public static int Clamp(int value, int min, int max) => value;
         public static int Min(int a, int b) => a;

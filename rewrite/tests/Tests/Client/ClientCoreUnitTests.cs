@@ -218,13 +218,13 @@ public class ClientCoreUnitTests
     [Fact]
     public void Mouse_turns_and_walking_slows_down()
     {
-        var player = new LocalPlayer(1, new Vec3(0, 0, 0), heading: 350);
-        player.Turn(20);
-        Assert.Equal(10f, player.Heading, precision: 3);
+        var player = new LocalPlayer(1, new Vec3(0, 0, 0), heading: 10);
+        player.Turn(20);                                   // to the right on screen: the heading goes down (mirrored world)
+        Assert.Equal(350f, player.Heading, precision: 3);
         player.Turn(-30);
-        Assert.Equal(340f, player.Heading, precision: 3);
+        Assert.Equal(20f, player.Heading, precision: 3);
 
-        player.Turn(-340); // face north
+        player.Turn(20); // face north
         player.Walking = true;
         player.Move(forward: 1, strafe: 0, turn: 0, seconds: 1);
         Assert.Equal(LocalPlayer.WalkSpeed, player.Position.Y, precision: 3);

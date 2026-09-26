@@ -120,13 +120,8 @@ public sealed partial class ZoneServer
             else
                 Tell(peer, "You need a target.");
         }),
-        new("invul", GmStatus, "[on|off] - your target (or you) cannot be hurt", (peer, p, a) =>
-        {
-            var t = (Target(p) ?? Me(p))!;
-            bool on = a.Length < 2 ? !t.GmInvulnerable : a[1] is "on" or "1";
-            p.Instance.GmInvulnerable(t.Id, on);
-            Tell(peer, $"{ZoneServer.DisplayName(t.Name)} is {(on ? "now" : "no longer")} invulnerable.");
-        }),
+        new("invul", GmStatus, "[on|off] - your target (or you) cannot be hurt (also #invulnerable)", InvulCommand),
+        new("invulnerable", GmStatus, "[on|off]", InvulCommand),
         new("summonitem", GmStatus, "<item id> [charges] - an item into your inventory (also #si)", SummonItemCommand),
         new("si", GmStatus, "<item id> [charges]", SummonItemCommand),
         new("givemoney", GmStatus, "<copper> [silver] [gold] [platinum] - money for you", (peer, p, a) =>
@@ -152,6 +147,14 @@ public sealed partial class ZoneServer
         }),
         new("npcstats", GmStatus, "- about your target NPC", (peer, p, _) => Tell(peer, Target(p) is { } t ? p.Instance.GmNpcStats(t.Id) : "Target an NPC.")),
     ];
+
+    private void InvulCommand(NetPeer peer, Player p, string[] a)
+    {
+        var t = (Target(p) ?? Me(p))!;
+        bool on = a.Length < 2 ? !t.GmInvulnerable : a[1] is "on" or "1";
+        p.Instance.GmInvulnerable(t.Id, on);
+        Tell(peer, $"{DisplayName(t.Name)} is {(on ? "now" : "no longer")} invulnerable.");
+    }
 
     private void SummonItemCommand(NetPeer peer, Player p, string[] a)
     {

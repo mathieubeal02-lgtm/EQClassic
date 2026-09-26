@@ -190,6 +190,7 @@ namespace EQClassic.Unity
             foreach (var door in _doors.Values)
                 AnimateDoor(door, deltaTime);
             _sky.Update(_camera, client, deltaTime);
+            DarkenFogAtNight(client);
             _weather.Update(_camera, client.Weather);
 
             if (_objects.TryGetValue(player.EntityId, out var me) && _playerLight == null)
@@ -211,6 +212,55 @@ namespace EQClassic.Unity
         private ZoneRegions _regions;
         private (Color Colour, float Start, float End)? _zoneFog;
         private bool _underwater;
+
+        /// <summary>
+        /// The zone's fog (and the background behind the sky) follows the daylight: at night the cfg's
+        /// daytime colour lit the distance bright against a dark sky (Oasis's sand yellow at midnight).
+        /// </summary>
+        private void DarkenFogAtNight(GameClient client)
+        {
+            if (_underwater || _zoneFog is not { } fog || client.Clock is not { } clock)
+                return;
+            float k = Mathf.Lerp(0.15f, 1f, clock.Daylight(client.Now));
+            var colour = new Color(fog.Colour.r * k, fog.Colour.g * k, fog.Colour.b * k);
+            RenderSettings.fogColor = colour;
+            if (_camera != null)
+                _camera.backgroundColor = colour;
+        }
+
+        /// <summary>
+        /// The entity under the mouse in the 3D view (<paramref name="gui"/>: IMGUI position, from the top
+        /// left): each drawn character is taken as the box from its feet to the top of its model on screen;
+        /// the nearest one containing the point wins. Null when there is none.
+        /// </summary>
+        public int? PickAt(Vector2 gui)
+        {
+            if (_camera == null)
+                return null;
+            float x = gui.x, y = Screen.height - gui.y;
+            int? best = null;
+            float bestDepth = float.MaxValue;
+            foreach (var pair in _objects)
+            {
+                if (pair.Key == _playerId || pair.Value == null)
+                    continue;
+                float top = _tops.TryGetValue(pair.Key, out var h) ? h : 2f;
+                var feet = _camera.WorldToScreenPoint(pair.Value.transform.position);
+                var head = _camera.WorldToScreenPoint(pair.Value.transform.position + new Vector3(0f, top, 0f));
+                if (feet.z <= 0f || head.z <= 0f)
+                    continue;
+                float half = Mathf.Max(10f, Mathf.Abs(head.y - feet.y) * 0.3f);
+                if (x < Mathf.Min(feet.x, head.x) - half || x > Mathf.Max(feet.x, head.x) + half
+                    || y < Mathf.Min(feet.y, head.y) - 4f || y > Mathf.Max(feet.y, head.y) + 4f)
+                    continue;
+                if (feet.z < bestDepth)
+                {
+                    bestDepth = feet.z;
+                    best = pair.Key;
+                }
+            }
+            return best;
+        }
 
         /// <summary>Under water the view turns blue-green and short, as in the Trilogy client.</summary>
         private void Underwater(Vector3 cameraPosition)
@@ -268,8 +318,24 @@ namespace EQClassic.Unity
                     armour.SetArmorSetActive(texture, h);
             }
             Set(helm);
+            if (helm != 0)
+                KeepOnlyMainMesh(model);
             if (helm != 0 && model.GetComponentsInChildren<SkinnedMeshRenderer>(false).Length < before)
                 Set(0);
+        }
+
+        private static readonly System.Reflection.FieldInfo MainMeshes =
+            typeof(Lantern.EQ.Equipment.VariantHandler).GetField("_mainMeshes", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        /// <summary>
+        /// For a helmet, Lantern hides the last main mesh as the bare head; on models whose only main
+        /// mesh is the whole body (the Qeynos guards) that left the helmet floating alone: keep it shown.
+        /// </summary>
+        private static void KeepOnlyMainMesh(GameObject model)
+        {
+            var handler = model.GetComponentInChildren<Lantern.EQ.Equipment.NonPlayableVariantHandler>();
+            if (handler != null && MainMeshes?.GetValue(handler) is List<GameObject> meshes && meshes.Count == 1 && meshes[0] != null)
+                meshes[0].SetActive(true);
         }
 
         private void AddEntity(ZoneView.EntityView entity)
@@ -280,14 +346,16 @@ namespace EQClassic.Unity
             GameObject go;
             if (prefab != null)
             {
-                // Imported character prefabs keep the importer's own scale. Their origin is not at the
+                // Imported character prefabs are in EverQuest units (scaled below). Their origin is not at the
                 // feet (EverQuest models are centred), while entity positions are on the ground: lift
                 // the model under an empty parent so the bottom of its bounds touches the ground.
                 go = new GameObject("entity");
                 var model = Instantiate(prefab);
                 model.transform.SetParent(go.transform, false);
                 // The spawn's size relative to its race's usual one (a giant guard, a gnome child...).
-                model.transform.localScale = model.transform.localScale * ModelCodes.Scale(entity.Spawn.Race, entity.Spawn.Size);
+                // Character meshes are in EverQuest units like the zones, whose prefab carries the 0.5
+                // world scale: the models take it too (they stood twice too tall), then the spawn's size.
+                model.transform.localScale = model.transform.localScale * (Scale * ModelCodes.Scale(entity.Spawn.Race, entity.Spawn.Size));
                 model.transform.localPosition = new Vector3(0f, FeetOffset(model), 0f);
                 // The armour and helmet the server gives (NPC texture / helmtexture, a player's chest and head material).
                 ApplyVariant(model, entity.Spawn.Texture, entity.Spawn.Helm);
