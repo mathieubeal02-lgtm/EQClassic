@@ -32,7 +32,7 @@ namespace EQClassic.ClientCore
         {
             [71] = ("qcm", "qcf"),
             // City citizens and guards, and ghosts of playable races, drawn with their race's models.
-            [44] = ("hum", "huf"),  // Freeport guards
+            [44] = ("fpm", "fpm"),  // Freeport guards (their own model)
             [55] = ("hum", "huf"),  // beggars
             [67] = ("hum", "huf"),  // Highpass citizens
             [77] = ("dam", "daf"),  // Neriak citizens
@@ -47,7 +47,7 @@ namespace EQClassic.ClientCore
             [117] = ("dwm", "dwf"), // dwarf ghosts
             [118] = ("erm", "erf"), // Erudite ghosts
             [139] = ("ikm", "ikf"), // Iksar citizens
-            [183] = ("dwm", "dwf"), // Coldain
+            [183] = ("clm", "clf"), // Coldain
         };
 
         // Codes present in this project's Lantern exports (Qeynos, Permafrost and the global_chr
@@ -99,8 +99,17 @@ namespace EQClassic.ClientCore
             [151] = "tri", // the Tribunal
             [155] = "ske", // sarnak skeletons
             [161] = "ske", // Iksar skeletons
-            [188] = "gia", // frost giants
+            [188] = "fgi", // frost giants
             [189] = "gia", // storm giants
+            // The zones' own character archives (tools/lantern/extract.sh ... *_chr.s3d, import-zones.sh --characters).
+            [13] = "avi", [16] = "cen", [17] = "gol", [19] = "trk", [29] = "gar", [31] = "cub", [41] = "gor", [45] = "dml",
+            [47] = "gri", [50] = "lim", [51] = "liz", [52] = "mim", [53] = "min", [56] = "pif", [61] = "sha", [63] = "tig",
+            [64] = "tre", [69] = "wil", [74] = "pir", [76] = "pum", [79] = "bix", [83] = "sku", [86] = "sph", [87] = "arm",
+            [89] = "drk", [91] = "all", [96] = "coc", [99] = "den", [100] = "der", [101] = "efr", [103] = "ked", [104] = "lee",
+            [105] = "swo", [107] = "mam", [109] = "was", [110] = "mer", [111] = "har", [113] = "dri", [116] = "sea",
+            [124] = "uni", [125] = "peg", [133] = "lyc", [134] = "mos", [135] = "rhi", [136] = "xal", [138] = "yet",
+            [145] = "goo", [149] = "isc", [154] = "fdr", [157] = "wyv", [158] = "wur", [159] = "dev", [160] = "ikg",
+            [162] = "mep", [163] = "rap", [181] = "yak", [185] = "hag", [187] = "sir", [190] = "otm", [191] = "wal",
         };
 
         public static string For(int race, int gender)

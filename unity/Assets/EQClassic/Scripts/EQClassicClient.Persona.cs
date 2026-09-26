@@ -70,7 +70,7 @@ namespace EQClassic.Unity
                 GUI.Label(C(56, 50, 50, 16), xp.Level.ToString(), _smallBold);
                 DrawBar(C(20, 186, 76, 6), xp.Fraction, new Color(0.9f, 0.6f, 0.1f), "");
             }
-            GUI.Label(C(56, 96, 50, 16), _client.MaxHp.ToString(), _smallBold);
+            GUI.Label(C(56, 86, 50, 16), $"{_client.Hp}/{_client.MaxHp}", _smallBold);
 
             string hovered = null;
             var mouse = Event.current?.mousePosition ?? Vector2.zero;
@@ -103,10 +103,10 @@ namespace EQClassic.Unity
             else
                 _openBag = null;
             // Money in the strip's boxes (moved by +50, −100).
-            GUI.Label(C(250, 302, 60, 16), inventory.Platinum.ToString(), _smallBold);
-            GUI.Label(C(324, 302, 60, 16), inventory.Gold.ToString(), _smallBold);
-            GUI.Label(C(398, 302, 60, 16), inventory.Silver.ToString(), _smallBold);
-            GUI.Label(C(470, 302, 60, 16), inventory.Copper.ToString(), _smallBold);
+            GUI.Label(C(254, 316, 60, 16), inventory.Platinum.ToString(), _smallBold);
+            GUI.Label(C(328, 316, 60, 16), inventory.Gold.ToString(), _smallBold);
+            GUI.Label(C(402, 316, 60, 16), inventory.Silver.ToString(), _smallBold);
+            GUI.Label(C(474, 316, 60, 16), inventory.Copper.ToString(), _smallBold);
             // DONE (the inventory column's button) closes.
             if (Hit(C(152, 454, 46, 18)))
             {
