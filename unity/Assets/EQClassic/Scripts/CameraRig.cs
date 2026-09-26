@@ -15,6 +15,7 @@ namespace EQClassic.Unity
         public enum View { FirstPerson, Chase, Overhead }
 
         private const float MinDistance = 4f, MaxDistance = 40f; // Unity units behind the head
+        private const float WallMargin = 1.5f; // Unity units kept between the camera and a wall
         private const float PitchLimit = 80f;
         private readonly float _scale;
 
@@ -77,9 +78,11 @@ namespace EQClassic.Unity
             if (mesh == null)
                 return 1f;
             var from = Coordinates.FromUnity(eye.x, eye.y, eye.z, _scale);
+            // The camera keeps a margin from the wall behind it, or the view plane would cut through it.
+            float margin = WallMargin / Mathf.Max(offset.magnitude, 0.01f);
             for (float f = 1f; f > 0.05f; f -= 0.05f)
             {
-                var cam = eye + offset * f;
+                var cam = eye + offset * (f + margin);
                 if (mesh.LineOfSight(from, Coordinates.FromUnity(cam.x, cam.y, cam.z, _scale)))
                     return f;
             }

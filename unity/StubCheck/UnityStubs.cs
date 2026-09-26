@@ -76,6 +76,7 @@ namespace UnityEngine
         public float x, y, z;
         public Vector3(float x, float y, float z) { this.x = x; this.y = y; this.z = z; }
         public static Vector3 one => new Vector3(1, 1, 1);
+        public float magnitude => 0f;
         public static Vector3 operator +(Vector3 a, Vector3 b) => a;
         public static Vector3 operator *(Vector3 a, float d) => a;
         public static Vector3 operator *(float d, Vector3 a) => a;

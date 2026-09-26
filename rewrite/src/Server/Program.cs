@@ -116,6 +116,11 @@ using var zones = new ZoneServer(zoneKeys, name =>
     Log = server.Log, Characters = characters, PublicAddress = worldAddress, Items = items,
     FactionValues = db is null ? null : new MySqlFactionValueStore(db),
     Quests = quests,
+    AccountStatus = db is null ? null : new MySqlWorldAccountStore(db).Status,
+    // #zone: a zone's safe point from its cfg header (the zones the server knows).
+    SafePointOf = zone => zoneCfg is not null && File.Exists(Path.Combine(zoneCfg, zone + ".cfg"))
+        && ZoneInfo.FromLegacyCfg(File.ReadAllBytes(Path.Combine(zoneCfg, zone + ".cfg"))) is { } info
+        ? new Vec3(info.SafeX, info.SafeY, info.SafeZ) : null,
 };
 zones.Start(zonePort);
 if (db is not null && ReadTimeOfDay(db) is { } tod)

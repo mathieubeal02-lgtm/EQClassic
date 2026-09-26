@@ -113,6 +113,8 @@ public sealed partial class ZoneInstance
         public int Hunger { get; internal set; } = FullStamina;
         public int Thirst { get; internal set; } = FullStamina;
         public int Fatigue { get; internal set; }
+        /// <summary>#invul: nothing hurts it.</summary>
+        public bool GmInvulnerable { get; internal set; }
         public int FactionValue(int factionId) => FactionValues.GetValueOrDefault(factionId);
         internal void SetFactionValue(int factionId, int value) => FactionValues[factionId] = value;
         /// <summary>NPC casters: their spells (npc_spells), spell credits spent, and when they next consider casting.</summary>
@@ -372,6 +374,7 @@ public sealed partial class ZoneInstance
     public Entity AddPlayer(string name, int race, int gender, int level, Vec3 position, float heading = 0, Combatant? fighter = null, int? hp = null,
         PlayerProgress? progress = null)
     {
+        position = SafeEntry(position);
         var player = Add(name, true, race, gender, level, 6f, position, heading);
         player.LastMoveTime = _time;
         player.Progress = progress;
@@ -1262,6 +1265,23 @@ public sealed partial class ZoneInstance
         }
         _events.Add(new Spawned(entity));
         return entity;
+    }
+
+    /// <summary>
+    /// A player saved under the world, or above nothing at all (no floor of the collision mesh below,
+    /// not in water), enters at the zone's safe point instead of falling for ever.
+    /// </summary>
+    private Vec3 SafeEntry(Vec3 p)
+    {
+        if (Info is not { } info)
+            return p;
+        var safe = new Vec3(info.SafeX, info.SafeY, info.SafeZ);
+        if (p.Z < info.Underworld)
+            return safe;
+        if (Mesh is not null && Mesh.GroundZ(p.X, p.Y, p.Z, 10f) is null && Regions?.InWater(p) != true
+            && Mesh.GroundZ(safe.X, safe.Y, safe.Z, 10f) is not null)
+            return safe;
+        return p;
     }
 
     private Entity Add(string name, bool isPlayer, int race, int gender, int level, float size, Vec3 position, float heading)

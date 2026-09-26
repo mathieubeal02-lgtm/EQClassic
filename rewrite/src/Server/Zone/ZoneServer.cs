@@ -506,6 +506,11 @@ public sealed partial class ZoneServer : IDisposable
     private void Chat(NetPeer peer, Player speaker, ChatSend chat)
     {
         string from = speaker.Ticket.CharacterName;
+        if (chat.Channel == ChatChannel.Say && chat.Text.StartsWith('#'))
+        {
+            GmLine(peer, speaker, chat.Text);
+            return;
+        }
         if (chat.Channel == ChatChannel.Tell)
         {
             var (to, recipient) = _players.FirstOrDefault(kv => string.Equals(kv.Value.Ticket.CharacterName, chat.To, StringComparison.OrdinalIgnoreCase));

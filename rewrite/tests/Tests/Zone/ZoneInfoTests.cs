@@ -15,7 +15,7 @@ public class ZoneInfoTests
         Assert.Equal("North Qeynos", info.LongName);
         Assert.Equal((200, 200, 220), (info.FogRed, info.FogGreen, info.FogBlue));
         Assert.Equal((10f, 450f, 450f), (info.FogMin, info.FogMax, info.MaxClip));
-        Assert.Equal((428f, -74f, -404f), (MathF.Round(info.SafeX), MathF.Round(info.SafeY), MathF.Round(info.Underworld)));
+        Assert.Equal((-74f, 428f, -404f), (MathF.Round(info.SafeX), MathF.Round(info.SafeY), MathF.Round(info.Underworld)));
         Assert.Equal(1, info.Sky);
 
         var permafrost = ZoneInfo.FromLegacyCfg(File.ReadAllBytes(Cfg("permafrost")))!;
@@ -28,12 +28,35 @@ public class ZoneInfoTests
     {
         var info = ZoneInfo.FromLegacyCfg(File.ReadAllBytes(Cfg("qeynos2")))!;
         var zone = new ZoneInstance(new ZoneData("qeynos2", [], new Dictionary<int, Grid>())) { Info = info };
-        var player = zone.AddPlayer("Qbot", 9, 0, 1, new Vec3(428, -74, -400));
+        var player = zone.AddPlayer("Qbot", 9, 0, 1, new Vec3(-74, 428, -400));
         zone.Tick(0.2f);
-        Assert.Null(zone.MovePlayer(player.Id, new Vec3(428, -74, -402), 0)); // still above -404
+        Assert.Null(zone.MovePlayer(player.Id, new Vec3(-74, 428, -402), 0)); // still above -404
         zone.Tick(0.2f);
-        Assert.Equal(ZoneInstance.UnderworldReason, zone.MovePlayer(player.Id, new Vec3(428, -74, -410), 0));
+        Assert.Equal(ZoneInstance.UnderworldReason, zone.MovePlayer(player.Id, new Vec3(-74, 428, -410), 0));
         Assert.Equal(new Vec3(info.SafeX, info.SafeY, info.SafeZ), player.Position);
+    }
+
+    [Fact]
+    public void A_character_saved_under_the_world_enters_at_the_safe_point()
+    {
+        var info = ZoneInfo.FromLegacyCfg(File.ReadAllBytes(Cfg("everfrost")))!;
+        var zone = new ZoneInstance(new ZoneData("everfrost", [], new Dictionary<int, Grid>())) { Info = info };
+        var player = zone.AddPlayer("Lanlaan", 3, 0, 1, new Vec3(629, 3139, info.Underworld - 5));
+        Assert.Equal(new Vec3(info.SafeX, info.SafeY, info.SafeZ), player.Position);
+    }
+
+    /// <summary>Every imported zone's safe point stands on its collision mesh (the cfg keeps it as y, x).</summary>
+    [Fact]
+    public void Safe_points_stand_on_ground()
+    {
+        var exports = Path.Combine(EQClassic.Tests.Characters.PlayerProfileTests.RepoRoot(), "build", "lantern-work", "Exports");
+        foreach (var zone in new[] { "qeynos2", "everfrost", "qeynos" })
+        {
+            if (!File.Exists(Path.Combine(exports, zone, "Zone", "Meshes", zone + "_collision.txt")))
+                continue;
+            var info = ZoneInfo.FromLegacyCfg(File.ReadAllBytes(Cfg(zone)))!;
+            Assert.NotNull(ZoneCollisionMesh.LoadLanternZone(exports, zone).GroundZ(info.SafeX, info.SafeY, info.SafeZ, 10f));
+        }
     }
 
     [Fact]

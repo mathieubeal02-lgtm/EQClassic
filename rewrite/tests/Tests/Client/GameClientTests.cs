@@ -47,7 +47,7 @@ public sealed class GameClientTests : IDisposable
         var spells = EQClassic.Tests.Combat.SpellRulesTests.File();
         _zones = new ZoneServer(keys, n => zoneData.Load(n) is { } d ? new ZoneInstance(d) { Loot = loot, Items = items, Spells = spells } : null)
         {
-            Characters = _characters, Items = items,
+            Characters = _characters, Items = items, AccountStatus = _ => _gmStatus,
         };
         _zones.Start(0);
         var creation = new InMemoryCreationData();
@@ -242,6 +242,31 @@ public sealed class GameClientTests : IDisposable
         Assert.Contains("[1 Shaman] Qchat (Troll)", heard);
         qbot.ExecuteChat("/loc");
         Assert.Contains("Your Location is 10.00, 10.00, 4.00", heard);
+    }
+
+    private int _gmStatus;
+
+    [Fact]
+    public void Gm_commands_need_a_gm_account_and_nobody_hears_them()
+    {
+        var qbot = InZone("Qbot");
+        var heard = new List<string>();
+        qbot.MessageReceived += heard.Add;
+        qbot.ExecuteChat("#level 10");
+        Assert.True(Run(() => heard.Contains("Your access level is not high enough to use this command.")), string.Join(" | ", heard));
+        Assert.DoesNotContain(heard, h => h.StartsWith("You say"));
+        qbot.ExecuteChat("#loc");
+        Assert.True(Run(() => heard.Contains("Your Location is 10.00, 10.00, 4.00")), string.Join(" | ", heard));
+
+        _gmStatus = 255; // made a GM while playing
+        var gm = qbot;
+        var told = heard;
+        gm.ExecuteChat("#level 10");
+        Assert.True(Run(() => gm.Experience?.Level == 10), string.Join(" | ", told));
+        gm.ExecuteChat("#nothing");
+        Assert.True(Run(() => told.Contains("Unknown command '#nothing'. #help lists yours.")));
+        gm.ExecuteChat("#goto 30 40 4");
+        Assert.True(Run(() => gm.Player is { } p && Math.Abs(p.Position.X - 30) < 0.1f && Math.Abs(p.Position.Y - 40) < 0.1f), gm.Player?.Position.ToString());
     }
 
     [Fact]

@@ -52,6 +52,17 @@ public sealed class MySqlWorldAccountStore : IWorldAccountStore
             ? table : throw new ArgumentException("must be a plain SQL identifier", nameof(table));
     }
 
+    /// <summary>account.status (GM level: 0 player, up to 255), 0 for an unknown account.</summary>
+    public int Status(int worldAccountId)
+    {
+        using var connection = new MySqlConnection(_connectionString);
+        connection.Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT status FROM `{_table}` WHERE id = @id";
+        cmd.Parameters.AddWithValue("@id", worldAccountId);
+        return cmd.ExecuteScalar() is { } v and not DBNull ? Convert.ToInt32(v) : 0;
+    }
+
     public int ResolveOrCreate(int lsAccountId, string lsAccountName)
     {
         using var connection = new MySqlConnection(_connectionString);

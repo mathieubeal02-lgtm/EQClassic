@@ -399,7 +399,7 @@ public sealed partial class ZoneInstance
     {
         if (damage <= 0)
             return damage;
-        if (e.Bonuses.Invulnerable)
+        if (e.Bonuses.Invulnerable || e.GmInvulnerable)
             return 0;
         var used = new List<Buff>();
         foreach (var buff in e.BuffList.Where(b => b.RuneLeft > 0))

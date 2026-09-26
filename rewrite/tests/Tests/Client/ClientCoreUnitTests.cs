@@ -168,6 +168,17 @@ public class ClientCoreUnitTests
     }
 
     [Fact]
+    public void The_body_keeps_its_radius_from_walls()
+    {
+        string[] wallAt60 = ["v,0,0,60", "v,100,0,60", "v,100,50,60", "v,0,50,60", "i,0,4,5,6", "i,0,4,6,7"];
+        var walled = ZoneCollisionMesh.ParseLantern([.. Floor(0, 200, 0, 0), .. wallAt60]);
+        var player = new LocalPlayer(1, new Vec3(56, 50, 0), heading: 90);
+        for (int i = 0; i < 50; i++)
+            player.Move(1, 0, 0, 0.01f, walled); // small steps up to the wall
+        Assert.InRange(player.Position.X, 57f, 60f - LocalPlayer.BodyRadius + 0.01f); // it walked, and stopped short
+    }
+
+    [Fact]
     public void Tab_targets_the_nearest_npc_then_cycles_by_distance()
     {
         var view = ViewWith(

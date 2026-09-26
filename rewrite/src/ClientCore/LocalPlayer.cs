@@ -23,6 +23,8 @@ namespace EQClassic.ClientCore
         public const float StepUp = 6f;
         /// <summary>Height of the wall check above the feet: above <see cref="StepUp"/>, so steps are not walls.</summary>
         public const float WaistHeight = 8f;
+        /// <summary>How far the body keeps from walls (units): the eye and the camera never touch a wall.</summary>
+        public const float BodyRadius = 2.5f;
 
         private float _sendIn;
         private bool _dirty;
@@ -98,8 +100,12 @@ namespace EQClassic.ClientCore
             Move(forward, strafe, turn, seconds, (x, y, z) =>
             {
                 var ground = mesh.GroundZ(x, y, z, StepUp);
+                // The way ahead is checked a body's radius beyond the step, at the knees and at the waist.
+                float dx = x - from.X, dy = y - from.Y, length = (float)Math.Sqrt(dx * dx + dy * dy);
+                float ax = length > 1e-4f ? x + dx / length * BodyRadius : x, ay = length > 1e-4f ? y + dy / length * BodyRadius : y;
                 if (ground is float g
-                    && mesh.LineOfSight(new Vec3(from.X, from.Y, from.Z + WaistHeight), new Vec3(x, y, Math.Max(g, z) + WaistHeight)))
+                    && mesh.LineOfSight(new Vec3(from.X, from.Y, from.Z + WaistHeight), new Vec3(ax, ay, Math.Max(g, z) + WaistHeight))
+                    && mesh.LineOfSight(new Vec3(from.X, from.Y, from.Z + StepUp + 1f), new Vec3(ax, ay, Math.Max(g, z) + StepUp + 1f)))
                     return z; // height is settled below, with gravity
                 blocked = true;
                 return z;

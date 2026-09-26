@@ -481,6 +481,7 @@ namespace EQClassic.Shared.Zone
         /// <summary>
         /// Reads a legacy cfg/&lt;zone&gt;.cfg (Zone::SaveZoneCFG: short name[20], long name[180], then the
         /// NewZone_Struct from its byte 230, so a field at struct offset n is at n - 30). Null when too short.
+        /// SafeX and SafeY are returned as x and y.
         /// </summary>
         public static ZoneInfo? FromLegacyCfg(byte[] cfg)
         {
@@ -491,7 +492,9 @@ namespace EQClassic.Shared.Zone
             int end = System.Array.IndexOf(cfg, (byte)0, 20);
             string longName = System.Text.Encoding.GetEncoding("ISO-8859-1").GetString(cfg, 20, (end < 20 || end > 200 ? 200 : end) - 20);
             return new ZoneInfo(longName, cfg[231 + shift], cfg[235 + shift], cfg[239 + shift], F(244), F(260), cfg[330 + shift],
-                F(344), F(348), F(352), F(360), F(364), F(368), cfg[230 + shift]);
+                // The struct keeps the safe point as y, x, z (the EverQuest order): checked against the
+                // collision meshes, every zone's safe point stands on ground only that way round.
+                F(348), F(344), F(352), F(360), F(364), F(368), cfg[230 + shift]);
         }
     }
 
