@@ -50,6 +50,7 @@ namespace EQClassic.Unity
         private Light _playerLight;
         private readonly CameraRig _rig = new CameraRig(Scale);
         private readonly SkyPresenter _sky = new SkyPresenter();
+        private readonly WeatherPresenter _weather = new WeatherPresenter();
         private bool _autorun;
         private float _eyeHeight = 2.5f; // Unity units above the feet; measured from the player's model
         private bool _playerHidden;
@@ -169,6 +170,7 @@ namespace EQClassic.Unity
             foreach (var door in _doors.Values)
                 AnimateDoor(door, deltaTime);
             _sky.Update(_camera, client, deltaTime);
+            _weather.Update(_camera, client.Weather);
 
             if (_objects.TryGetValue(player.EntityId, out var me) && _playerLight == null)
                 _playerLight = AddPlayerLight(me);

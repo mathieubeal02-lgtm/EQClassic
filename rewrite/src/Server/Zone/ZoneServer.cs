@@ -158,6 +158,7 @@ public sealed class ZoneServer : IDisposable
                         Send(peer, BuffsOf(me), DeliveryMethod.ReliableOrdered);
                         Send(peer, SkillsOf(me), DeliveryMethod.ReliableOrdered);
                         Send(peer, GroupOf(entered.Ticket.CharacterName), DeliveryMethod.ReliableOrdered);
+                        Send(peer, new ZoneWeather(entered.Instance.Weather), DeliveryMethod.ReliableOrdered);
                     }
                 }
                 break;
@@ -409,6 +410,10 @@ public sealed class ZoneServer : IDisposable
                     break;
                 case ZoneInstance.SkillsChanged changedSkills when PeerOf(instance, changedSkills.PlayerId) is { } skilledPeer && instance.Get(changedSkills.PlayerId) is { } skilled:
                     Send(skilledPeer, SkillsOf(skilled), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.WeatherChanged weather:
+                    SendToZone(instance, new ZoneWeather(weather.Weather));
+                    SendToZone(instance, new ZoneMessage(ZoneInstance.WeatherMessage(weather.Weather)));
                     break;
                 case ZoneInstance.MerchantShown shown when PeerOf(instance, shown.PlayerId) is { } shopPeer:
                     Send(shopPeer, new MerchantGoods(shown.NpcId, shown.Goods.Select(id => View(id, 1)).ToList()), DeliveryMethod.ReliableOrdered);

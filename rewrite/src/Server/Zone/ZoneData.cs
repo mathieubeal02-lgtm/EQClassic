@@ -81,6 +81,8 @@ public sealed record ZoneData(string ShortName, IReadOnlyList<SpawnPoint> Spawns
     public IReadOnlyList<ZoneLine> Lines => ZoneLines ?? Array.Empty<ZoneLine>();
     public IReadOnlyList<Door> Doors => ZoneDoors ?? Array.Empty<Door>();
     public ZoneRules Rules { get; init; } = ZoneRules.Anything;
+    /// <summary>zone.weather: 0 none, 1 rain, 2 snow.</summary>
+    public int Weather { get; init; }
 }
 
 /// <summary>
@@ -230,6 +232,22 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
                     new Vec3(r.IsDBNull(12) ? 0 : r.GetFloat(12), r.IsDBNull(13) ? 0 : r.GetFloat(13), r.IsDBNull(14) ? 0 : r.GetFloat(14))));
         }
 
+        int weather = 0;
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = $"SELECT weather FROM `{_p}zone` WHERE short_name = @zone";
+            cmd.Parameters.AddWithValue("@zone", shortName);
+            try
+            {
+                if (cmd.ExecuteScalar() is { } w and not DBNull)
+                    weather = Convert.ToInt32(w);
+            }
+            catch (MySqlException)
+            {
+                // no zone table: no weather
+            }
+        }
+
         var rules = ZoneRules.Anything;
         using (var cmd = connection.CreateCommand())
         {
@@ -252,6 +270,6 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
 
         return new ZoneData(shortName,
             spawns.Select(kv => new SpawnPoint(kv.Key, kv.Value.Pos, kv.Value.Heading, kv.Value.Grid, kv.Value.Candidates, kv.Value.Respawn, kv.Value.Variance)).ToList(),
-            grids, lines, doors) { Rules = rules };
+            grids, lines, doors) { Rules = rules, Weather = weather };
     }
 }

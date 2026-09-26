@@ -71,4 +71,5 @@ public enum MessageType : byte
     PlayerSkills = 63,
     GroupCommand = 64,
     GroupUpdate = 65,
+    ZoneWeather = 66,
 }

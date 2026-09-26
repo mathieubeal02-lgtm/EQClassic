@@ -923,4 +923,12 @@ namespace EQClassic.Shared.Zone
             return new GroupUpdate(leader, members);
         }
     }
+
+    /// <summary>Zone server to the players of a zone: the weather (0 clear, 1 rain, 2 snow), on entry and when it changes.</summary>
+    public sealed record ZoneWeather(int Weather) : IMessage
+    {
+        public MessageType Type => MessageType.ZoneWeather;
+        public void WriteFields(NetDataWriter writer) => writer.Put((byte)Weather);
+        public static ZoneWeather ReadFields(NetDataReader reader) => new ZoneWeather(reader.GetByte());
+    }
 }

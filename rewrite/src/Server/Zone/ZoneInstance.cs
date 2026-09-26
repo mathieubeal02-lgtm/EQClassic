@@ -306,6 +306,7 @@ public sealed partial class ZoneInstance
     {
         ShortName = data.ShortName;
         Rules = data.Rules;
+        WeatherType = data.Weather;
         Mesh = mesh;
         _grids = data.Grids;
         _lines = data.Lines;
@@ -834,6 +835,7 @@ public sealed partial class ZoneInstance
         Fight(seconds);
         NpcCasting();
         Emergencies();
+        AdvanceWeather();
         if (_time >= _nextRegen)
             TickBuffs(); // before the regeneration below moves _nextRegen: same 6 s tic
         Regenerate();

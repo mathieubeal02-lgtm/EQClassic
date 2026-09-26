@@ -131,10 +131,70 @@ namespace UnityEngine
         public static int NameToLayer(string layerName) => 0;
     }
 
-    public static class Shader
+    public sealed class Shader : Object
     {
         public static int PropertyToID(string name) => 0;
         public static void SetGlobalColor(int nameID, Color value) { }
+        public static Shader Find(string name) => null;
+    }
+
+    public class Material : Object
+    {
+        public Material(Shader shader) { }
+        public Color color { get; set; }
+    }
+
+    // Particle systems (weather).
+    public enum ParticleSystemSimulationSpace { Local, World, Custom }
+    public enum ParticleSystemShapeType { Sphere = 0, Box = 5, Cone = 4 }
+    public enum ParticleSystemRenderMode { Billboard = 0, Stretch = 1 }
+
+    public sealed class ParticleSystem : Component
+    {
+        public struct MinMaxCurve
+        {
+            public static implicit operator MinMaxCurve(float constant) => default;
+        }
+
+        public struct MinMaxGradient
+        {
+            public static implicit operator MinMaxGradient(Color color) => default;
+        }
+
+        public struct MainModule
+        {
+            public bool loop { get; set; }
+            public MinMaxCurve startLifetime { get; set; }
+            public MinMaxCurve startSpeed { get; set; }
+            public MinMaxCurve startSize { get; set; }
+            public MinMaxGradient startColor { get; set; }
+            public MinMaxCurve gravityModifier { get; set; }
+            public int maxParticles { get; set; }
+            public ParticleSystemSimulationSpace simulationSpace { get; set; }
+        }
+
+        public struct EmissionModule
+        {
+            public MinMaxCurve rateOverTime { get; set; }
+        }
+
+        public struct ShapeModule
+        {
+            public ParticleSystemShapeType shapeType { get; set; }
+            public Vector3 scale { get; set; }
+        }
+
+        public MainModule main => default;
+        public EmissionModule emission => default;
+        public ShapeModule shape => default;
+        public void Play() { }
+    }
+
+    public sealed class ParticleSystemRenderer : Renderer
+    {
+        public Material material { get; set; }
+        public ParticleSystemRenderMode renderMode { get; set; }
+        public float lengthScale { get; set; }
     }
 
     public sealed class Camera : Behaviour

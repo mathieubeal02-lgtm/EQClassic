@@ -350,6 +350,9 @@ namespace EQClassic.ClientCore
             return null;
         }
 
+        /// <summary>The zone's weather: 0 clear, 1 rain, 2 snow.</summary>
+        public int Weather { get; private set; }
+
         /// <summary>The player's group (leader and members), or null when not grouped.</summary>
         public GroupUpdate? Group { get; private set; }
 
@@ -568,6 +571,9 @@ namespace EQClassic.ClientCore
                     break;
                 case PlayerExperience experience:
                     Experience = experience;
+                    break;
+                case ZoneWeather weather:
+                    Weather = weather.Weather;
                     break;
                 case GroupUpdate group:
                     Group = group.Members.Count == 0 ? null : group;

@@ -18,7 +18,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Equipment | Weapons in hand, armour tint and material | Todo | 3 |
 | Animations | Walk, run, idle, combat, damage, death, social | Partial: idle/walk/run, attack, flinch | 2 |
 | Sky, day and night | Sky dome, sun/moon, day/night light from the server clock | Written (Lantern sky on its own URP camera, sky type from the zone header, Norrath's clock from time_of_day, night ambient), to check in Unity | 2 |
-| Weather | Rain, snow | Todo | 4 |
+| Weather | Rain, snow | Written (the zone's weather type from the zone table, the legacy clear/weather cycle on the server, rain streaks and snow around the camera), to check in Unity | 4 |
 | Fog and clip plane | Per zone (legacy cfg/<zone>.cfg: fog colour and distances, clip) | Written (linear fog, far clip, fog-coloured background), to check in Unity | 2 |
 | Underworld | Falling below the zone's floor returns you to the safe point | Done (server, from the zone header) | — |
 | Water and lava | Surfaces, swimming, underwater tint | Partial: water and lava regions from the zone's BSP tree (Lantern export); swimming (no gravity, slower, Space up, Ctrl down, the head stays at the surface), blue-green fog under water, the server lets swimmers rise; no lava damage, drowning or swimming skill yet | 2 |
