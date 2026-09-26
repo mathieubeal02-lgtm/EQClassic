@@ -107,8 +107,15 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      - name: MariaDB for the account store tests
+        run: |
+          docker run -d --name rewrite-db -p 127.0.0.1:3306:3306 -e MARIADB_ROOT_PASSWORD=root -e MARIADB_DATABASE=eqclassic \
+            mariadb:11.8 --skip-ssl --character-set-server=latin1 --collation-server=latin1_swedish_ci
+          for _ in $(seq 60); do docker logs rewrite-db 2>&1 | grep -q 'ready for connections.*port: 3306' && break; sleep 2; done
       - run: dotnet build rewrite/EQClassic.Rewrite.sln
       - run: dotnet test rewrite/EQClassic.Rewrite.sln --no-build
+        env:
+          EQC_REWRITE_TEST_DB: Server=127.0.0.1;User ID=root;Password=root;Database=eqclassic;SslMode=None
 
   # The Release servers from windows-cmake, under Wine with MariaDB, played by eqbot:
   # login, character creation, zone entry, twice (see tools/eqbot/ci-e2e.sh).

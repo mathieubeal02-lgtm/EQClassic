@@ -360,3 +360,6 @@ Dependencies/*
 !Dependencies/.keep
 Dependencies.zip
 server/
+
+# rewrite: the login server key created on first start
+login-key.pem

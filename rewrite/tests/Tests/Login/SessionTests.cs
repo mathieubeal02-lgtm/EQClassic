@@ -25,8 +25,8 @@ public class SessionTests
     [Fact]
     public void Session_keys_have_the_legacy_shape_and_differ()
     {
-        var keys = Enumerable.Range(0, 200).Select(_ => SessionKeys.New()).ToList();
-        Assert.All(keys, k => Assert.True(SessionKeys.IsWellFormed(k), k));
+        var keys = Enumerable.Range(0, 200).Select(_ => WorldKeys.New()).ToList();
+        Assert.All(keys, k => Assert.True(WorldKeys.IsWellFormed(k), k));
         Assert.Equal(keys.Count, keys.Distinct().Count());
     }
 }

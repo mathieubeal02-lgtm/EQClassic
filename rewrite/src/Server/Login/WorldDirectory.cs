@@ -35,7 +35,7 @@ public sealed class WorldDirectory
         if (world.Status == WorldStatus.Locked)
             return PlayResponse.Refused(LoginMessages.WorldLocked);
 
-        var key = SessionKeys.New();
+        var key = WorldKeys.New();
         _pending[(accountId, worldId)] = (key, _now() + _keyLifetime);
         return new PlayResponse(true, "", key, world.Address, world.Port);
     }

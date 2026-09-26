@@ -1,35 +1,61 @@
+using System.Security.Cryptography;
 using EQClassic.Shared.Login;
 using EQClassic.Shared.Protocol;
+using EQClassic.Shared.Security;
 using LiteNetLib;
 using LiteNetLib.Utils;
 
 namespace EQClassic.Server.Login;
 
 /// <summary>
-/// Minimal login server on LiteNetLib (reliable ordered UDP). Flow, like the legacy one:
-/// connect (protocol key checked) → <see cref="LoginRequest"/> → <see cref="LoginResponse"/>;
-/// then, once logged in, <see cref="ServerListRequest"/> and <see cref="PlayRequest"/>.
-/// Single-threaded: call <see cref="PollEvents"/> from one loop (Program) or test.
+/// Login server on LiteNetLib (reliable ordered UDP). Flow:
+/// connect (protocol key checked) → <see cref="ServerHello"/> (RSA public key + nonce) →
+/// <see cref="SecureLoginRequest"/> → <see cref="LoginResponse"/>; then, once logged in,
+/// <see cref="ServerListRequest"/> and <see cref="PlayRequest"/>, whose answer (the world key) is
+/// sent <see cref="Sealed"/> with the session keys. Authentication itself is <see cref="LoginService"/>,
+/// identical to the legacy server. Single-threaded: call <see cref="PollEvents"/> from one loop.
 /// </summary>
 public sealed class LoginServer : IDisposable
 {
+    private sealed class Session
+    {
+        public byte[] Nonce = LoginCrypto.RandomBytes(LoginCrypto.NonceSize);
+        public int? AccountId;
+        public SessionKeys? Keys;
+    }
+
     private readonly LoginService _login;
     private readonly WorldDirectory _worlds;
+    private readonly RSA _key;
+    private readonly RSAParameters _publicKey;
     private readonly EventBasedNetListener _listener = new();
     private readonly NetManager _net;
-    private readonly Dictionary<NetPeer, int> _loggedIn = new();
+    private readonly Dictionary<NetPeer, Session> _sessions = new();
     private readonly NetDataWriter _writer = new();
 
     /// <summary>Called for each handled message (logging, metrics). Never receives passwords.</summary>
     public Action<string>? Log { get; set; }
 
-    public LoginServer(LoginService login, WorldDirectory worlds)
+    /// <summary>
+    /// Accept the unencrypted <see cref="LoginRequest"/> too. Off by default: the password would
+    /// cross the network in clear.
+    /// </summary>
+    public bool AllowPlaintextLogin { get; set; }
+
+    /// <summary>What clients pin (<see cref="Shared.Client.LoginClient.ExpectedServerFingerprint"/>).</summary>
+    public string Fingerprint { get; }
+
+    public LoginServer(LoginService login, WorldDirectory worlds, RSA serverKey)
     {
         _login = login;
         _worlds = worlds;
+        _key = serverKey;
+        _publicKey = serverKey.ExportParameters(includePrivateParameters: false);
+        Fingerprint = LoginCrypto.Fingerprint(_publicKey.Modulus!, _publicKey.Exponent!);
         _net = new NetManager(_listener) { AutoRecycle = true };
         _listener.ConnectionRequestEvent += request => request.AcceptIfKey(ProtocolInfo.ConnectionKey);
-        _listener.PeerDisconnectedEvent += (peer, _) => _loggedIn.Remove(peer);
+        _listener.PeerConnectedEvent += OnConnected;
+        _listener.PeerDisconnectedEvent += (peer, _) => _sessions.Remove(peer);
         _listener.NetworkReceiveEvent += OnReceive;
     }
 
@@ -47,8 +73,20 @@ public sealed class LoginServer : IDisposable
 
     public void Dispose() => _net.Stop();
 
+    private void OnConnected(NetPeer peer)
+    {
+        var session = new Session();
+        _sessions[peer] = session;
+        SendHello(peer, session);
+    }
+
+    private void SendHello(NetPeer peer, Session session) =>
+        Send(peer, new ServerHello(_publicKey.Modulus!, _publicKey.Exponent!, session.Nonce));
+
     private void OnReceive(NetPeer peer, NetPacketReader reader, byte channel, DeliveryMethod method)
     {
+        if (!_sessions.TryGetValue(peer, out var session))
+            return;
         IMessage message;
         try
         {
@@ -63,32 +101,76 @@ public sealed class LoginServer : IDisposable
 
         switch (message)
         {
-            case LoginRequest request:
-                var response = _login.Authenticate(request.Username, request.Password);
-                if (response.Result == LoginResult.Success)
-                    _loggedIn[peer] = response.AccountId;
-                else
-                    _loggedIn.Remove(peer);
-                Log?.Invoke($"{peer.Address}: login '{request.Username}' -> {response.Result}");
-                Send(peer, response);
+            case SecureLoginRequest secure:
+                HandleSecureLogin(peer, session, secure);
                 break;
 
-            case ServerListRequest when _loggedIn.ContainsKey(peer):
+            case LoginRequest plain when AllowPlaintextLogin:
+                Complete(peer, session, plain.Username, _login.Authenticate(plain.Username, plain.Password), keys: null);
+                break;
+
+            case LoginRequest plain:
+                Log?.Invoke($"{peer.Address}: plaintext login for '{plain.Username}' refused");
+                Send(peer, LoginResponse.Failure(LoginResult.PlaintextRefused));
+                break;
+
+            case ServerListRequest when session.AccountId is not null:
                 Send(peer, new ServerListResponse(_worlds.List()));
                 break;
 
-            case PlayRequest play when _loggedIn.TryGetValue(peer, out int accountId):
-                var playResponse = _worlds.RequestPlay(accountId, play.WorldId);
-                Log?.Invoke($"{peer.Address}: account {accountId} play on world {play.WorldId} -> {(playResponse.Accepted ? "key issued" : playResponse.Message)}");
-                Send(peer, playResponse);
+            case PlayRequest play when session.AccountId is int accountId:
+                var response = _worlds.RequestPlay(accountId, play.WorldId);
+                Log?.Invoke($"{peer.Address}: account {accountId} play on world {play.WorldId} -> {(response.Accepted ? "key issued" : response.Message)}");
+                // The world key lets whoever holds it enter the world as this account: never in clear
+                // when the session has keys.
+                Send(peer, session.Keys is { } keys ? Sealed.Of(response, keys) : response);
                 break;
 
             default:
-                // Anything else before login (or a server-to-client message) is a protocol violation.
                 Log?.Invoke($"{peer.Address}: unexpected {message.Type}, disconnecting");
                 peer.Disconnect();
                 break;
         }
+    }
+
+    private void HandleSecureLogin(NetPeer peer, Session session, SecureLoginRequest request)
+    {
+        if (!LoginCrypto.TryOpenCredentials(_key, request.SealedCredentials, out var nonce, out var secret, out var user, out var password)
+            || !LoginCrypto.FixedTimeEquals(nonce, session.Nonce))
+        {
+            // Undecryptable, or a request recorded on another connection (replay): same answer as garbage.
+            Log?.Invoke($"{peer.Address}: secure login rejected (bad key, layout or nonce)");
+            Send(peer, LoginResponse.Failure(LoginResult.Malformed));
+            RenewNonce(peer, session);
+            return;
+        }
+        var keys = LoginCrypto.DeriveSessionKeys(secret, nonce);
+        Complete(peer, session, user, _login.Authenticate(user, password), keys);
+    }
+
+    private void Complete(NetPeer peer, Session session, string user, LoginResponse response, SessionKeys? keys)
+    {
+        Log?.Invoke($"{peer.Address}: login '{user}' -> {response.Result}");
+        if (response.Result == LoginResult.Success)
+        {
+            session.AccountId = response.AccountId;
+            session.Keys = keys;
+            Send(peer, response);
+        }
+        else
+        {
+            session.AccountId = null;
+            session.Keys = null;
+            Send(peer, response);
+            RenewNonce(peer, session);
+        }
+    }
+
+    /// <summary>One nonce per attempt: a failed attempt cannot be replayed, and the client may retry.</summary>
+    private void RenewNonce(NetPeer peer, Session session)
+    {
+        session.Nonce = LoginCrypto.RandomBytes(LoginCrypto.NonceSize);
+        SendHello(peer, session);
     }
 
     private void Send(NetPeer peer, IMessage message)

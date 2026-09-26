@@ -14,4 +14,6 @@ public enum LoginResult : byte
     Banned = 4,
     /// <summary>The request itself could not be read.</summary>
     Malformed = 5,
+    /// <summary>A plaintext <see cref="LoginRequest"/> reached a server that requires <see cref="Security.SecureLoginRequest"/>.</summary>
+    PlaintextRefused = 6,
 }

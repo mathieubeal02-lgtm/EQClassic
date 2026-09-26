@@ -1,5 +1,6 @@
 using System;
 using EQClassic.Shared.Login;
+using EQClassic.Shared.Security;
 using LiteNetLib.Utils;
 
 namespace EQClassic.Shared.Protocol;
@@ -35,6 +36,9 @@ public static class MessageCodec
                 MessageType.ServerListResponse => ServerListResponse.ReadFields(reader),
                 MessageType.PlayRequest => PlayRequest.ReadFields(reader),
                 MessageType.PlayResponse => PlayResponse.ReadFields(reader),
+                MessageType.ServerHello => ServerHello.ReadFields(reader),
+                MessageType.SecureLoginRequest => SecureLoginRequest.ReadFields(reader),
+                MessageType.Sealed => Sealed.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

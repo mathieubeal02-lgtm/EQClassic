@@ -36,8 +36,9 @@ the *game* (rules, data, database) and replaces the *technology* around it:
 | Component | Role | Status |
 |---|---|---|
 | `rewrite/src/Shared` | Message contracts, codec, client library (`LoginClient`), zone collision mesh. Targets `net10.0` and `netstandard2.1` (Unity 2021.3). | Started |
-| `rewrite/src/Server` | Login (authentication, world list, world keys), then World and Zone. One process, one tick loop per zone. | Login done |
-| `rewrite/tests/Tests` | xUnit: unit tests and UDP end-to-end tests on localhost. | 66 tests |
+| `rewrite/src/Server` | Login (authentication against MariaDB or memory, encrypted login, world list, world keys), then World and Zone. One process, one tick loop per zone. | Login done (M1) |
+| `rewrite/src/Cli` | Command-line client: login, world list, world key, one line per step. | Done |
+| `rewrite/tests/Tests` | xUnit: unit tests, UDP end-to-end tests on localhost, MariaDB tests when `EQC_REWRITE_TEST_DB` is set. | 91 tests |
 | Unity client | New Unity project using LanternUnityTools for assets and `EQClassic.Shared.dll` for networking. | Not started |
 | `tools/lantern/extract.sh` | Builds LanternExtractor and exports zones from a client install (exports are not in git). | Done |
 
@@ -79,10 +80,24 @@ then the fields, decoded strictly (unknown type, truncation or trailing bytes ar
 protocol version is the connection key (`EQClassic/1`), so mismatched builds are refused at
 connect time. Movement will use unreliable-sequenced delivery, everything else reliable-ordered.
 
-**Known gap: encryption.** LiteNetLib sends plaintext. Today the login password crosses the network
-in clear (acceptable on a LAN, not on the Internet). Milestone M1 adds a key exchange (X25519) at
-connection and AES-GCM on the login channel, or moves authentication to HTTPS and uses only a
-signed token over UDP. Until then the server must not be exposed publicly.
+**Encryption (M1, done).** LiteNetLib itself sends plaintext, so the login adds its own layer, built
+only from primitives that exist on netstandard2.1 *and* Unity's Mono runtime (no `AesGcm`, no X25519):
+
+1. On connect the server sends `ServerHello`: its RSA-2048 public key and a fresh 32-byte nonce.
+2. The client sends `SecureLoginRequest`: RSA-OAEP(SHA-1) of {nonce, 32-byte client secret, name,
+   password}. The password never appears on the wire; a recorded request is useless on another
+   connection (nonce), and every failed attempt renews the nonce.
+3. Both sides derive session keys from the secret and the nonce (HMAC-SHA256); sensitive answers,
+   today the world key, travel `Sealed` (AES-256-CBC, then HMAC-SHA256 over IV and ciphertext).
+4. The server prints its key fingerprint at start-up; a client configured with it
+   (`LoginClient.ExpectedServerFingerprint`, `--fingerprint`) refuses any other server before
+   sending credentials, which stops a man in the middle. An unpinned client accepts any key: it is
+   safe against eavesdropping but not against an active man in the middle. Remembering the first
+   key seen (as SSH does) is left for the Unity client (M4).
+
+The plaintext `LoginRequest` stays in the protocol for tests and tools but is refused unless the
+server runs with `--allow-plaintext`. Movement and chat will not be encrypted (not secret, and
+per-packet cost matters at 20 Hz); anything that grants access (keys, tokens) will be sealed.
 
 The legacy credential block (`TrilogyCredentials`) is kept in Shared, tested against OpenSSL, for an
 optional bridge that would let the original client log in to the new login server.
@@ -94,7 +109,7 @@ Each milestone ends with automated tests plus one manual check, and is merged on
 | # | Milestone | Done when |
 |---|---|---|
 | M0 | **Foundations** (this branch): Lantern tools, solution, login server, shared client library, collision mesh, waypoint walker. | `dotnet build` and `dotnet test` pass in `rewrite/`; Permafrost and Qeynos export with `tools/lantern/extract.sh`; `EQClassic.Server` accepts `test`/`test`. |
-| M1 | **Real accounts and a secure login**: `login_accounts` read from MariaDB (MySqlConnector), key exchange + encrypted login, CLI client. | Tests against a MariaDB container in CI; the runbook's `test` account and the bot account log in; a captured login packet shows no plaintext password. |
+| M1 | **Real accounts and a secure login** (done): `login_accounts` read from MariaDB (MySqlConnector), encrypted login with a pinnable server key, sealed world key, `EQClassic.Cli`. | Store tests against a MariaDB container in CI; the bot account logs in from the CLI against the live database as `LS#16`; tests prove the login packet holds no password, replays fail, and the world key is sealed. |
 | M2 | **World**: character list and creation (same `character_` rows, profile blob decoded into typed fields), world key redemption (`WorldDirectory.TryRedeem`), zone assignment. | A character created by the rewrite loads in the current C++ zone server and vice versa; tests for creation rules and key reuse/expiry. |
 | M3 | **Zone core**: zone instance with a 20 Hz tick, spawns from `spawn2`/`spawngroup`, NPC waypoints on the Lantern collision mesh, player movement with server validation, position broadcast. | Headless test: a client enters Qeynos, sees the guards patrol without leaving the street (`WaypointWalker` on real exports), and is refused a teleport-like move. |
 | M4 | **Unity client, first light**: Unity 2021.3 + URP 12 project, LanternUnityTools import of one zone, `EQClassic.Shared.dll` networking: login screen → zone, walk, see NPCs move. | Manual play test on Linux and Windows; the client runs against the M3 server with two players seeing each other. |
@@ -108,6 +123,9 @@ Each milestone ends with automated tests plus one manual check, and is merged on
 cd rewrite
 dotnet build && dotnet test
 dotnet run --project src/Server -- --port 5999      # login server with the test account (test / test)
+dotnet run --project src/Server -- --db "Server=127.0.0.1;User ID=eqc;Password=eqc;Database=eqclassic;SslMode=None"
+dotnet run --project src/Cli -- 127.0.0.1 test test --fingerprint <printed by the server>
+EQC_REWRITE_TEST_DB="Server=127.0.0.1;User ID=eqc;Password=eqc;Database=eqclassic;SslMode=None" dotnet test
 
 tools/lantern/extract.sh ~/eq-client permafrost qeynos2   # from the repo root; needs libgdiplus on Linux
 ```

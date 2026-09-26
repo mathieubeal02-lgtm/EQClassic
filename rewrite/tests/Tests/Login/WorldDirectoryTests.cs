@@ -36,7 +36,7 @@ public class WorldDirectoryTests
 
         Assert.True(response.Accepted);
         Assert.Equal(("10.0.0.5", 9000), (response.Address, response.Port));
-        Assert.True(SessionKeys.IsWellFormed(response.SessionKey));
+        Assert.True(WorldKeys.IsWellFormed(response.SessionKey));
         Assert.False(directory.TryRedeem(16, 1, "wrong-key-00000"));
         Assert.False(directory.TryRedeem(17, 1, response.SessionKey));
         Assert.True(directory.TryRedeem(16, 1, response.SessionKey));

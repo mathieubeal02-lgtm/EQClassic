@@ -14,6 +14,7 @@ public static class LoginMessages
     public const string AccountSuspended = "This account has been SUSPENDED. To contest this decision, please contact the server's administration.";
     public const string AccountNotVerified = "Your account has not been verified by e-mail.  Please goto http://www.eqemulator.org/ to update your information.";
     public const string Malformed = "Malformed OP_LoginInfo";
+    public const string PlaintextRefused = "This server requires an encrypted login. Please update your client.";
 
     public static string For(LoginResult result) => result switch
     {
@@ -23,6 +24,7 @@ public static class LoginMessages
         LoginResult.Suspended => AccountSuspended,
         LoginResult.Banned => AccountBanned,
         LoginResult.Malformed => Malformed,
+        LoginResult.PlaintextRefused => PlaintextRefused,
         _ => "Unknown Error",
     };
 

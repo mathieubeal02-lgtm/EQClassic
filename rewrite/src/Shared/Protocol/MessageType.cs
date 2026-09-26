@@ -12,4 +12,7 @@ public enum MessageType : byte
     ServerListResponse = 4,
     PlayRequest = 5,
     PlayResponse = 6,
+    ServerHello = 7,
+    SecureLoginRequest = 8,
+    Sealed = 9,
 }
