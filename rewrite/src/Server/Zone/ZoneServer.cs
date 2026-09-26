@@ -421,6 +421,9 @@ public sealed partial class ZoneServer : IDisposable
                     if (owner.BankerId is not null)
                         Send(ownerPeer, BankOf(owner), DeliveryMethod.ReliableOrdered); // a move may have touched the bank
                     break;
+                case ZoneInstance.LooksChanged looks when instance.Get(looks.EntityId) is { } dressed:
+                    SendToZone(instance, new EntityLooks(dressed.Id, dressed.Texture, dressed.Helm));
+                    break;
                 case ZoneInstance.IllusionChanged illusion when instance.Get(illusion.EntityId) is { } disguised:
                     SendToZone(instance, new EntityIllusion(disguised.Id, disguised.LooksLike, disguised.Gender));
                     break;

@@ -58,6 +58,8 @@ public sealed partial class ZoneInstance
     public sealed record BuffFaded(int EntityId, int SpellId) : ZoneEvent;
     /// <summary>The entity looks like another race now (or like itself again).</summary>
     public sealed record IllusionChanged(int EntityId) : ZoneEvent;
+    /// <summary>A player's armour or helmet as others see it changed (the chest or head item).</summary>
+    public sealed record LooksChanged(int EntityId) : ZoneEvent;
     public const string DidNotTakeHoldMessage = "Your spell did not take hold.";
     /// <summary>A player's bind point changed (bind affinity): the server saves it.</summary>
     public sealed record BindChanged(int PlayerId) : ZoneEvent;
@@ -789,8 +791,12 @@ public sealed partial class ZoneInstance
     {
         if (player.Inventory is not { } inventory)
             return;
-        player.Texture = Items?.Get(inventory.ItemAt(17))?.Material ?? 0;
-        player.Helm = Items?.Get(inventory.ItemAt(2))?.Material ?? 0;
+        int texture = Items?.Get(inventory.ItemAt(17))?.Material ?? 0, helm = Items?.Get(inventory.ItemAt(2))?.Material ?? 0;
+        if (texture == player.Texture && helm == player.Helm)
+            return;
+        player.Texture = texture;
+        player.Helm = helm;
+        _events.Add(new LooksChanged(player.Id));
     }
 
     private void SetMana(Entity player, int mana)

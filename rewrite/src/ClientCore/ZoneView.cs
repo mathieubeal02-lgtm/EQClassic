@@ -82,9 +82,22 @@ namespace EQClassic.ClientCore
         {
             if (!_entities.TryGetValue(illusion.EntityId, out var old) || old.Spawn.Race == illusion.Race && old.Spawn.Gender == illusion.Gender)
                 return;
+            Redraw(old, old.Spawn with { Race = illusion.Race, Gender = illusion.Gender }, now);
+        }
+
+        /// <summary>New armour or helmet (OP_WearChange): the entity is drawn again with them, where it stands.</summary>
+        public void Apply(EntityLooks looks, double now)
+        {
+            if (!_entities.TryGetValue(looks.EntityId, out var old) || old.Spawn.Texture == looks.Texture && old.Spawn.Helm == looks.Helm)
+                return;
+            Redraw(old, old.Spawn with { Texture = looks.Texture, Helm = looks.Helm }, now);
+        }
+
+        private void Redraw(EntityView old, EntitySpawn spawn, double now)
+        {
             var at = old.Latest;
             var last = old.Snapshots[old.Snapshots.Count - 1];
-            var view = new EntityView(old.Spawn with { Race = illusion.Race, Gender = illusion.Gender, X = at.X, Y = at.Y, Z = at.Z, Heading = last.Heading }, now)
+            var view = new EntityView(spawn with { X = at.X, Y = at.Y, Z = at.Z, Heading = last.Heading }, now)
             {
                 HpPercent = old.HpPercent, Sitting = old.Sitting, Con = old.Con, LastTick = old.LastTick,
             };

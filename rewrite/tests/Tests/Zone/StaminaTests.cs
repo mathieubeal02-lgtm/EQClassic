@@ -90,6 +90,21 @@ public class StaminaTests
     }
 
     [Fact]
+    public void Putting_on_a_breastplate_changes_the_looks_others_see()
+    {
+        var items = new InMemoryItemSource();
+        items.Items[4204] = new ItemStats(4204, "Bronze Breastplate", 0, 0, 10, 12, Slots: 1 << 17) { Material = 3 };
+        var zone = new ZoneInstance(new ZoneData("qeynos2", [], new Dictionary<int, Grid>())) { Items = items };
+        var ann = zone.AddPlayer("Ann", 1, 0, 10, new Vec3(0, 0, 0), progress: new ZoneInstance.PlayerProgress(0, "", default, null, new Inventory()));
+        ann.Inventory!.Set(23, 4204, 0);
+        zone.DrainEvents();
+        zone.MoveItem(ann.Id, 23, 17);
+        Assert.Contains(new ZoneInstance.LooksChanged(ann.Id), zone.DrainEvents());
+        Assert.Equal(3, ann.ToSpawn().Texture);
+        Assert.Equal(new EntityLooks(7, 3, 1), MessageCodec.Decode(MessageCodec.Encode(new EntityLooks(7, 3, 1))));
+    }
+
+    [Fact]
     public void Stamina_messages_round_trip()
     {
         Assert.Equal(new PlayerStamina(32000, 0, 100), MessageCodec.Decode(MessageCodec.Encode(new PlayerStamina(32000, 0, 100))));

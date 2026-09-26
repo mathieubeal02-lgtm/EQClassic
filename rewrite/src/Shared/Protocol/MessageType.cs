@@ -80,4 +80,5 @@ public enum MessageType : byte
     PlayerStamina = 72,
     ConsumeItem = 73,
     EntityIllusion = 74,
+    EntityLooks = 75,
 }

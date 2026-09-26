@@ -374,6 +374,21 @@ namespace EQClassic.Shared.Zone
         public static EntityIllusion ReadFields(NetDataReader reader) => new EntityIllusion(reader.GetInt(), reader.GetUShort(), reader.GetByte());
     }
 
+    /// <summary>Zone server to players: an entity's armour and helmet variants changed (legacy OP_WearChange).</summary>
+    public sealed record EntityLooks(int EntityId, int Texture, int Helm) : IMessage
+    {
+        public MessageType Type => MessageType.EntityLooks;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(EntityId);
+            writer.Put((byte)Texture);
+            writer.Put((byte)Helm);
+        }
+
+        public static EntityLooks ReadFields(NetDataReader reader) => new EntityLooks(reader.GetInt(), reader.GetByte(), reader.GetByte());
+    }
+
     public sealed record EntityAppearance(int EntityId, bool Sitting) : IMessage
     {
         public MessageType Type => MessageType.EntityAppearance;

@@ -637,6 +637,9 @@ namespace EQClassic.ClientCore
                 case EntityIllusion illusion:
                     Zone?.Apply(illusion, Now);
                     break;
+                case EntityLooks looks:
+                    Zone?.Apply(looks, Now);
+                    break;
                 case TimeOfDay time:
                     Clock = new EqClock(time.Hour, time.Minute, Now);
                     break;
