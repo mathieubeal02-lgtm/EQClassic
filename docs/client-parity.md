@@ -14,7 +14,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Zones | Every zone of the install (s3d/wld) | Partial: zones imported with Lantern; a zone that is not imported shows a message | 1 |
 | Placed objects | Trees, lamps, furniture | Done (without per-instance vertex colours) | — |
 | Doors | Click to open, lifts, teleports | Done (animation approximated per open type) | — |
-| Characters | Race/gender models, textures, size | Partial: models by race, scaled by spawn size for the playable races; no armour textures, no face/hair | 2 |
+| Characters | Race/gender models, textures, size | Partial: models by race, sized as the legacy Mob::GetDefaultSize (players and size-0 NPCs) or by their spawn size; armour and helmet variants from npc_types texture / helmtexture and a player's chest and head material (a helmet the model has no mesh for is left off); no face / hair choice, other players see equipment changes only on zoning | 2 |
 | Equipment | Weapons in hand, armour tint and material | Todo | 3 |
 | Animations | Walk, run, idle, combat, damage, death, social | Partial: idle/walk/run, attack, flinch | 2 |
 | Sky, day and night | Sky dome, sun/moon, day/night light from the server clock | Written (Lantern sky on its own URP camera, sky type from the zone header, Norrath's clock from time_of_day, night ambient), to check in Unity | 2 |
