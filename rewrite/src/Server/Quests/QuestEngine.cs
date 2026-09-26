@@ -51,6 +51,24 @@ public sealed class QuestEngine
         return null;
     }
 
+    private readonly Dictionary<string, (DateTime Written, HashSet<string> Events)> _events = new();
+
+    /// <summary>Whether the script defines that event (sub EVENT_...): no process for NPCs without it.</summary>
+    public bool HasEvent(string script, string eventName)
+    {
+        var written = File.GetLastWriteTimeUtc(script);
+        lock (_events)
+        {
+            if (!_events.TryGetValue(script, out var known) || known.Written != written)
+            {
+                var text = File.ReadAllText(script, Encoding.Latin1);
+                known = (written, System.Text.RegularExpressions.Regex.Matches(text, @"sub\s+(EVENT_\w+)").Select(m => m.Groups[1].Value).ToHashSet());
+                _events[script] = known;
+            }
+            return known.Events.Contains(eventName);
+        }
+    }
+
     public static string CleanName(string npcName) => npcName.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9').Replace('`', '-');
 
     /// <summary>Runs an event of a script; returns its quest:: calls (empty when it failed or took too long).</summary>

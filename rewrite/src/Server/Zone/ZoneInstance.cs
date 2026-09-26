@@ -610,6 +610,8 @@ public sealed partial class ZoneInstance
     {
         if (!_entities.TryGetValue(npcId, out var npc) || npc.IsPlayer || npc.IsCorpse)
             return false;
+        if (npc.Npc is { } dying)
+            _events.Add(new QuestTriggered(npcId, looterId ?? 0, dying, "EVENT_DEATH", QuestVariables(npcId, looterId ?? 0)));
         _entities.Remove(npcId);
         _events.Add(new Removed(npcId));
         if (npc.OwnerId is int owner && _entities.TryGetValue(owner, out var master))
@@ -919,6 +921,7 @@ public sealed partial class ZoneInstance
         AdvanceWeather();
         CheckTrades();
         CheckBanks();
+        CheckQuestTimers();
         if (_time >= _nextRegen)
             TickBuffs(); // before the regeneration below moves _nextRegen: same 6 s tic
         Regenerate();

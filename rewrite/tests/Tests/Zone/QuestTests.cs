@@ -60,12 +60,38 @@ public class QuestTests
             new QuestAction("depop", []),
         ]);
         var events = zone.DrainEvents();
-        Assert.Contains(new ZoneInstance.NpcSpoke(npc.Id, "say", "Hail, Ann."), events);
+        Assert.Contains(new ZoneInstance.NpcSpoke(npc.Id, "Guard Tom", npc.Position, "say", "Hail, Ann."), events);
         Assert.Contains(Sword, ann.Inventory!.Items);
         Assert.Equal(1005, ann.Inventory.Coins.TotalCopper);
         Assert.Equal(100u, ann.Exp);
         Assert.Null(zone.Get(npc.Id));
         Assert.Contains(new ZoneInstance.Removed(npc.Id), events);
+    }
+
+    [Fact]
+    public void Timers_signals_and_death_raise_script_events()
+    {
+        var (zone, ann, npc) = Setup();
+        zone.ApplyQuest(npc.Id, ann.Id, [new QuestAction("settimer", ["patrol", "10"])]);
+        zone.Tick(5);
+        Assert.DoesNotContain(zone.DrainEvents(), e => e is ZoneInstance.QuestTriggered);
+        zone.Tick(6);
+        var timer = Assert.Single(zone.DrainEvents().OfType<ZoneInstance.QuestTriggered>());
+        Assert.Equal(("EVENT_TIMER", "patrol", "Guard Tom"), (timer.Event, timer.Variables["timer"], timer.Variables["mname"]));
+        zone.ApplyQuest(npc.Id, ann.Id, [new QuestAction("stoptimer", ["patrol"])]);
+        zone.Tick(11);
+        Assert.DoesNotContain(zone.DrainEvents(), e => e is ZoneInstance.QuestTriggered);
+
+        zone.ApplyQuest(npc.Id, ann.Id, [new QuestAction("signalwith", ["1", "7"])]);
+        var signal = Assert.Single(zone.DrainEvents().OfType<ZoneInstance.QuestTriggered>());
+        Assert.Equal(("EVENT_SIGNAL", "7", npc.Id), (signal.Event, signal.Variables["signal"], signal.NpcId));
+
+        zone.Kill(npc.Id, ann.Id);
+        var death = Assert.Single(zone.DrainEvents().OfType<ZoneInstance.QuestTriggered>());
+        Assert.Equal(("EVENT_DEATH", "Ann", Guard), (death.Event, death.Variables["name"], death.Template));
+        // A dead NPC's last words still come from where it fell.
+        zone.ApplyQuest(npc.Id, ann.Id, [new QuestAction("say", ["Argh!"])], speaker: ("Guard Tom", npc.Position));
+        Assert.Contains(new ZoneInstance.NpcSpoke(npc.Id, "Guard Tom", npc.Position, "say", "Argh!"), zone.DrainEvents());
     }
 
     [Fact]
@@ -146,6 +172,8 @@ public class QuestTests
                 }
                 """);
             var engine = new QuestEngine(dir, Host);
+            Assert.True(engine.HasEvent(script, "EVENT_ITEM"));
+            Assert.False(engine.HasEvent(script, "EVENT_DEATH"));
             var said = await engine.RunAsync(script, "EVENT_SAY", new Dictionary<string, string> { ["name"] = "Ann", ["text"] = "Hail, Guard Tom" });
             Assert.Equal([new QuestAction("say", ["Hail, Ann! Bring me rat [whiskers]."])], said.Select(a => a with { Args = a.Args.ToArray() }), new ActionComparer());
 

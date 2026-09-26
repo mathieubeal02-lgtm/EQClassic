@@ -364,17 +364,22 @@ public sealed partial class ZoneServer : IDisposable
             {
                 case ZoneInstance.Spawned spawned:
                     SendToZone(instance, new EntitySpawned(spawned.Entity.ToSpawn()));
+                    QuestEvent(instance, spawned.Entity.Id, 0, "EVENT_SPAWN");
                     break;
                 case ZoneInstance.Removed removed:
                     SendToZone(instance, new EntityRemoved(removed.EntityId));
                     break;
-                case ZoneInstance.NpcSpoke spoke when instance.Get(spoke.NpcId) is { } npc:
-                    NpcSpoke(instance, npc, spoke);
+                case ZoneInstance.NpcSpoke spoke:
+                    NpcSpoke(instance, spoke);
                     break;
                 case ZoneInstance.HandedIn handedIn:
                     HandIn(instance, handedIn);
                     break;
+                case ZoneInstance.QuestTriggered triggered:
+                    Trigger(instance, triggered.NpcId, triggered.PlayerId, triggered.Template, triggered.Event, triggered.Variables);
+                    break;
                 case ZoneInstance.Engaged engaged:
+                    QuestEvent(instance, engaged.NpcId, engaged.PlayerId, "EVENT_AGGRO");
                     Log?.Invoke($"{instance.ShortName}: {instance.Get(engaged.NpcId)?.Name} aggroes {instance.Get(engaged.PlayerId)?.Name}");
                     break;
                 case ZoneInstance.CrossedZoneLine crossed:
@@ -415,6 +420,8 @@ public sealed partial class ZoneServer : IDisposable
                     break;
                 case ZoneInstance.Slain slain:
                     AnnounceDeath(instance, slain);
+                    if (instance.Get(slain.VictimId) is { IsPlayer: true })
+                        QuestEvent(instance, slain.KillerId, slain.VictimId, "EVENT_SLAY");
                     break;
                 case ZoneInstance.CastStarted started when instance.Get(started.CasterId) is { } startedBy:
                     SendNear(instance, startedBy.Position, new SpellCast(started.CasterId, started.SpellId, started.SpellName, started.CastMs, SpellPhase.Begin));

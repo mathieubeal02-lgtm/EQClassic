@@ -1,4 +1,5 @@
 using EQClassic.Server.Quests;
+using EQClassic.Shared.World;
 
 namespace EQClassic.Server.Zone;
 
@@ -11,7 +12,41 @@ namespace EQClassic.Server.Zone;
 public sealed partial class ZoneInstance
 {
     /// <summary>An NPC's line for the players around it (say, emote or shout).</summary>
-    public sealed record NpcSpoke(int NpcId, string Channel, string Text) : ZoneEvent;
+    public sealed record NpcSpoke(int NpcId, string Name, Vec3 At, string Channel, string Text) : ZoneEvent;
+    /// <summary>A script event of an NPC raised by the zone (death, timer, signal), with its variables taken at that moment.</summary>
+    public sealed record QuestTriggered(int NpcId, int PlayerId, NpcTemplate Template, string Event, IReadOnlyDictionary<string, string> Variables) : ZoneEvent;
+
+    private readonly Dictionary<(int NpcId, string Name), (double Every, double Next)> _questTimers = new();
+
+    /// <summary>quest::settimer: EVENT_TIMER every so many seconds until stopped or the NPC goes.</summary>
+    private void CheckQuestTimers()
+    {
+        foreach (var (key, timer) in _questTimers.ToList())
+        {
+            if (!_entities.TryGetValue(key.NpcId, out var npc) || npc.Npc is not { } template)
+            {
+                _questTimers.Remove(key);
+                continue;
+            }
+            if (_time < timer.Next)
+                continue;
+            _questTimers[key] = (timer.Every, _time + timer.Every);
+            var vars = QuestVariables(npc.Id, 0);
+            vars["timer"] = key.Name;
+            _events.Add(new QuestTriggered(npc.Id, 0, template, "EVENT_TIMER", vars));
+        }
+    }
+
+    /// <summary>quest::signalwith / signal: EVENT_SIGNAL on every NPC of that type in the zone.</summary>
+    private void Signal(int npcTypeId, int signal)
+    {
+        foreach (var npc in _entities.Values.Where(e => e.Npc?.Id == npcTypeId && !e.IsCorpse).ToList())
+        {
+            var vars = QuestVariables(npc.Id, 0);
+            vars["signal"] = signal.ToString();
+            _events.Add(new QuestTriggered(npc.Id, 0, npc.Npc!, "EVENT_SIGNAL", vars));
+        }
+    }
     /// <summary>A player handed items and money to an NPC: its script's EVENT_ITEM.</summary>
     public sealed record HandedIn(int PlayerId, int NpcId, IReadOnlyList<int> Items, Coins Coins) : ZoneEvent;
 
@@ -44,22 +79,30 @@ public sealed partial class ZoneInstance
     }
 
     /// <summary>Applies a script's quest:: calls for the NPC and the player of the event.</summary>
-    public void ApplyQuest(int npcId, int playerId, IReadOnlyList<QuestAction> actions, Action<string>? log = null)
+    /// <param name="speaker">Who speaks when the NPC is gone (EVENT_DEATH): its name and where it was.</param>
+    public void ApplyQuest(int npcId, int playerId, IReadOnlyList<QuestAction> actions, Action<string>? log = null, (string Name, Vec3 At)? speaker = null)
     {
         _entities.TryGetValue(npcId, out var npc);
         _entities.TryGetValue(playerId, out var player);
+        var voice = npc is not null ? (DisplayName(npc.Name), npc.Position) : speaker;
         foreach (var a in actions)
         {
             switch (a.Function)
             {
-                case "say" when npc is not null:
-                    _events.Add(new NpcSpoke(npcId, "say", a.Arg(0)));
+                case "say" or "emote" or "shout" when voice is { } v:
+                    _events.Add(new NpcSpoke(npcId, v.Item1, v.Item2, a.Function, a.Arg(0)));
                     break;
-                case "emote" when npc is not null:
-                    _events.Add(new NpcSpoke(npcId, "emote", a.Arg(0)));
+                case "settimer" when npc is not null && a.Int(1) > 0:
+                    _questTimers[(npcId, a.Arg(0))] = (a.Int(1), _time + a.Int(1));
                     break;
-                case "shout" when npc is not null:
-                    _events.Add(new NpcSpoke(npcId, "shout", a.Arg(0)));
+                case "stoptimer":
+                    _questTimers.Remove((npcId, a.Arg(0)));
+                    break;
+                case "signalwith":
+                    Signal(a.Int(0), a.Int(1));
+                    break;
+                case "signal":
+                    Signal(a.Int(0), 0);
                     break;
                 case "me":
                     if (player is not null)
@@ -101,9 +144,7 @@ public sealed partial class ZoneInstance
                         ApplyInstantEffects(player, player, spell);
                     break;
                 case "ding":
-                case "settimer":
-                case "stoptimer":
-                    break; // a sound; timers are not run yet
+                    break; // a sound
                 case "error":
                     log?.Invoke($"quest error ({npc?.Name}): {a.Arg(0)}");
                     break;
