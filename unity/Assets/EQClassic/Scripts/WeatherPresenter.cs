@@ -11,7 +11,8 @@ namespace EQClassic.Unity
         private ParticleSystem _particles;
         private int _shown;
 
-        public void Update(Camera camera, int weather)
+        /// <param name="sheltered">A roof above the player: nothing falls (the rain stops where it is).</param>
+        public void Update(Camera camera, int weather, bool sheltered = false)
         {
             if (camera == null)
                 return;
@@ -20,8 +21,13 @@ namespace EQClassic.Unity
                 _shown = weather;
                 Build(weather);
             }
-            if (_particles != null)
-                _particles.transform.position = camera.transform.position + new Vector3(0f, 8f, 0f);
+            if (_particles == null)
+                return;
+            _particles.transform.position = camera.transform.position + new Vector3(0f, 8f, 0f);
+            if (sheltered && _particles.isEmitting)
+                _particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            else if (!sheltered && !_particles.isEmitting)
+                _particles.Play();
         }
 
         private void Build(int weather)

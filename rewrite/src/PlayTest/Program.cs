@@ -189,6 +189,31 @@ Step("loot the corpse", () =>
     bool closed = Run(() => client.LootingCorpse == null, 5);
     return (opened && closed, $"{items} item(s); {Last(2)}");
 });
+Step("pet: kills, its owner loots", () =>
+{
+    client.SetTarget(client.Zone!.YourEntityId);
+    var known = client.Zone!.Entities.Select(e => e.Id).ToHashSet();
+    Chat("#cast 164"); // Companion Spirit
+    bool Near(ZoneView.EntityView e) => client.Player is { } me && Math.Abs(e.Latest.X - me.Position.X) < 20 && Math.Abs(e.Latest.Y - me.Position.Y) < 20;
+    if (!Run(() => client.Zone!.Entities.Any(e => !known.Contains(e.Id) && !e.Spawn.IsPlayer && Near(e)), 8))
+        return (false, $"no pet; {Last(2)}");
+    if (!GoTo("a_rodent") && !GoTo("a_rat")) return (false, "no rodent in the zone");
+    client.ExecuteChat("/pet attack");
+    if (!Heard(l => l.Contains("has been slain by"), 90)) return (false, $"the pet did not kill; {Last(3)}");
+    ZoneView.EntityView? corpse = null;
+    Run(() => (corpse = client.Zone?.Entities.Where(e => e.Spawn.IsCorpse && e.Spawn.Name.StartsWith("a_r", StringComparison.OrdinalIgnoreCase))
+        .OrderBy(e => client.Player is { } me ? Math.Abs(e.Latest.X - me.Position.X) + Math.Abs(e.Latest.Y - me.Position.Y) : 0).FirstOrDefault()) != null, 5);
+    if (corpse is null) return (false, "no corpse appeared");
+    client.SetTarget(corpse.Id);
+    Chat("#goto");
+    Run(() => false, 1.5);
+    client.Loot();
+    bool opened = Run(() => client.LootingCorpse != null, 8);
+    client.EndLoot();
+    Run(() => client.LootingCorpse == null, 5);
+    Chat("/pet get lost");
+    return (opened, $"opened {opened}; {Last(3)}");
+});
 Step("spells: scribe, memorise, cast", () =>
 {
     Chat("#scribespells 10");
@@ -377,10 +402,12 @@ Step("trade an item", () =>
 Step("translocate: asked, accepted", () =>
 {
     // Qbot translocates Qpartner (grouped) to Greater Faydark: Qpartner is asked and says yes.
+    int heardBefore;
+    lock (partnerHeard) heardBefore = partnerHeard.Count;
     Chat("/invite Qpartner");
-    Run(() => partnerHeard.Any(l => l.Contains("invites you")), 8);
+    Run(() => { lock (partnerHeard) return partnerHeard.Skip(heardBefore).Any(l => l.Contains("invites you")); }, 8);
     partner.ExecuteChat("/follow");
-    if (!Run(() => client.Group?.Members.Count == 2, 8)) return (false, "not grouped");
+    if (!Run(() => client.Group?.Members.Count == 2, 8)) return (false, $"not grouped; {Last(3)} / {string.Join(" | ", partnerHeard.TakeLast(3))}");
     var them = client.Zone!.Entities.FirstOrDefault(e => e.Spawn.IsPlayer && e.Spawn.Name == "Qpartner");
     if (them is null) return (false, "Qpartner not seen");
     client.SetTarget(them.Id);

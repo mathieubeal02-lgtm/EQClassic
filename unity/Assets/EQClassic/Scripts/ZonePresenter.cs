@@ -193,7 +193,7 @@ namespace EQClassic.Unity
                 AnimateDoor(door, deltaTime);
             _sky.Update(_camera, client, deltaTime);
             DarkenFogAtNight(client);
-            _weather.Update(_camera, client.Weather);
+            _weather.Update(_camera, client.Weather, Sheltered(client.Player));
 
             if (_objects.TryGetValue(player.EntityId, out var me) && _playerLight == null)
                 _playerLight = AddPlayerLight(me);
@@ -566,6 +566,23 @@ namespace EQClassic.Unity
         /// The collision mesh the server walks NPCs on (LanternExtractor export, copied into
         /// the export folder in the Editor, next to the asset bundles in player builds). Without it the player keeps its height.
         /// </summary>
+        private bool _sheltered;
+        private float _shelterCheckIn;
+
+        /// <summary>Whether something (a roof, a cave) is above the player: checked a few times a second on the collision mesh.</summary>
+        private bool Sheltered(LocalPlayer player)
+        {
+            if (_mesh == null || player == null)
+                return false;
+            _shelterCheckIn -= Time.deltaTime;
+            if (_shelterCheckIn > 0f)
+                return _sheltered;
+            _shelterCheckIn = 0.25f;
+            var p = player.Position;
+            _sheltered = !_mesh.LineOfSight(new Vec3(p.X, p.Y, p.Z + 5f), new Vec3(p.X, p.Y, p.Z + 300f));
+            return _sheltered;
+        }
+
         private static ZoneCollisionMesh LoadCollision(string zone)
         {
             // Editor: the Lantern export (zone and solid objects); standalone builds: the merged
@@ -708,7 +725,14 @@ namespace EQClassic.Unity
                 : animated.Speed > WalkAbove ? AnimationType.LocomotionWalk
                 : AnimationType.PassiveStand;
             animated.Controller.SetNewConstantState(state, 0);
+            // The EverQuest client plays walking and running faster with the speed (Lantern's
+            // AnimationHelper: 1 + speed × 1.0667, where a player's run is speed 0.7): at a fixed
+            // rate the feet do not keep up and the model slides.
+            if (state is AnimationType.LocomotionWalk or AnimationType.LocomotionRun)
+                animated.Controller.UpdateAnimationSpeed(state, 1f + animated.Speed / MoveUnit * AnimationSpeedPerMove);
         }
+
+        private const float MoveUnit = LocalPlayer.RunSpeed / 0.7f, AnimationSpeedPerMove = 1.066666f;
 
         /// <summary>Height of the top of a model above its root, in world units.</summary>
         private static float ModelTop(GameObject model)

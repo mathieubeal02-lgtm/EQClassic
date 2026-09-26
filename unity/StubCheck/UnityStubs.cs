@@ -171,6 +171,8 @@ namespace UnityEngine
     public enum ParticleSystemShapeType { Sphere = 0, Box = 5, Cone = 4 }
     public enum ParticleSystemRenderMode { Billboard = 0, Stretch = 1 }
 
+    public enum ParticleSystemStopBehavior { StopEmittingAndClear, StopEmitting }
+
     public sealed class ParticleSystem : Component
     {
         public struct MinMaxCurve
@@ -209,6 +211,8 @@ namespace UnityEngine
         public MainModule main => default;
         public EmissionModule emission => default;
         public ShapeModule shape => default;
+        public bool isEmitting => false;
+        public void Stop(bool withChildren, ParticleSystemStopBehavior stopBehavior) { }
         public void Play() { }
     }
 
@@ -467,6 +471,7 @@ namespace Lantern.EQ.Animation
         public void SetNewConstantState(AnimationType animationType, int priority, float speed = 1f) { }
         public void PlayOneShotAnimation(AnimationType animationType, float speed = 1f, int importance = 0, bool canSelfInterrupt = true, AnimationType? newConstantState = null) { }
         public bool HasAnimation(string animationName) => false;
+        public void UpdateAnimationSpeed(AnimationType animationType, float animSpeed) { }
     }
 }
 

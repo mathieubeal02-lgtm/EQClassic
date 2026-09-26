@@ -669,6 +669,8 @@ public sealed partial class ZoneInstance
             corpse.Corpse.Rights.Add(id);
         corpse.Fighter = npc.Fighter;
         corpse.Hp = 0;
+        corpse.Texture = npc.Npc?.Texture ?? npc.Texture; // an ice goblin's corpse stays blue
+        corpse.Helm = npc.Npc?.Helm ?? npc.Helm;
         _events.Add(new Spawned(corpse));
     }
 

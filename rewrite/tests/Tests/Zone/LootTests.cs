@@ -52,6 +52,15 @@ public class LootTests
     }
 
     [Fact]
+    public void A_corpse_keeps_the_npcs_armour_and_helmet()
+    {
+        var zone = new ZoneInstance(new ZoneData("everfrost", [new SpawnPoint(1, new Vec3(5, 0, 0), 0, 0, [(Rat with { Texture = 2, Helm = 1 }, 100)], 600, 0)], new Dictionary<int, Grid>()));
+        zone.Kill(zone.Entities.Single().Id);
+        var spawn = zone.Entities.Single(e => e.IsCorpse).ToSpawn();
+        Assert.Equal((2, 1), (spawn.Texture, spawn.Helm));
+    }
+
+    [Fact]
     public void The_killer_opens_the_corpse_gets_the_coins_and_takes_items()
     {
         var (zone, player, corpse) = KillRat();

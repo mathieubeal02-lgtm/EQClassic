@@ -22,6 +22,7 @@ and plays these scenarios, each reported OK / FAIL with what it saw, in a Markdo
 | quest: hail Brohan | #goto, hail | Brohan Ironforge's Perl quest answer |
 | melee: kill a rodent | auto attack | "You have slain a rodent!" |
 | loot the corpse | loot window, take all | the window opens and closes |
+| pet: kills, its owner loots | #cast 164 (Companion Spirit), /pet attack a rodent, loot its corpse | the pet kills, the owner may loot |
 | spells: scribe, memorise, cast | #scribespells 10, memorise Inner Fire, cast on self (up to 3 tries) | mana spent, no interruption nor fizzle, the buff shows |
 | GM: #summonitem, eat | a muffin, eat it | the eating message |
 | equipment change | a chest piece for the class, worn | slot 17 holds it (others get EntityLooks) |
