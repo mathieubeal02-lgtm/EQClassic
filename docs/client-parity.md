@@ -21,7 +21,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Weather | Rain, snow | Todo | 4 |
 | Fog and clip plane | Per zone (legacy cfg/<zone>.cfg: fog colour and distances, clip) | Written (linear fog, far clip, fog-coloured background), to check in Unity | 2 |
 | Underworld | Falling below the zone's floor returns you to the safe point | Done (server, from the zone header) | — |
-| Water and lava | Surfaces, swimming, underwater tint | Todo | 2 |
+| Water and lava | Surfaces, swimming, underwater tint | Partial: water and lava regions from the zone's BSP tree (Lantern export); swimming (no gravity, slower, Space up, Ctrl down, the head stays at the surface), blue-green fog under water, the server lets swimmers rise; no lava damage, drowning or swimming skill yet | 2 |
 | Light sources | Torches and lanterns in hand, zone lights | Partial: one light around the player | 3 |
 | Particles | Spell effects | Todo (casting works, no particles yet) | 3 |
 | Name plates | Names above heads, consider colours | Written (con colour after considering, target in brackets), to check in Unity | 1 |
@@ -39,7 +39,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Autorun | Num Lock / R | Written, to check in Unity | 1 |
 | Jump and falls | Space; falling off ledges | Done: jump (about 5.7 units), gravity, falls from ledges; the server limits climbing, not falling | — |
 | Sit, stand, crouch | Sitting regenerates faster | Partial: X or /sit, seen by others, walking stands up; no crouch | 1 |
-| Swimming, levitation, falling damage | | Partial: levitation floats you down; no swimming or falling damage | 3 |
+| Swimming, levitation, falling damage | | Partial: swimming, levitation floats you down; no falling damage | 3 |
 | Collisions | Walls, objects, steps | Done (ground, steps, walls, solid objects of the export) | — |
 
 ## Interface

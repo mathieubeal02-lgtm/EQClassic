@@ -93,6 +93,32 @@ public class ClientCoreUnitTests
     }
 
     [Fact]
+    public void In_water_the_player_floats_swims_up_to_the_surface_and_down_to_the_floor()
+    {
+        var mesh = ZoneCollisionMesh.ParseLantern(Floor(0, 200, -30, 0));
+        // Water below z = 0 everywhere (the plane on EverQuest z: Lantern's second coefficient).
+        var regions = ZoneRegions.Parse(["0,1,0,0,1,2", "1,Normal", "2,Water"]);
+        var player = new LocalPlayer(1, new Vec3(40, 50, -20), heading: 90) { Regions = regions };
+        player.Move(0, 0, 0, 0.5f, mesh);
+        Assert.True(player.Swimming);
+        Assert.Equal(-20f, player.Position.Z); // no gravity
+
+        player.SwimInput = 1;
+        for (int i = 0; i < 40; i++)
+            player.Move(0, 0, 0, 0.05f, mesh);
+        Assert.InRange(player.Position.Z, -LocalPlayer.ChestHeight - 1.5f, -LocalPlayer.ChestHeight); // the chest stays under the surface
+
+        player.SwimInput = -1;
+        for (int i = 0; i < 60; i++)
+            player.Move(0, 0, 0, 0.05f, mesh);
+        Assert.Equal(-30f, player.Position.Z);
+
+        player.SwimInput = 0;
+        player.Move(1, 0, 0, 1f, mesh);
+        Assert.Equal(40 + LocalPlayer.RunSpeed * LocalPlayer.SwimSpeedFactor, player.Position.X, precision: 3);
+    }
+
+    [Fact]
     public void A_jump_goes_up_about_six_units_and_comes_back_down()
     {
         var mesh = ZoneCollisionMesh.ParseLantern(Floor(0, 200, 0, 0));

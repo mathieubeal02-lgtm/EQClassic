@@ -63,10 +63,22 @@ namespace EQClassic.ClientCore
         public bool Levitating { get; set; }
         public const float LevitateFallSpeed = 8f;
 
-        /// <summary>Jump (Space), from the ground only.</summary>
+        /// <summary>The zone's water, lava and zone line regions (bsp_tree), when known.</summary>
+        public ZoneRegions? Regions { get; set; }
+        /// <summary>In water up to the chest: no gravity, slower, <see cref="SwimInput"/> moves up and down.</summary>
+        public bool Swimming { get; private set; }
+        /// <summary>+1 swims up (Space), −1 down, 0 floats.</summary>
+        public float SwimInput { get; set; }
+        /// <summary>Height of the chest above the feet: the character swims when it is under water.</summary>
+        public const float ChestHeight = 4f;
+        public const float SwimVerticalSpeed = 20f, SwimSpeedFactor = 0.6f;
+
+        private bool InWater(float x, float y, float z) => Regions?.InWater(new Vec3(x, y, z + ChestHeight)) ?? false;
+
+        /// <summary>Jump (Space), from the ground only (in water, Space swims up instead).</summary>
         public void Jump()
         {
-            if (Airborne)
+            if (Airborne || Swimming)
                 return;
             Airborne = true;
             VerticalSpeed = JumpSpeed;
@@ -98,11 +110,27 @@ namespace EQClassic.ClientCore
             return !blocked;
         }
 
-        /// <summary>Vertical motion: stay on the ground, or fly and fall until landing.</summary>
+        /// <summary>Vertical motion: swim, stay on the ground, or fly and fall until landing.</summary>
         private void Fall(float seconds, ZoneCollisionMesh mesh)
         {
             var p = Position;
             float? ground = mesh.GroundZ(p.X, p.Y, p.Z, StepUp);
+            Swimming = InWater(p.X, p.Y, p.Z);
+            if (Swimming)
+            {
+                Airborne = false;
+                VerticalSpeed = SwimInput * SwimVerticalSpeed;
+                if (VerticalSpeed == 0f)
+                    return;
+                float swimZ = p.Z + VerticalSpeed * seconds;
+                if (VerticalSpeed > 0f && !InWater(p.X, p.Y, swimZ))
+                    return; // at the surface: treading water
+                if (VerticalSpeed < 0f && ground is float bottom && swimZ < bottom)
+                    swimZ = bottom;
+                Position = new Vec3(p.X, p.Y, swimZ);
+                _dirty = true;
+                return;
+            }
             if (!Airborne)
             {
                 if (ground is float g && g >= p.Z - StepDown)
@@ -145,7 +173,7 @@ namespace EQClassic.ClientCore
             float sx = fy, sy = -fx;                                      // right of the heading
             float length = Math.Min(1f, (float)Math.Sqrt(forward * forward + strafe * strafe));
             float norm = length / (float)Math.Sqrt(forward * forward + strafe * strafe);
-            float speed = (Walking ? WalkSpeed : RunSpeed) * SpeedFactor;
+            float speed = (Walking ? WalkSpeed : RunSpeed) * SpeedFactor * (Swimming ? SwimSpeedFactor : 1f);
             float dx = (fx * forward + sx * strafe) * norm * speed * seconds;
             float dy = (fy * forward + sy * strafe) * norm * speed * seconds;
             float x = Position.X + dx, y = Position.Y + dy;

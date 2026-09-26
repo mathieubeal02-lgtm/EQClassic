@@ -89,9 +89,11 @@ using var zones = new ZoneServer(zoneKeys, name =>
         return null;
     var meshPath = lantern is null ? null : Path.Combine(lantern, name, "Zone", "Meshes", name + "_collision.txt");
     var mesh = meshPath is not null && File.Exists(meshPath) ? ZoneCollisionMesh.LoadLanternZone(lantern!, name) : null;
+    var bsp = lantern is null ? null : Path.Combine(lantern, name, "Zone", "bsp_tree.txt");
+    var regions = bsp is not null && File.Exists(bsp) ? ZoneRegions.Load(bsp) : null;
     var cfg = zoneCfg is null ? null : Path.Combine(zoneCfg, name + ".cfg");
     var info = cfg is not null && File.Exists(cfg) ? ZoneInfo.FromLegacyCfg(File.ReadAllBytes(cfg)) : null;
-    return new ZoneInstance(data, mesh) { Info = info, Loot = loot, Items = items, Spells = spells, Factions = factions, Merchants = merchants };
+    return new ZoneInstance(data, mesh) { Info = info, Loot = loot, Items = items, Spells = spells, Factions = factions, Merchants = merchants, Regions = regions };
 })
 {
     Log = server.Log, Characters = characters, PublicAddress = worldAddress, Items = items,

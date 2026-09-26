@@ -48,6 +48,9 @@ namespace EQClassic.Unity.Editor
                 var instances = Path.Combine(ClientPaths.Exports, zone, "Zone", "object_instances.txt");
                 if (File.Exists(instances))
                     File.Copy(instances, Path.Combine(StreamingDir, zone + "_objects.txt"), overwrite: true);
+                var bsp = Path.Combine(ClientPaths.Exports, zone, "Zone", "bsp_tree.txt");
+                if (File.Exists(bsp))
+                    File.Copy(bsp, Path.Combine(StreamingDir, zone + "_bsp.txt"), overwrite: true); // water and lava
                 var exports = ClientPaths.Exports;
                 if (File.Exists(Path.Combine(exports, zone, "Zone", "Meshes", zone + "_collision.txt")))
                 {

@@ -134,4 +134,18 @@ public class ZoneBehaviourTests
         var crossed = Assert.IsType<ZoneInstance.CrossedZoneLine>(Assert.Single(zone.DrainEvents()));
         Assert.Equal(new Vec3(71, -380, 0), crossed.Destination);
     }
+
+    [Fact]
+    public void Swimming_up_is_not_limited_like_climbing()
+    {
+        var regions = ZoneRegions.Parse(["0,1,0,0,1,2", "1,Normal", "2,Water"]); // water below z = 0
+        var zone = new ZoneInstance(OneNpc(new Vec3(500, 500, 0))) { Regions = regions };
+        var player = zone.AddPlayer("Qbot", 9, 0, 1, new Vec3(0, 0, -60));
+        zone.Tick(0.1f);
+        Assert.Null(zone.MovePlayer(player.Id, new Vec3(0, 0, -30), 0)); // 30 units up in 0.1 s: too fast for climbing
+        var dry = new ZoneInstance(OneNpc(new Vec3(500, 500, 0)));
+        var walker = dry.AddPlayer("Qbot", 9, 0, 1, new Vec3(0, 0, -60));
+        dry.Tick(0.1f);
+        Assert.NotNull(dry.MovePlayer(walker.Id, new Vec3(0, 0, -30), 0));
+    }
 }

@@ -100,6 +100,7 @@ namespace EQClassic.Unity
             if (zonePrefab != null)
                 PlaceObjects(zone.Zone);
             _mesh = LoadCollision(zone.Zone);
+            _regions = LoadRegions(zone.Zone);
             foreach (var e in zone.Entities)
                 AddEntity(e);
             zone.Added += AddEntity;
@@ -127,6 +128,9 @@ namespace EQClassic.Unity
                 _autorun = !_autorun;
             if (InputEnabled && Input.GetKeyDown(KeyCode.Space))
                 player.Jump();
+            // Swimming: Space up, Ctrl down (the Trilogy client used the jump and crouch keys).
+            player.Regions = _regions;
+            player.SwimInput = !InputEnabled ? 0f : Input.GetKey(KeyCode.Space) ? 1f : Input.GetKey(KeyCode.LeftControl) ? -1f : 0f;
             float forward = InputEnabled ? Input.GetAxis("Vertical") : 0f;
             if (forward < -0.1f)
                 _autorun = false; // backing up stops autorun, as in the old client
@@ -175,7 +179,48 @@ namespace EQClassic.Unity
                 if (first != _playerHidden)
                     SetVisible(me, !(_playerHidden = first)); // first person: do not look out from inside our own model
                 _rig.Place(_camera, me.transform.position, me.transform.rotation, _eyeHeight, _mesh);
+                Underwater(_camera.transform.position);
             }
+        }
+
+        private ZoneRegions _regions;
+        private (Color Colour, float Start, float End)? _zoneFog;
+        private bool _underwater;
+
+        /// <summary>Under water the view turns blue-green and short, as in the Trilogy client.</summary>
+        private void Underwater(Vector3 cameraPosition)
+        {
+            var eq = Coordinates.FromUnity(cameraPosition.x, cameraPosition.y, cameraPosition.z, Scale);
+            bool under = _regions != null && _regions.InWater(eq);
+            if (under == _underwater)
+                return;
+            _underwater = under;
+            if (under)
+            {
+                RenderSettings.fog = true;
+                RenderSettings.fogColor = new Color(0.08f, 0.22f, 0.3f);
+                RenderSettings.fogStartDistance = 0f;
+                RenderSettings.fogEndDistance = 60f * Scale;
+                if (_camera != null)
+                    _camera.backgroundColor = RenderSettings.fogColor;
+            }
+            else if (_zoneFog is { } fog)
+            {
+                RenderSettings.fogColor = fog.Colour;
+                RenderSettings.fogStartDistance = fog.Start;
+                RenderSettings.fogEndDistance = fog.End;
+                if (_camera != null)
+                    _camera.backgroundColor = fog.Colour;
+            }
+        }
+
+        /// <summary>The zone's BSP regions (water, lava): the Lantern export in the Editor, the copy next to the bundles in builds.</summary>
+        private static ZoneRegions LoadRegions(string zone)
+        {
+            var path = Path.Combine(ClientPaths.Exports, zone, "Zone", "bsp_tree.txt");
+            if (!File.Exists(path))
+                path = Path.Combine(ClientBundles.Directory, zone + "_bsp.txt");
+            return File.Exists(path) ? ZoneRegions.Load(path) : null;
         }
 
         private void AddEntity(ZoneView.EntityView entity)
@@ -246,6 +291,8 @@ namespace EQClassic.Unity
             RenderSettings.fogColor = colour;
             RenderSettings.fogStartDistance = info.FogMin * Scale;
             RenderSettings.fogEndDistance = info.FogMax * Scale;
+            _zoneFog = (colour, info.FogMin * Scale, info.FogMax * Scale);
+            _underwater = false;
             EnsureCamera();
             if (_camera == null)
                 return;

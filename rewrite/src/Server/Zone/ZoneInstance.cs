@@ -203,6 +203,8 @@ public sealed partial class ZoneInstance
     private double _time;
 
     public string ShortName { get; }
+    /// <summary>Water, lava and zone line regions (the zone's BSP tree), when the Lantern export has it.</summary>
+    public ZoneRegions? Regions { get; init; }
     /// <summary>zone_rules: binding, levitation, outdoor spells.</summary>
     public ZoneRules Rules { get; }
     public ZoneCollisionMesh? Mesh { get; }
@@ -422,9 +424,10 @@ public sealed partial class ZoneInstance
         float speed = MaxPlayerSpeed * Math.Max(1f, (100 + player.Bonuses.MovementSpeed) / 100f); // spirit of wolf and the like
         if (distance > speed * elapsed + MoveTolerance)
             return $"moved {distance:0} units in {elapsed:0.00} s";
-        // Falling is free (the legacy server checked nothing); climbing is limited to jumps and steps.
+        // Falling is free (the legacy server checked nothing); climbing is limited to jumps and steps, except in water.
         float climb = to.Z - player.Position.Z;
-        if (climb > MaxClimbSpeed * elapsed + ClimbTolerance)
+        bool swimming = Regions is { } regions && (regions.InWater(to) || regions.InWater(player.Position));
+        if (!swimming && climb > MaxClimbSpeed * elapsed + ClimbTolerance)
             return $"climbed {climb:0} units in {elapsed:0.00} s";
         if (Info is { } info && to.Z < info.Underworld)
         {
