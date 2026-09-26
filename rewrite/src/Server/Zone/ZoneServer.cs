@@ -54,6 +54,9 @@ public sealed class ZoneServer : IDisposable
     // type byte + tick (4) + count (2); each position is id + 4 floats.
     private const int PositionsHeaderSize = 7, PositionSize = 20;
 
+    /// <summary>The characters' faction values (loaded on entry, saved after each kill). Optional.</summary>
+    public IFactionValueStore? FactionValues { get; set; }
+
     /// <summary>Where a player saves on leaving (camp, disconnect, zoning). Optional.</summary>
     public Characters.ICharacterStore? Characters { get; set; }
 
@@ -263,7 +266,11 @@ public sealed class ZoneServer : IDisposable
             (level, bonuses) => EQClassic.Server.Combat.Combatant.ForPlayer(profile with { Level = level, Inventory = inventory!.Items.ToArray() }, Items, bonuses),
             inventory,
             new ZoneInstance.PlayerMagic(profile.Wis, profile.Int, profile.Skills, profile.SpellBook, profile.SpellGemIds, profile.Mana,
-                profile.Buffs.Select(b => new ZoneInstance.SavedBuff(b.SpellId, b.CasterLevel, b.Tics)).ToList()));
+                profile.Buffs.Select(b => new ZoneInstance.SavedBuff(b.SpellId, b.CasterLevel, b.Tics)).ToList()))
+            {
+                Deity = profile.Deity,
+                Factions = FactionValues?.Load(ticket.CharacterName),
+            };
         var entity = instance.AddPlayer(ticket.CharacterName, ticket.Race, ticket.Gender, profile?.Level ?? ticket.Level, ticket.Position,
             profile?.Heading ?? 0, null, profile?.CurHp, progress);
         _players[peer] = new Player { Instance = instance, EntityId = entity.Id, Ticket = ticket };
@@ -355,6 +362,10 @@ public sealed class ZoneServer : IDisposable
                 case ZoneInstance.BindChanged bound when instance.Get(bound.PlayerId) is { } boundPlayer
                         && _players.Values.FirstOrDefault(p => p.Instance == instance && p.EntityId == bound.PlayerId) is { Ticket.Profile: not null } boundBy:
                     Characters?.SaveBind(boundBy.Ticket.CharacterName, boundPlayer.BindZone, boundPlayer.Bind.X, boundPlayer.Bind.Y, boundPlayer.Bind.Z);
+                    break;
+                case ZoneInstance.FactionsChanged factions when instance.Get(factions.PlayerId) is { } fighter
+                        && _players.Values.FirstOrDefault(p => p.Instance == instance && p.EntityId == factions.PlayerId) is { } factionPlayer:
+                    FactionValues?.Save(factionPlayer.Ticket.CharacterName, fighter.FactionValues);
                     break;
                 case ZoneInstance.GemsChanged gems when PeerOf(instance, gems.PlayerId) is { } memPeer && instance.Get(gems.PlayerId) is { } memorizer:
                     Send(memPeer, SpellBookOf(instance, memorizer), DeliveryMethod.ReliableOrdered);

@@ -104,6 +104,11 @@ public sealed partial class ZoneInstance
         /// <summary>Players: where death and gate send them (bind affinity changes it); empty zone when unknown.</summary>
         public string BindZone { get; internal set; } = "";
         public Vec3 Bind { get; internal set; }
+        /// <summary>Players: deity (faction modifiers) and their values with each faction (faction_values).</summary>
+        public int Deity { get; internal set; } = FactionRules.AgnosticDeity;
+        internal readonly Dictionary<int, int> FactionValues = new();
+        public int FactionValue(int factionId) => FactionValues.GetValueOrDefault(factionId);
+        internal void SetFactionValue(int factionId, int value) => FactionValues[factionId] = value;
     }
 
     public abstract record ZoneEvent;
@@ -127,8 +132,10 @@ public sealed partial class ZoneInstance
     public sealed record LootShown(int PlayerId, int CorpseId, IReadOnlyList<LootDrop> Items) : ZoneEvent;
     public sealed record InventoryChanged(int PlayerId) : ZoneEvent;
     public sealed record ExperienceChanged(int PlayerId, uint Exp, int Level) : ZoneEvent;
+    /// <summary>A kill moved the player's faction values: the server saves them.</summary>
+    public sealed record FactionsChanged(int PlayerId) : ZoneEvent;
 
-    private const int BankerClass = 40, MerchantClass = 41;
+    internal const int BankerClass = 40, MerchantClass = 41;
 
     internal sealed class CorpseData
     {
@@ -237,6 +244,9 @@ public sealed partial class ZoneInstance
         player.Hp = hp is int h && h > 0 && h <= player.Fighter.MaxHp ? h : player.Fighter.MaxHp;
         player.EntryPosition = position;
         player.BindZone = progress?.BindZone ?? "";
+        player.Deity = progress?.Deity ?? FactionRules.AgnosticDeity;
+        foreach (var (id, value) in progress?.Factions ?? new Dictionary<int, int>())
+            player.FactionValues[id] = value;
         player.Bind = progress?.Bind ?? default;
         SetUpMagic(player, progress?.Magic);
         return player;
@@ -245,7 +255,12 @@ public sealed partial class ZoneInstance
     /// <summary>What a player brings besides position: experience, bind point, and their fighter at any level.</summary>
     /// <param name="FighterAt">The player's fighter at a level with the bonuses of their buffs (from the profile and items).</param>
     public sealed record PlayerProgress(uint Exp, string BindZone, Vec3 Bind, Func<int, StatBonuses, Combatant>? FighterAt, PlayerInventory? Inventory = null,
-        PlayerMagic? Magic = null);
+        PlayerMagic? Magic = null)
+    {
+        public int Deity { get; init; } = FactionRules.AgnosticDeity;
+        /// <summary>faction_values of the character.</summary>
+        public IReadOnlyDictionary<int, int>? Factions { get; init; }
+    }
 
     private static Combatant DefaultPlayer(int level) =>
         new(true, level, CombatFormulas.Warrior, CombatFormulas.ClientBaseHp(level, CombatFormulas.Warrior, 75),
@@ -264,7 +279,8 @@ public sealed partial class ZoneInstance
         var standing = Standing.Indifferent;
         if (other.Npc is { } npc)
         {
-            standing = (Standing)(int)Factions.Standing(player, npc);
+            // Consider asks with the player's deity, aggro with an agnostic one (client_process.cpp, NpcAI.cpp).
+            standing = (Standing)(int)(Factions is DatabaseFactions db ? db.StandingFor(player, npc, player.Deity) : Factions.Standing(player, npc));
             if (npc.Combat.Class is BankerClass or MerchantClass && standing is Standing.Scowls or Standing.Threatenly)
                 standing = Standing.Dubious;
         }
@@ -786,18 +802,26 @@ public sealed partial class ZoneInstance
 
     /// <summary>
     /// NPC::Death: the player who did the most damage gets NPC level² × 75 experience (capped at a
-    /// tenth of their level), unless the NPC cons green to them or is a merchant or banker.
+    /// tenth of their level), unless the NPC cons green to them or is a merchant or banker, and the
+    /// faction hits of the NPC's faction list.
     /// Groups and pets are not modelled yet.
     /// </summary>
     /// <returns>The player who earned the kill (and the loot rights), if any.</returns>
     private int? RewardKill(Entity npc)
     {
-        if (npc.DamageBy is null || npc.Npc is null || npc.Npc.Combat.Class is BankerClass or MerchantClass)
+        if (npc.DamageBy is null || npc.DamageBy.Count == 0 || npc.Npc is null)
             return null;
         var (killerId, _) = npc.DamageBy.OrderByDescending(kv => kv.Value).First();
         if (!_entities.TryGetValue(killerId, out var player) || !player.IsPlayer)
             return null;
-        if (ConsiderRules.LevelCon(player.Level, npc.Level) != ConColor.Green)
+        if (Factions is DatabaseFactions db)
+        {
+            // HateList: the top hater's faction moves (SetFactionLevel), with their deity.
+            foreach (var message in db.Kill(player, npc.Npc, player.Deity))
+                _events.Add(new Told(player.Id, message));
+            _events.Add(new FactionsChanged(player.Id));
+        }
+        if (ConsiderRules.LevelCon(player.Level, npc.Level) != ConColor.Green && npc.Npc.Combat.Class is not (BankerClass or MerchantClass))
         {
             uint gain = Experience.Capped(Experience.ForKill(npc.Level), player.Level, player.Fighter.Class, player.Race);
             if (gain > 0)

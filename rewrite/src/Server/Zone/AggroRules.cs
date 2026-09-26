@@ -55,9 +55,8 @@ public static class AggroRules
 }
 
 /// <summary>
-/// How a player stands with an NPC's faction. The legacy computation (player faction values, race,
-/// class and deity modifiers, npc_faction_entries) is ported in a later milestone; until then the
-/// server uses <see cref="IndifferentFactions"/> (no aggro) or a test implementation.
+/// How a player stands with an NPC's faction: <see cref="DatabaseFactions"/> (the legacy tables),
+/// or <see cref="IndifferentFactions"/> without a database (no aggro).
 /// </summary>
 public interface IFactionStandings
 {

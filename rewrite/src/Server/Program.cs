@@ -79,6 +79,8 @@ server.Start(port);
 var zoneKeys = new ZoneKeys();
 EQClassic.Server.Combat.IItemSource? items = db is null ? null : new EQClassic.Server.Combat.MySqlItemSource(db);
 ILootSource? loot = db is null ? null : new MySqlLootSource(db);
+// Factions (faction_list, npc_faction, npc_faction_entries); without a database every NPC is indifferent.
+IFactionStandings factions = db is null ? new IndifferentFactions() : new DatabaseFactions(new MySqlFactionData(db));
 using var zones = new ZoneServer(zoneKeys, name =>
 {
     var data = zoneData.Load(name);
@@ -88,8 +90,12 @@ using var zones = new ZoneServer(zoneKeys, name =>
     var mesh = meshPath is not null && File.Exists(meshPath) ? ZoneCollisionMesh.LoadLanternZone(lantern!, name) : null;
     var cfg = zoneCfg is null ? null : Path.Combine(zoneCfg, name + ".cfg");
     var info = cfg is not null && File.Exists(cfg) ? ZoneInfo.FromLegacyCfg(File.ReadAllBytes(cfg)) : null;
-    return new ZoneInstance(data, mesh) { Info = info, Loot = loot, Items = items, Spells = spells };
-}) { Log = server.Log, Characters = characters, PublicAddress = worldAddress, Items = items };
+    return new ZoneInstance(data, mesh) { Info = info, Loot = loot, Items = items, Spells = spells, Factions = factions };
+})
+{
+    Log = server.Log, Characters = characters, PublicAddress = worldAddress, Items = items,
+    FactionValues = db is null ? null : new MySqlFactionValueStore(db),
+};
 zones.Start(zonePort);
 if (db is not null && ReadTimeOfDay(db) is { } tod)
 {
