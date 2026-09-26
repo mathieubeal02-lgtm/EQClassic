@@ -500,7 +500,7 @@ namespace EQClassic.Shared.Zone
 
     /// <summary>An item as the client shows it: id, name, charges (0 when not stackable).</summary>
     /// <summary>An item as the windows show it; Price is its value in copper (items' price), which merchants multiply.</summary>
-    public sealed record ItemView(int ItemId, string Name, int Charges, int Price = 0);
+    public sealed record ItemView(int ItemId, string Name, int Charges, int Price = 0, int BagSlots = 0);
 
     internal static class ItemViews
     {
@@ -513,6 +513,7 @@ namespace EQClassic.Shared.Zone
                 writer.Put(i.Name);
                 writer.Put((short)i.Charges);
                 writer.Put(i.Price);
+                writer.Put((byte)i.BagSlots);
             }
         }
 
@@ -521,7 +522,7 @@ namespace EQClassic.Shared.Zone
             int count = reader.GetUShort();
             var list = new List<ItemView>(count);
             for (int n = 0; n < count; n++)
-                list.Add(new ItemView(reader.GetInt(), reader.GetString(), reader.GetShort(), reader.GetInt()));
+                list.Add(new ItemView(reader.GetInt(), reader.GetString(), reader.GetShort(), reader.GetInt(), reader.GetByte()));
             return list;
         }
     }
@@ -570,9 +571,15 @@ namespace EQClassic.Shared.Zone
         public static LootContents ReadFields(NetDataReader reader) => new LootContents(reader.GetInt(), ItemViews.Read(reader));
     }
 
-    /// <summary>Zone server to the player: the 30 inventory slots (worn 0-21, general 22-29) and money.</summary>
-    public sealed record PlayerInventory(IReadOnlyList<ItemView> Slots, int Platinum, int Gold, int Silver, int Copper) : IMessage
+    /// <summary>
+    /// Zone server to the player: the 30 inventory slots (worn 0-21, general 22-29), money, and the
+    /// contents of the bags in the general slots (80 cells, slot numbers 250 + bag × 10 + cell).
+    /// </summary>
+    public sealed record PlayerInventory(IReadOnlyList<ItemView> Slots, int Platinum, int Gold, int Silver, int Copper, IReadOnlyList<ItemView>? Bags = null) : IMessage
     {
+        public const int BagSlotBase = 250, BagCells = 10;
+        public IReadOnlyList<ItemView> BagCellsOrEmpty => Bags ?? System.Array.Empty<ItemView>();
+
         public MessageType Type => MessageType.PlayerInventory;
 
         public void WriteFields(NetDataWriter writer)
@@ -582,10 +589,11 @@ namespace EQClassic.Shared.Zone
             writer.Put(Gold);
             writer.Put(Silver);
             writer.Put(Copper);
+            ItemViews.Write(writer, BagCellsOrEmpty);
         }
 
         public static PlayerInventory ReadFields(NetDataReader reader) =>
-            new PlayerInventory(ItemViews.Read(reader), reader.GetInt(), reader.GetInt(), reader.GetInt(), reader.GetInt());
+            new PlayerInventory(ItemViews.Read(reader), reader.GetInt(), reader.GetInt(), reader.GetInt(), reader.GetInt(), ItemViews.Read(reader));
     }
 
     /// <summary>Client to zone server: move or swap the items of two inventory slots (legacy OP_MoveItem).</summary>
@@ -595,11 +603,11 @@ namespace EQClassic.Shared.Zone
 
         public void WriteFields(NetDataWriter writer)
         {
-            writer.Put((byte)From);
-            writer.Put((byte)To);
+            writer.Put((ushort)From);
+            writer.Put((ushort)To);
         }
 
-        public static MoveItem ReadFields(NetDataReader reader) => new MoveItem(reader.GetByte(), reader.GetByte());
+        public static MoveItem ReadFields(NetDataReader reader) => new MoveItem(reader.GetUShort(), reader.GetUShort());
     }
 
     /// <summary>A spell as the client shows it in the book and the gems.</summary>
@@ -708,8 +716,8 @@ namespace EQClassic.Shared.Zone
     public sealed record ScribeScroll(int Slot) : IMessage
     {
         public MessageType Type => MessageType.ScribeScroll;
-        public void WriteFields(NetDataWriter writer) => writer.Put((byte)Slot);
-        public static ScribeScroll ReadFields(NetDataReader reader) => new ScribeScroll(reader.GetByte());
+        public void WriteFields(NetDataWriter writer) => writer.Put((ushort)Slot);
+        public static ScribeScroll ReadFields(NetDataReader reader) => new ScribeScroll(reader.GetUShort());
     }
 
     /// <summary>A buff on the player as the buff window shows it.</summary>
@@ -825,10 +833,10 @@ namespace EQClassic.Shared.Zone
         public void WriteFields(NetDataWriter writer)
         {
             writer.Put(NpcId);
-            writer.Put((byte)Slot);
+            writer.Put((ushort)Slot);
         }
 
-        public static MerchantSell ReadFields(NetDataReader reader) => new MerchantSell(reader.GetInt(), reader.GetByte());
+        public static MerchantSell ReadFields(NetDataReader reader) => new MerchantSell(reader.GetInt(), reader.GetUShort());
     }
 
     /// <summary>Client to zone server: close the merchant's window (legacy OP_ShopEnd).</summary>

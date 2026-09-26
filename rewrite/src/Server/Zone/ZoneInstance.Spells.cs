@@ -138,9 +138,9 @@ public sealed partial class ZoneInstance
     public void ScribeScroll(int playerId, int slot)
     {
         if (!_entities.TryGetValue(playerId, out var player) || player.Inventory is not { } inventory
-            || slot is < 0 or >= PlayerInventory.Slots || inventory.Items[slot] == 0)
+            || inventory.ItemAt(slot) == 0)
             return;
-        if (Items?.Get(inventory.Items[slot]) is not { ItemType: Combat.ItemStats.SpellScroll } scroll || SpellById(scroll.ScrollSpell) is not { } spell)
+        if (Items?.Get(inventory.ItemAt(slot)) is not { ItemType: Combat.ItemStats.SpellScroll } scroll || SpellById(scroll.ScrollSpell) is not { } spell)
         {
             _events.Add(new Told(playerId, "That is not a spell scroll."));
             return;
@@ -170,8 +170,7 @@ public sealed partial class ZoneInstance
         }
         book[page] = spell.Id;
         player.Book = book;
-        inventory.Items[slot] = 0;
-        inventory.Charges[slot] = 0;
+        inventory.Set(slot, 0, 0);
         _events.Add(new Told(playerId, $"You have finished scribing {spell.Name}."));
         _events.Add(new InventoryChanged(playerId));
         _events.Add(new GemsChanged(playerId));
@@ -481,14 +480,13 @@ public sealed partial class ZoneInstance
     {
         if (player.Inventory is not { } inventory || itemId <= 0)
             return;
-        int slot = inventory.FreeGeneralSlot();
+        int slot = inventory.FreeSlotFor(Items?.Get(itemId), id => Items?.Get(id));
         if (slot < 0)
         {
             _events.Add(new Told(player.Id, "You have no room to hold the summoned item."));
             return;
         }
-        inventory.Items[slot] = itemId;
-        inventory.Charges[slot] = charges;
+        inventory.Set(slot, itemId, charges);
         _events.Add(new InventoryChanged(player.Id));
     }
 

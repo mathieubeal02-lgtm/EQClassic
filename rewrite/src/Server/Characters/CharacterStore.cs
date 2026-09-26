@@ -21,7 +21,8 @@ public interface ICharacterStore
     void SavePosition(string name, string zone, float x, float y, float z, int? hp = null, uint? exp = null, int? level = null);
 
     /// <summary>The 30 inventory slots (item ids and charges) and the money, into the profile.</summary>
-    void SaveInventory(string name, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins);
+    void SaveInventory(string name, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins,
+        IReadOnlyList<int>? bagItems = null, IReadOnlyList<int>? bagCharges = null);
 
     /// <summary>Skill values after skill-ups.</summary>
     void SaveSkills(string name, IReadOnlyList<int> skills);
@@ -82,15 +83,23 @@ public sealed class InMemoryCharacterStore : ICharacterStore
         }
     }
 
-    public void SaveInventory(string name, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins)
+    public void SaveInventory(string name, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins,
+        IReadOnlyList<int>? bagItems = null, IReadOnlyList<int>? bagCharges = null)
     {
         int i = _characters.FindIndex(c => string.Equals(c.Profile.Name, name, StringComparison.OrdinalIgnoreCase));
         if (i < 0)
             return;
         var c = _characters[i];
-        _characters[i] = c with { Profile = c.Profile with { Inventory = items.ToArray(), Charges = charges.ToArray(), Coins = coins } };
+        _characters[i] = c with
+        {
+            Profile = c.Profile with
+            {
+                Inventory = items.ToArray(), Charges = charges.ToArray(), Coins = coins,
+                BagItems = bagItems?.ToArray() ?? c.Profile.BagItems, BagCharges = bagCharges?.ToArray() ?? c.Profile.BagCharges,
+            },
+        };
         if (Profiles.TryGetValue(name, out var raw))
-            WriteInventory(raw, items, charges, coins);
+            WriteInventory(raw, items, charges, coins, bagItems, bagCharges);
     }
 
     public void SaveSpells(string name, IReadOnlyList<int> book, IReadOnlyList<int> gems, int mana, IReadOnlyList<(int SpellId, int CasterLevel, int Tics)> buffs)
@@ -133,10 +142,15 @@ public sealed class InMemoryCharacterStore : ICharacterStore
         ProfileTemplate.SetBuffs(profile, buffs);
     }
 
-    internal static void WriteInventory(byte[] profile, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins)
+    internal static void WriteInventory(byte[] profile, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins,
+        IReadOnlyList<int>? bagItems = null, IReadOnlyList<int>? bagCharges = null)
     {
+        static sbyte Charge(int c) => (sbyte)Math.Clamp(c, sbyte.MinValue, sbyte.MaxValue);
         for (int slot = 0; slot < Math.Min(30, items.Count); slot++)
-            ProfileTemplate.SetItem(profile, slot, items[slot] == 0 ? (ushort)0xFFFF : (ushort)items[slot], (sbyte)Math.Clamp(charges[slot], sbyte.MinValue, sbyte.MaxValue));
+            ProfileTemplate.SetItem(profile, slot, items[slot] == 0 ? (ushort)0xFFFF : (ushort)items[slot], Charge(charges[slot]));
+        for (int cell = 0; bagItems is not null && cell < Math.Min(PlayerProfile.BagSlotsTotal, bagItems.Count); cell++)
+            ProfileTemplate.SetBagItem(profile, cell, bagItems[cell] == 0 ? (ushort)0xFFFF : (ushort)bagItems[cell],
+                Charge(bagCharges is not null && cell < bagCharges.Count ? bagCharges[cell] : 0));
         ProfileTemplate.SetCoins(profile, coins);
     }
 
@@ -215,8 +229,9 @@ public sealed class MySqlCharacterStore : ICharacterStore
         tx.Commit();
     }
 
-    public void SaveInventory(string name, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins) =>
-        Update(name, profile => InMemoryCharacterStore.WriteInventory(profile, items, charges, coins));
+    public void SaveInventory(string name, IReadOnlyList<int> items, IReadOnlyList<int> charges, EQClassic.Server.Zone.Coins coins,
+        IReadOnlyList<int>? bagItems = null, IReadOnlyList<int>? bagCharges = null) =>
+        Update(name, profile => InMemoryCharacterStore.WriteInventory(profile, items, charges, coins, bagItems, bagCharges));
 
     public void SaveBind(string name, string zone, float x, float y, float z) =>
         Update(name, profile => ProfileTemplate.SetBind(profile, zone, x, y, z));

@@ -10,6 +10,11 @@ public sealed record ItemStats(int Id, string Name, int Damage, int Delay, int I
     public int ScrollSpell { get; init; }
     /// <summary>Value in copper (price): merchants sell at 2.5 times, buy at 0.4 times.</summary>
     public int Price { get; init; }
+    /// <summary>Containers (itemclass 1): their cells and the largest item size they take; every item's size (0 tiny to 4 giant).</summary>
+    public bool IsContainer { get; init; }
+    public int BagSlots { get; init; }
+    public int BagSize { get; init; }
+    public int Size { get; init; }
     public const int SpellScroll = 20;
 
     /// <summary>Whether it can be worn in this worn slot (0-21): bit <c>slot</c> of the slots bitmask.</summary>
@@ -73,12 +78,12 @@ public sealed class MySqlItemSource : IItemSource
         using var connection = new MySqlConnection(_connectionString);
         connection.Open();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT id, Name, damage, delay, itemtype, ac, slots, classes, races, scrolleffect, price FROM `{_table}` WHERE id = @id";
+        cmd.CommandText = $"SELECT id, Name, damage, delay, itemtype, ac, slots, classes, races, scrolleffect, price, itemclass, bagslots, bagsize, size FROM `{_table}` WHERE id = @id";
         cmd.Parameters.AddWithValue("@id", id);
         using var r = cmd.ExecuteReader();
         if (!r.Read())
             return null;
         int I(int i) => r.IsDBNull(i) ? 0 : Convert.ToInt32(r.GetValue(i));
-        return new ItemStats(I(0), r.IsDBNull(1) ? "" : r.GetString(1), I(2), I(3), I(4), I(5), I(6), I(7), I(8)) { ScrollSpell = I(9), Price = I(10) };
+        return new ItemStats(I(0), r.IsDBNull(1) ? "" : r.GetString(1), I(2), I(3), I(4), I(5), I(6), I(7), I(8)) { ScrollSpell = I(9), Price = I(10), IsContainer = I(11) == 1, BagSlots = I(12), BagSize = I(13), Size = I(14) };
     }
 }

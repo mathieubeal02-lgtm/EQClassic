@@ -295,7 +295,7 @@ public sealed class ZoneServer : IDisposable
             Log?.Invoke($"zone {ticket.Zone} booted: {instance.Entities.Count()} NPC(s)");
         }
         var profile = ticket.Profile;
-        var inventory = profile is null ? null : ZoneInstance.PlayerInventory.From(profile.Inventory, profile.Charges, profile.Coins);
+        var inventory = profile is null ? null : ZoneInstance.PlayerInventory.From(profile.Inventory, profile.Charges, profile.Coins, profile.BagItems, profile.BagCharges);
         // One skills array for the zone's skill-ups and the fighter builder below.
         var skills = profile is null ? null : Enumerable.Range(0, EQClassic.Server.Combat.SkillCaps.SkillCount).Select(profile.Skill).ToArray();
         var progress = profile is null ? null : new ZoneInstance.PlayerProgress(profile.Exp, profile.BindZone,
@@ -641,14 +641,16 @@ public sealed class ZoneServer : IDisposable
     }
 
     private ItemView View(int itemId, int charges) =>
-        itemId == 0 ? new(0, "", charges) : Items?.Get(itemId) is { } item ? new(itemId, item.Name, charges, item.Price) : new(itemId, $"item #{itemId}", charges);
+        itemId == 0 ? new(0, "", charges) : Items?.Get(itemId) is { } item ? new(itemId, item.Name, charges, item.Price, item.IsContainer ? item.BagSlots : 0)
+            : new(itemId, $"item #{itemId}", charges);
 
     private PlayerInventory InventoryOf(ZoneInstance.Entity p)
     {
         var inventory = p.Inventory ?? new ZoneInstance.PlayerInventory();
         var slots = Enumerable.Range(0, ZoneInstance.PlayerInventory.Slots).Select(i => View(inventory.Items[i], inventory.Charges[i])).ToList();
+        var bags = Enumerable.Range(0, ZoneInstance.PlayerInventory.BagSlotsTotal).Select(i => View(inventory.BagItems[i], inventory.BagCharges[i])).ToList();
         var c = inventory.Coins;
-        return new PlayerInventory(slots, c.Platinum, c.Gold, c.Silver, c.Copper);
+        return new PlayerInventory(slots, c.Platinum, c.Gold, c.Silver, c.Copper, bags);
     }
 
     private static PlayerExperience ExperienceOf(ZoneInstance.Entity p) =>
@@ -678,6 +680,7 @@ public sealed class ZoneServer : IDisposable
                 Level = now.Level, Exp = now.Exp, CurHp = now.Hp, Zone = crossed.Line.TargetZone, X = d.X, Y = d.Y, Z = d.Z,
                 Inventory = now.Inventory?.Items.ToArray() ?? p.Inventory, Charges = now.Inventory?.Charges.ToArray() ?? p.Charges,
                 Coins = now.Inventory?.Coins ?? p.Coins,
+                BagItems = now.Inventory?.BagItems.ToArray() ?? p.BagItems, BagCharges = now.Inventory?.BagCharges.ToArray() ?? p.BagCharges,
                 Mana = now.Mana, SpellBook = now.Book, SpellGemIds = now.Gems.ToArray(),
                 Buffs = ZoneInstance.SaveBuffs(now).Select(b => (b.SpellId, b.CasterLevel, b.TicsLeft)).ToArray(),
                 BindZone = now.BindZone, BindX = now.Bind.X, BindY = now.Bind.Y, BindZ = now.Bind.Z,
@@ -710,7 +713,7 @@ public sealed class ZoneServer : IDisposable
         Characters?.SavePosition(player.Ticket.CharacterName, zone, at.X, at.Y, at.Z, state?.Hp,
             player.Ticket.Profile is null ? null : state?.Exp, player.Ticket.Profile is null ? null : state?.Level);
         if (player.Ticket.Profile is not null && state?.Inventory is { } inventory)
-            Characters?.SaveInventory(player.Ticket.CharacterName, inventory.Items, inventory.Charges, inventory.Coins);
+            Characters?.SaveInventory(player.Ticket.CharacterName, inventory.Items, inventory.Charges, inventory.Coins, inventory.BagItems, inventory.BagCharges);
         if (player.Ticket.Profile is not null && state is not null)
             Characters?.SaveSkills(player.Ticket.CharacterName, state.Skills);
         if (player.Ticket.Profile is not null && state is not null)

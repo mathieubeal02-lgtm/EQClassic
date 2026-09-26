@@ -111,7 +111,7 @@ public sealed partial class ZoneInstance
             CloseMerchant(playerId);
             return;
         }
-        int slot = inventory.FreeGeneralSlot();
+        int slot = inventory.FreeSlotFor(item, id => Items?.Get(id));
         if (slot < 0)
         {
             _events.Add(new Told(playerId, "Your inventory appears full now!"));
@@ -124,8 +124,7 @@ public sealed partial class ZoneInstance
             return;
         }
         inventory.Coins = left;
-        inventory.Items[slot] = item.Id;
-        inventory.Charges[slot] = 1;
+        inventory.Set(slot, item.Id, 1);
         _events.Add(new Told(playerId, $"You bought a {item.Name} for {MerchantRules.Coins(price)}."));
         _events.Add(new InventoryChanged(playerId));
     }
@@ -134,16 +133,15 @@ public sealed partial class ZoneInstance
     public void Sell(int playerId, int npcId, int slot)
     {
         if (!_entities.TryGetValue(playerId, out var player) || player.MerchantId != npcId || player.Inventory is not { } inventory
-            || slot < 0 || slot >= PlayerInventory.Slots || inventory.Items[slot] == 0)
+            || inventory.ItemAt(slot) == 0 || inventory.BagHasItems(slot))
             return;
-        var item = Items?.Get(inventory.Items[slot]);
-        int price = MerchantRules.SellPrice(item?.Price ?? 0) * Math.Max(1, inventory.Charges[slot] > 1 ? inventory.Charges[slot] : 1);
+        var item = Items?.Get(inventory.ItemAt(slot));
+        int price = MerchantRules.SellPrice(item?.Price ?? 0) * Math.Max(1, inventory.ChargesAt(slot));
         inventory.Coins = inventory.Coins.AddCopper(price);
-        inventory.Items[slot] = 0;
-        inventory.Charges[slot] = 0;
+        inventory.Set(slot, 0, 0);
         _events.Add(new Told(playerId, $"You sold {item?.Name ?? "an item"} for {MerchantRules.Coins(price)}."));
         _events.Add(new InventoryChanged(playerId));
-        if (slot < PlayerInventory.FirstGeneral)
+        if (slot is >= 0 and < PlayerInventory.FirstGeneral)
             RebuildFighter(player);
     }
 

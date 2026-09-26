@@ -113,6 +113,13 @@ public static class ProfileTemplate
 
     public static sbyte GetCharges(byte[] p, int slot) => (sbyte)p[ItemPropertiesOffset + ItemPropertiesSize * slot + ChargesOffset];
 
+    /// <summary>One cell of a bag (containerinv and bagItemProprieties), 0-79.</summary>
+    public static void SetBagItem(byte[] p, int cell, ushort item, sbyte charges)
+    {
+        BinaryPrimitives.WriteUInt16LittleEndian(p.AsSpan(PlayerProfile.BagItemsOffset + 2 * cell), item);
+        p[PlayerProfile.BagPropertiesOffset + ItemPropertiesSize * cell + ChargesOffset] = (byte)charges;
+    }
+
     public static void SetItem(byte[] p, int slot, ushort item, sbyte charges)
     {
         if ((uint)slot >= InventorySlots)

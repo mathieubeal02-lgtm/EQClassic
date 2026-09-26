@@ -167,20 +167,55 @@ public sealed partial class ZoneInstance
     }
 
     /// <summary>A player's inventory: item id and charges for each of the 30 profile slots, and money.</summary>
+    /// <summary>
+    /// A player's items: 30 slots (0-21 worn, 22-29 general) and the contents of the bags in the
+    /// general slots, up to 10 each (the profile's containerinv[80]), addressed as the legacy zone
+    /// did: 250 + bag × 10 + cell, bag 0 being the one in slot 22.
+    /// </summary>
     public sealed class PlayerInventory
     {
-        public const int Slots = 30, FirstGeneral = 22;
+        public const int Slots = 30, FirstGeneral = 22, BagSlotBase = 250, BagCells = 10, BagCount = 8, BagSlotsTotal = BagCount * BagCells;
         public int[] Items { get; } = new int[Slots];
         public int[] Charges { get; } = new int[Slots];
+        public int[] BagItems { get; } = new int[BagSlotsTotal];
+        public int[] BagCharges { get; } = new int[BagSlotsTotal];
         public Coins Coins { get; set; }
 
-        public static PlayerInventory From(IReadOnlyList<int> items, IReadOnlyList<int> charges, Coins coins)
+        public static bool IsBagSlot(int slot) => slot >= BagSlotBase && slot < BagSlotBase + BagSlotsTotal;
+        /// <summary>The general slot of the bag holding a bag slot.</summary>
+        public static int BagOf(int bagSlot) => FirstGeneral + (bagSlot - BagSlotBase) / BagCells;
+        public static int CellOf(int bagSlot) => (bagSlot - BagSlotBase) % BagCells;
+        public static int BagSlot(int generalSlot, int cell) => BagSlotBase + (generalSlot - FirstGeneral) * BagCells + cell;
+        public static bool IsGeneral(int slot) => slot >= FirstGeneral && slot < Slots;
+
+        public int ItemAt(int slot) => slot is >= 0 and < Slots ? Items[slot] : IsBagSlot(slot) ? BagItems[slot - BagSlotBase] : 0;
+        public int ChargesAt(int slot) => slot is >= 0 and < Slots ? Charges[slot] : IsBagSlot(slot) ? BagCharges[slot - BagSlotBase] : 0;
+
+        public void Set(int slot, int item, int charges)
+        {
+            if (slot is >= 0 and < Slots)
+                (Items[slot], Charges[slot]) = (item, charges);
+            else if (IsBagSlot(slot))
+                (BagItems[slot - BagSlotBase], BagCharges[slot - BagSlotBase]) = (item, charges);
+        }
+
+        /// <summary>Whether the bag in a general slot holds anything.</summary>
+        public bool BagHasItems(int generalSlot) =>
+            IsGeneral(generalSlot) && Enumerable.Range(0, BagCells).Any(c => BagItems[(generalSlot - FirstGeneral) * BagCells + c] != 0);
+
+        public static PlayerInventory From(IReadOnlyList<int> items, IReadOnlyList<int> charges, Coins coins,
+            IReadOnlyList<int>? bagItems = null, IReadOnlyList<int>? bagCharges = null)
         {
             var inventory = new PlayerInventory { Coins = coins };
             for (int i = 0; i < Slots; i++)
             {
                 inventory.Items[i] = i < items.Count ? items[i] : 0;
                 inventory.Charges[i] = i < charges.Count ? charges[i] : 0;
+            }
+            for (int i = 0; bagItems is not null && i < BagSlotsTotal && i < bagItems.Count; i++)
+            {
+                inventory.BagItems[i] = bagItems[i];
+                inventory.BagCharges[i] = bagCharges is not null && i < bagCharges.Count ? bagCharges[i] : 0;
             }
             return inventory;
         }
@@ -191,6 +226,25 @@ public sealed partial class ZoneInstance
             for (int i = FirstGeneral; i < Slots; i++)
                 if (Items[i] == 0)
                     return i;
+            return -1;
+        }
+
+        /// <summary>
+        /// Client::AutoPutItemInInventory: the first empty general slot, else the first empty cell of a
+        /// bag the item fits in (no bag in a bag, the item's size within the bag's); -1 when full.
+        /// </summary>
+        public int FreeSlotFor(ItemStats? item, Func<int, ItemStats?> itemById)
+        {
+            int general = FreeGeneralSlot();
+            if (general >= 0)
+                return general;
+            if (item is { IsContainer: true })
+                return -1;
+            for (int g = FirstGeneral; g < Slots; g++)
+                if (itemById(Items[g]) is { IsContainer: true } bag && (item is null || item.Size <= bag.BagSize))
+                    for (int c = 0; c < Math.Min(bag.BagSlots, BagCells); c++)
+                        if (BagItems[(g - FirstGeneral) * BagCells + c] == 0)
+                            return BagSlot(g, c);
             return -1;
         }
     }
@@ -583,9 +637,14 @@ public sealed partial class ZoneInstance
     public void MoveItem(int playerId, int from, int to)
     {
         if (!_entities.TryGetValue(playerId, out var player) || player.Inventory is not { } inventory
-            || from is < 0 or >= PlayerInventory.Slots || to is < 0 or >= PlayerInventory.Slots || from == to || inventory.Items[from] == 0)
+            || !ValidSlot(inventory, from) || !ValidSlot(inventory, to) || from == to || inventory.ItemAt(from) == 0)
             return;
-        string? refusal = CanWear(player, inventory.Items[from], to) ?? CanWear(player, inventory.Items[to], from);
+        int moving = inventory.ItemAt(from), swapped = inventory.ItemAt(to);
+        string? refusal = CanWear(player, moving, to) ?? CanWear(player, swapped, from)
+            ?? CanBag(inventory, moving, to) ?? CanBag(inventory, swapped, from);
+        // A bag that holds items only moves between general slots (its contents follow it).
+        if (refusal is null && (inventory.BagHasItems(from) && !PlayerInventory.IsGeneral(to) || inventory.BagHasItems(to) && !PlayerInventory.IsGeneral(from)))
+            refusal = "You cannot move a bag that has items in it there.";
         if (refusal is null && WouldClashTwoHanded(inventory, from, to))
             refusal = "You cannot use a two-handed weapon with something in your off hand.";
         if (refusal is not null)
@@ -594,11 +653,38 @@ public sealed partial class ZoneInstance
             _events.Add(new InventoryChanged(playerId)); // puts the client's view back
             return;
         }
-        (inventory.Items[from], inventory.Items[to]) = (inventory.Items[to], inventory.Items[from]);
-        (inventory.Charges[from], inventory.Charges[to]) = (inventory.Charges[to], inventory.Charges[from]);
+        int movingCharges = inventory.ChargesAt(from), swappedCharges = inventory.ChargesAt(to);
+        inventory.Set(to, moving, movingCharges);
+        inventory.Set(from, swapped, swappedCharges);
+        if (PlayerInventory.IsGeneral(from) && PlayerInventory.IsGeneral(to))
+            for (int c = 0; c < PlayerInventory.BagCells; c++)
+            {
+                int a = PlayerInventory.BagSlot(from, c), b = PlayerInventory.BagSlot(to, c);
+                int ai = inventory.ItemAt(a), ac = inventory.ChargesAt(a);
+                inventory.Set(a, inventory.ItemAt(b), inventory.ChargesAt(b));
+                inventory.Set(b, ai, ac);
+            }
         _events.Add(new InventoryChanged(playerId));
         if (from < PlayerInventory.FirstGeneral || to < PlayerInventory.FirstGeneral)
             RebuildFighter(player);
+    }
+
+    /// <summary>A worn or general slot, or a cell of a bag that is there and has that many cells.</summary>
+    private bool ValidSlot(PlayerInventory inventory, int slot) =>
+        slot is >= 0 and < PlayerInventory.Slots
+        || PlayerInventory.IsBagSlot(slot) && Items?.Get(inventory.Items[PlayerInventory.BagOf(slot)]) is { IsContainer: true } bag
+           && PlayerInventory.CellOf(slot) < bag.BagSlots;
+
+    /// <summary>Why this item cannot go into that bag cell (no bag in a bag, sizes), or null.</summary>
+    private string? CanBag(PlayerInventory inventory, int itemId, int slot)
+    {
+        if (itemId == 0 || !PlayerInventory.IsBagSlot(slot))
+            return null;
+        var item = Items?.Get(itemId);
+        if (item is { IsContainer: true })
+            return "You cannot put a bag in a bag.";
+        var bag = Items?.Get(inventory.Items[PlayerInventory.BagOf(slot)]);
+        return item is not null && bag is not null && item.Size > bag.BagSize ? "That item is too large for the bag." : null;
     }
 
     private const int PrimarySlot = 13, SecondarySlot = 14;
@@ -632,16 +718,15 @@ public sealed partial class ZoneInstance
             || !_entities.TryGetValue(corpseId, out var body) || body.Corpse is not { } corpse
             || corpse.Looter != playerId || index < 0 || index >= corpse.Items.Count)
             return;
-        int slot = inventory.FreeGeneralSlot();
+        var item = corpse.Items[index];
+        int slot = inventory.FreeSlotFor(Items?.Get(item.ItemId), id => Items?.Get(id));
         if (slot < 0)
         {
             _events.Add(new Told(playerId, "There is no room in your inventory for that item."));
             return;
         }
-        var item = corpse.Items[index];
         corpse.Items.RemoveAt(index);
-        inventory.Items[slot] = item.ItemId;
-        inventory.Charges[slot] = item.Charges;
+        inventory.Set(slot, item.ItemId, item.Charges);
         _events.Add(new Told(playerId, $"You have looted a {Items?.Get(item.ItemId)?.Name ?? "item #" + item.ItemId}."));
         _events.Add(new InventoryChanged(playerId));
         _events.Add(new LootShown(playerId, corpseId, corpse.Items.ToList()));

@@ -46,6 +46,10 @@ public sealed record PlayerProfile(
     public IReadOnlyList<int> Inventory { get; init; } = Array.Empty<int>();
     /// <summary>Charges of the item in each slot (stack size, food and drink portions).</summary>
     public IReadOnlyList<int> Charges { get; init; } = Array.Empty<int>();
+    /// <summary>The contents of the bags in the general slots (containerinv[80], 10 per bag) and their charges.</summary>
+    public IReadOnlyList<int> BagItems { get; init; } = Array.Empty<int>();
+    public IReadOnlyList<int> BagCharges { get; init; } = Array.Empty<int>();
+    public const int BagItemsOffset = 798, BagPropertiesOffset = 978, BagSlotsTotal = 80;
     public EQClassic.Server.Zone.Coins Coins { get; init; }
     /// <summary>Skill values by skill id; 254 (not trained yet) and 255 (cannot learn) read as 0.</summary>
     public IReadOnlyList<int> Skills { get; init; } = Array.Empty<int>();
@@ -107,6 +111,8 @@ public sealed record PlayerProfile(
             Buffs = ReadBuffs(profile),
             Inventory = ReadInventory(profile),
             Charges = ReadCharges(profile),
+            BagItems = ReadIds(profile, BagItemsOffset, BagSlotsTotal),
+            BagCharges = ReadBagCharges(profile),
             Coins = new EQClassic.Server.Zone.Coins(
                 BinaryPrimitives.ReadInt32LittleEndian(profile[CoinsOffset..]), BinaryPrimitives.ReadInt32LittleEndian(profile[(CoinsOffset + 4)..]),
                 BinaryPrimitives.ReadInt32LittleEndian(profile[(CoinsOffset + 8)..]), BinaryPrimitives.ReadInt32LittleEndian(profile[(CoinsOffset + 12)..])),
@@ -114,6 +120,22 @@ public sealed record PlayerProfile(
                 ? profile.Slice(SkillsOffset, SkillCount).ToArray().Select(b => b >= 254 ? 0 : (int)b).ToArray()
                 : Array.Empty<int>(),
         };
+    }
+
+    private static int[] ReadBagCharges(ReadOnlySpan<byte> profile)
+    {
+        var charges = new int[BagSlotsTotal];
+        for (int i = 0; i < BagSlotsTotal; i++)
+            charges[i] = (sbyte)profile[BagPropertiesOffset + ItemPropertiesSize * i + 2];
+        return charges;
+    }
+
+    private static int[] ReadIds(ReadOnlySpan<byte> profile, int offset, int count)
+    {
+        var ids = new int[count];
+        for (int i = 0; i < count; i++)
+            ids[i] = BinaryPrimitives.ReadUInt16LittleEndian(profile[(offset + 2 * i)..]) is var id && id != 0xFFFF ? id : 0;
+        return ids;
     }
 
     private static int[] ReadInventory(ReadOnlySpan<byte> profile)

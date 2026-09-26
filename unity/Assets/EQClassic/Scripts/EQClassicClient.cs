@@ -224,42 +224,65 @@ namespace EQClassic.Unity
         {
             var inventory = _client.Inventory;
             GUILayout.BeginArea(new Rect(Screen.width - 640, 60, 300, Screen.height - 120), GUI.skin.box);
-            GUILayout.Label(_heldSlot is int held && inventory != null ? $"Inventory - holding {inventory.Slots[held].Name}" : "Inventory");
+            GUILayout.Label(_heldSlot is int held && inventory != null ? $"Inventory - holding {ItemIn(inventory, held).Name}" : "Inventory");
             if (inventory == null)
             {
                 GUILayout.Label("(not received yet)");
                 GUILayout.EndArea();
                 return;
             }
+            _inventoryScroll = GUILayout.BeginScrollView(_inventoryScroll);
             for (int slot = 0; slot < inventory.Slots.Count; slot++)
             {
                 var item = inventory.Slots[slot];
                 string where = slot < SlotNames.Length ? SlotNames[slot] : $"General {slot - SlotNames.Length + 1}";
-                string what = item.ItemId == 0 ? "-" : item.Charges > 1 ? $"{item.Name} ({item.Charges})" : item.Name;
-                GUILayout.BeginHorizontal();
-                if (item.Name.StartsWith("Spell: ") && GUILayout.Button("Scribe", GUILayout.Width(60)))
-                    _client.Scribe(slot);
-                if (_client.Merchant != null && item.ItemId != 0
-                    && GUILayout.Button("Sell " + MerchantRules.Coins(MerchantRules.SellPrice(item.Price)), GUILayout.Width(90)))
-                    _client.Sell(slot);
-                bool clicked = GUILayout.Button($"{where}: {what}");
-                GUILayout.EndHorizontal();
-                if (clicked)
+                DrawInventoryRow(slot, where, item);
+                // A bag in a general slot: its cells below it (slots 250 + bag × 10 + cell).
+                for (int cell = 0; slot >= SlotNames.Length && cell < item.BagSlots && cell < PlayerInventory.BagCells; cell++)
                 {
-                    if (_heldSlot is int from)
-                    {
-                        if (from != slot)
-                            _client.MoveItem(from, slot);
-                        _heldSlot = null;
-                    }
-                    else if (item.ItemId != 0)
-                    {
-                        _heldSlot = slot;
-                    }
+                    int bagSlot = PlayerInventory.BagSlotBase + (slot - SlotNames.Length) * PlayerInventory.BagCells + cell;
+                    DrawInventoryRow(bagSlot, $"    {cell + 1}", ItemIn(inventory, bagSlot));
                 }
             }
+            GUILayout.EndScrollView();
             GUILayout.Label($"{inventory.Platinum} pp  {inventory.Gold} gp  {inventory.Silver} sp  {inventory.Copper} cp");
             GUILayout.EndArea();
+        }
+
+        private Vector2 _inventoryScroll;
+
+        private static ItemView ItemIn(PlayerInventory inventory, int slot)
+        {
+            if (slot < inventory.Slots.Count)
+                return inventory.Slots[slot];
+            int cell = slot - PlayerInventory.BagSlotBase;
+            return cell >= 0 && cell < inventory.BagCellsOrEmpty.Count ? inventory.BagCellsOrEmpty[cell] : new ItemView(0, "", 0);
+        }
+
+        /// <summary>One inventory line: Scribe and Sell when they apply; a click picks the item up, another puts it down.</summary>
+        private void DrawInventoryRow(int slot, string where, ItemView item)
+        {
+            string what = item.ItemId == 0 ? "-" : item.Charges > 1 ? $"{item.Name} ({item.Charges})" : item.Name;
+            GUILayout.BeginHorizontal();
+            if (item.Name.StartsWith("Spell: ") && GUILayout.Button("Scribe", GUILayout.Width(60)))
+                _client.Scribe(slot);
+            if (_client.Merchant != null && item.ItemId != 0
+                && GUILayout.Button("Sell " + MerchantRules.Coins(MerchantRules.SellPrice(item.Price)), GUILayout.Width(90)))
+                _client.Sell(slot);
+            bool clicked = GUILayout.Button($"{where}: {what}");
+            GUILayout.EndHorizontal();
+            if (!clicked)
+                return;
+            if (_heldSlot is int from)
+            {
+                if (from != slot)
+                    _client.MoveItem(from, slot);
+                _heldSlot = null;
+            }
+            else if (item.ItemId != 0)
+            {
+                _heldSlot = slot;
+            }
         }
 
         /// <summary>
