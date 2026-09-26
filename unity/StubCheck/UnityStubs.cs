@@ -162,6 +162,7 @@ namespace UnityEngine
         public Color(float r, float g, float b) { }
         public Color(float r, float g, float b, float a) { }
         public static Color white => default;
+        public static Color black => default;
         public static Color Lerp(Color a, Color b, float t) => a;
         public static Color green => default;
         public static Color yellow => default;
