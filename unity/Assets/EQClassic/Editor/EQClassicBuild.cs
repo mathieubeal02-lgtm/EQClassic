@@ -39,7 +39,15 @@ namespace EQClassic.Unity.Editor
                 var prefab = $"{Content}Zones/{zone}/{zone}.prefab";
                 if (!File.Exists(prefab))
                     continue;
-                builds.Add(new AssetBundleBuild { assetBundleName = ClientBundles.ZoneBundle(zone), assetNames = new[] { prefab } });
+                // The zone and its object models (placed at run time from <zone>_objects.txt).
+                var assets = new List<string> { prefab };
+                var objects = $"{Content}Zones/{zone}/Objects";
+                if (Directory.Exists(objects))
+                    assets.AddRange(Directory.GetFiles(objects, "*.prefab").Select(p => p.Replace('\\', '/')));
+                builds.Add(new AssetBundleBuild { assetBundleName = ClientBundles.ZoneBundle(zone), assetNames = assets.ToArray() });
+                var instances = Path.Combine(Application.dataPath, "EQAssets", zone, "Zone", "object_instances.txt");
+                if (File.Exists(instances))
+                    File.Copy(instances, Path.Combine(StreamingDir, zone + "_objects.txt"), overwrite: true);
                 var exports = Path.Combine(Application.dataPath, "EQAssets");
                 if (File.Exists(Path.Combine(exports, zone, "Zone", "Meshes", zone + "_collision.txt")))
                 {

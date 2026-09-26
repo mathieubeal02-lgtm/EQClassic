@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using EQClassic.ClientCore;
 using EQClassic.Shared.World;
@@ -36,6 +37,7 @@ namespace EQClassic.Unity
         private GameObject _zoneRoot;
         private ZoneCollisionMesh _mesh;
         private Camera _camera;
+        private Light _playerLight;
 
         public void Enter(ZoneView zone)
         {
@@ -47,6 +49,8 @@ namespace EQClassic.Unity
                 Debug.LogWarning($"EQClassic: zone '{zone.Zone}' is not imported (EQ > Assets > Import Zone). Drawing entities only.");
                 _zoneRoot = new GameObject(zone.Zone + " (not imported)");
             }
+            if (zonePrefab != null)
+                PlaceObjects(zone.Zone);
             _mesh = LoadCollision(zone.Zone);
             foreach (var e in zone.Entities)
                 AddEntity(e);
@@ -92,7 +96,10 @@ namespace EQClassic.Unity
                     Animate(animated, position, deltaTime);
             }
 
-            if (_objects.TryGetValue(player.EntityId, out var me) && _camera != null)
+            if (_objects.TryGetValue(player.EntityId, out var me) && _playerLight == null)
+                _playerLight = AddPlayerLight(me);
+
+            if (me != null && _camera != null)
             {
                 var back = me.transform.rotation * new Vector3(0f, 0f, -1f);
                 var head = me.transform.position + new Vector3(0f, 2f, 0f);
@@ -204,6 +211,7 @@ namespace EQClassic.Unity
                 Destroy(go);
             _objects.Clear();
             _animated.Clear();
+            _playerLight = null; // destroyed with the player's object
             if (_zoneRoot != null)
                 Destroy(_zoneRoot);
             _zoneRoot = null;
@@ -226,6 +234,63 @@ namespace EQClassic.Unity
                 return ZoneCollisionMesh.LoadLantern(path);
             Debug.LogWarning($"EQClassic: no collision mesh at {path}; the player will not follow the ground.");
             return null;
+        }
+
+        /// <summary>
+        /// The zone's placed objects (trees, lamp posts, crates...): LanternUnityTools leaves them
+        /// out of the zone prefab for its own streaming, so they are placed here from the Lantern
+        /// object list, under the zone root (Lantern axes, before the root's world scale).
+        /// </summary>
+        private void PlaceObjects(string zone)
+        {
+            var list = Path.Combine(Application.dataPath, "EQAssets", zone, "Zone", "object_instances.txt");
+            if (!File.Exists(list))
+                list = Path.Combine(ClientBundles.Directory, zone + "_objects.txt");
+            if (!File.Exists(list))
+                return;
+            var prefabs = new Dictionary<string, GameObject>();
+            int placed = 0;
+            foreach (var line in File.ReadLines(list))
+            {
+                if (line.Length == 0 || line[0] == '#')
+                    continue;
+                // ModelName, PosX, PosY, PosZ, RotX, RotY, RotZ, ScaleX, ScaleY, ScaleZ, ColorIndex
+                var f = line.Split(',');
+                if (f.Length < 10)
+                    continue;
+                var position = new Vector3(Number(f[1]), Number(f[2]), Number(f[3]));
+                if (position.y < -30000f)
+                    continue; // fallen to the bottom of the world
+                if (!prefabs.TryGetValue(f[0], out var prefab))
+                    prefabs[f[0]] = prefab = LoadPrefab(ContentRoot + "Zones/" + zone + "/Objects/" + f[0] + ".prefab");
+                if (prefab == null)
+                    continue;
+                var go = Instantiate(prefab);
+                go.transform.SetParent(_zoneRoot.transform, false);
+                go.transform.localPosition = position;
+                go.transform.localRotation = Quaternion.Euler(Number(f[4]), Number(f[5]), Number(f[6]));
+                go.transform.localScale = new Vector3(Number(f[7]), Number(f[8]), Number(f[9]));
+                placed++;
+            }
+            Debug.Log($"EQClassic: {placed} object(s) placed in {zone}");
+        }
+
+        private static float Number(string s) => float.Parse(s, CultureInfo.InvariantCulture);
+
+        /// <summary>
+        /// A warm light carried by the player, as a torch would be, so dungeons such as Permafrost
+        /// are playable. The Lantern shaders add URP's per-vertex lights to the baked vertex colours.
+        /// </summary>
+        private static Light AddPlayerLight(GameObject player)
+        {
+            var light = new GameObject("EQClassic player light").AddComponent<Light>();
+            light.type = LightType.Point;
+            light.range = 30f;       // Unity units: 60 EverQuest units
+            light.intensity = 1.2f;
+            light.color = new Color(1f, 0.85f, 0.6f);
+            light.transform.SetParent(player.transform, false);
+            light.transform.localPosition = new Vector3(0f, 4f, 0f);
+            return light;
         }
 
         private void EnsureCamera()

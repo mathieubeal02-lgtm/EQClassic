@@ -52,6 +52,7 @@ namespace UnityEngine
     {
         public Vector3 position { get; set; }
         public Quaternion rotation { get; set; }
+        public Quaternion localRotation { get; set; }
         public Vector3 localScale { get; set; }
         public Vector3 localPosition { get; set; }
         public Transform parent { get; set; }
@@ -99,6 +100,14 @@ namespace UnityEngine
     public sealed class Light : Behaviour
     {
         public LightType type { get; set; }
+        public float range { get; set; }
+        public float intensity { get; set; }
+        public Color color { get; set; }
+    }
+
+    public struct Color
+    {
+        public Color(float r, float g, float b) { }
     }
 
     public static class Input

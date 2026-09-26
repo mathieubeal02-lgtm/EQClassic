@@ -82,7 +82,8 @@ the editor.
 | Works (tested) | Not yet |
 |---|---|
 | Login, world and zone connection chain, zone changes (`GameClientTests`) | The Windows build is built but not yet played on Windows (only 32-bit Wine here) |
-| Qeynos, Grobb and Permafrost imported and entered from the Linux build | Dungeons are very dark: no light source around the player yet |
+| Qeynos, Grobb and Permafrost imported and entered from the Linux build; a warm light follows the player (dungeons are playable) | Light sources carried as items (torches) are not modelled |
+| Placed objects (trees, lamp posts, crates, furniture: 480 in Qeynos) drawn from the Lantern object list; LanternUnityTools leaves them out of the zone prefab | Objects keep their default colours (Lantern's per-instance vertex colours are not applied) |
 | Standalone Linux build (173 MB with Qeynos and 64 character models) played against the rewrite server: login, world, zone, models from the asset bundles | |
 | Two standalone clients in Qeynos at once: each sees the other player walk (183 entities: 181 NPCs, 2 players) | |
 | Command line: `EQClassic.x86_64 -host <address> -port <port> -fingerprint <key> -user <name>` prefills the screens (never the password) | |
