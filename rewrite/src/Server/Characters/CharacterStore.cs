@@ -9,6 +9,9 @@ public interface ICharacterStore
 {
     /// <summary>Created characters of a world account, by name (legacy GetCharSelectInfo: "order by name", 10 slots).</summary>
     IReadOnlyList<CharacterRecord> ListForAccount(int accountId);
+
+    /// <summary>Inserts a created character; false when the name is taken (character_.name is unique).</summary>
+    bool TryCreate(int accountId, string name, byte[] profile);
 }
 
 public static class CharacterStoreExtensions
@@ -24,6 +27,18 @@ public sealed class InMemoryCharacterStore : ICharacterStore
     private readonly List<CharacterRecord> _characters = new();
 
     public void Add(CharacterRecord character) => _characters.Add(character);
+
+    public bool TryCreate(int accountId, string name, byte[] profile)
+    {
+        if (_characters.Any(c => string.Equals(c.Profile.Name, name, StringComparison.OrdinalIgnoreCase)))
+            return false;
+        _characters.Add(new CharacterRecord(_characters.Count + 1, accountId, PlayerProfile.Read(profile)!));
+        Profiles[name] = profile;
+        return true;
+    }
+
+    /// <summary>Raw profiles of created characters (tests).</summary>
+    public Dictionary<string, byte[]> Profiles { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public IReadOnlyList<CharacterRecord> ListForAccount(int accountId) =>
         _characters.Where(c => c.AccountId == accountId)
@@ -61,6 +76,27 @@ public sealed class MySqlCharacterStore : ICharacterStore
                 result.Add(new CharacterRecord(reader.GetInt32(0), reader.GetInt32(1), profile));
         }
         return result;
+    }
+
+    /// <summary>One INSERT with the full profile (the legacy two steps: reserve with NULL, then UPDATE).</summary>
+    public bool TryCreate(int accountId, string name, byte[] profile)
+    {
+        using var connection = new MySqlConnection(_connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = $"INSERT INTO `{_table}` SET account_id = @account, name = @name, profile = @profile";
+        command.Parameters.AddWithValue("@account", accountId);
+        command.Parameters.AddWithValue("@name", name);
+        command.Parameters.AddWithValue("@profile", profile);
+        try
+        {
+            command.ExecuteNonQuery();
+            return true;
+        }
+        catch (MySqlException e) when (e.ErrorCode == MySqlErrorCode.DuplicateKeyEntry)
+        {
+            return false;
+        }
     }
 }
 

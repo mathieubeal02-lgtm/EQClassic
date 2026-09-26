@@ -124,6 +124,31 @@ public sealed class WorldServerTests : IDisposable
         Assert.Equal(25, _worldAccounts.ResolveOrCreate(1, "test"));
     }
 
+    [Fact]
+    public void Characters_are_created_over_the_network_and_listed()
+    {
+        var (key, _) = LogIn("bot", "bot");
+        using var world = Connect(_world.Port);
+        Exchange(world, new WorldLoginRequest("LS#16", key));
+
+        var created = Assert.IsType<CreateCharacterResponse>(Exchange(world,
+            new CreateCharacterRequest("Qnew", 9, 10, 0, 203, 1, "grobb", new CharacterStats(108, 119, 45, 75, 52, 83, 95))));
+
+        Assert.True(created.Accepted, created.Message);
+        Assert.Equal(["Qbot", "Qbottwo", "Qnew"], created.Characters.Select(c => c.Name));
+        var enter = Assert.IsType<EnterWorldResponse>(Exchange(world, new EnterWorldRequest("Qnew")));
+        Assert.Equal("grobb", enter.Zone);
+    }
+
+    [Fact]
+    public void Creation_before_world_login_disconnects()
+    {
+        using var world = Connect(_world.Port);
+        world.Send(new CreateCharacterRequest("Qsneaky", 1, 1, 0, 0, 0, "qeynos", new CharacterStats(75, 75, 75, 75, 75, 75, 75)));
+        Assert.True(Pump(world, () => world.State == ConnectionState.Disconnected));
+        Assert.DoesNotContain(_characters.ListForAccount(24), c => c.Profile.Name == "Qsneaky");
+    }
+
     private (string Key, int Port) LogIn(string user, string password)
     {
         using var client = Connect(_login.Port);

@@ -7,6 +7,7 @@ using EQClassic.Shared.Protocol;
 // joins World, lists the characters and optionally enters the world with one of them.
 // One [ OK ]/[FAIL] line per step; exit code 0 when every step passed.
 //   EQClassic.Cli <host> <user> <password> [--port N] [--fingerprint HEX] [--world ID] [--enter NAME]
+//                 [--create NAME [--race 9] [--class 10] [--start-zone grobb]]   (default: troll shaman in Grobb)
 if (args.Length < 3)
 {
     Console.Error.WriteLine("usage: EQClassic.Cli <host> <user> <password> [--port N] [--fingerprint HEX] [--world ID] [--enter NAME]");
@@ -17,6 +18,9 @@ int port = ProtocolInfo.DefaultLoginPort;
 int? worldId = null;
 string? fingerprint = null;
 string? enter = null;
+string? create = null;
+int race = 9, @class = 10;
+string startZone = "grobb";
 for (int i = 3; i < args.Length - 1; i++)
 {
     switch (args[i])
@@ -25,6 +29,10 @@ for (int i = 3; i < args.Length - 1; i++)
         case "--fingerprint": fingerprint = args[++i]; break;
         case "--world": worldId = int.Parse(args[++i]); break;
         case "--enter": enter = args[++i]; break;
+        case "--create": create = args[++i]; break;
+        case "--race": race = int.Parse(args[++i]); break;
+        case "--class": @class = int.Parse(args[++i]); break;
+        case "--start-zone": startZone = args[++i]; break;
     }
 }
 
@@ -103,6 +111,15 @@ client.Send(new WorldLoginRequest(sessionId, play.SessionKey));
 var world = Next<WorldLoginResponse>();
 Step(world?.Accepted == true, "characters", world is null ? "no answer" : !world.Accepted ? world.Message
     : world.Characters.Count == 0 ? "(none)" : string.Join(", ", world.Characters.Select(c => $"{c.Name} (race {c.Race}, class {c.Class}, level {c.Level}, {c.Zone})")));
+
+if (create is not null && world?.Accepted == true)
+{
+    // Stats of the troll shaman the Trilogy client sent in the captured creation packet.
+    client.Send(new CreateCharacterRequest(create, race, @class, 0, 203, 1, startZone, new CharacterStats(108, 119, 45, 75, 52, 83, 95)));
+    var created = Next<CreateCharacterResponse>();
+    Step(created?.Accepted == true, "create", created is null ? "no answer" : created.Accepted
+        ? $"{create} created; characters: {string.Join(", ", created.Characters.Select(c => c.Name))}" : created.Message);
+}
 
 if (enter is not null && world?.Accepted == true)
 {

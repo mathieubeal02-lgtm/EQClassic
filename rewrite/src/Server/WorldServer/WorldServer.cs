@@ -33,6 +33,7 @@ public sealed class WorldServer : IDisposable
     private readonly WorldDirectory _directory;
     private readonly IWorldAccountStore _accounts;
     private readonly ICharacterStore _characters;
+    private readonly CharacterCreation _creation;
     private readonly EventBasedNetListener _listener = new();
     private readonly NetManager _net;
     private readonly Dictionary<NetPeer, Session> _sessions = new();
@@ -40,8 +41,9 @@ public sealed class WorldServer : IDisposable
 
     public Action<string>? Log { get; set; }
 
-    public WorldServer(int worldId, WorldDirectory directory, IWorldAccountStore accounts, ICharacterStore characters)
+    public WorldServer(int worldId, WorldDirectory directory, IWorldAccountStore accounts, ICharacterStore characters, ICreationData? creationData = null)
     {
+        _creation = new CharacterCreation(characters, creationData ?? new InMemoryCreationData());
         _worldId = worldId;
         _directory = directory;
         _accounts = accounts;
@@ -87,6 +89,12 @@ public sealed class WorldServer : IDisposable
                 Send(peer, HandleEnter(session, enter));
                 break;
 
+            case CreateCharacterRequest create when _sessions.TryGetValue(peer, out var creator):
+                var error = _creation.Create(creator.WorldAccountId, create);
+                Log?.Invoke($"{peer.Address}: account {creator.WorldAccountId} create '{create.Name}' -> {error ?? "created"}");
+                Send(peer, new CreateCharacterResponse(error is null, error ?? "", Summaries(creator.WorldAccountId)));
+                break;
+
             default:
                 Log?.Invoke($"{peer.Address}: unexpected {message.Type}, disconnecting");
                 peer.Disconnect();
@@ -109,12 +117,15 @@ public sealed class WorldServer : IDisposable
             return WorldLoginResponse.Refused(AccountUnavailable);
         }
         _sessions[peer] = new Session { WorldAccountId = worldAccountId };
-        var characters = _characters.ListForAccount(worldAccountId)
-            .Select(c => new CharacterSummary(c.Profile.Name, c.Profile.Race, c.Profile.Class, c.Profile.Level, c.Profile.Gender, c.Profile.Zone))
-            .ToList();
+        var characters = Summaries(worldAccountId);
         Log?.Invoke($"{peer.Address}: LS#{lsAccountId} '{accountName}' in world as account {worldAccountId}, {characters.Count} character(s)");
         return new WorldLoginResponse(true, "", characters);
     }
+
+    private List<CharacterSummary> Summaries(int worldAccountId) =>
+        _characters.ListForAccount(worldAccountId)
+            .Select(c => new CharacterSummary(c.Profile.Name, c.Profile.Race, c.Profile.Class, c.Profile.Level, c.Profile.Gender, c.Profile.Zone))
+            .ToList();
 
     private EnterWorldResponse HandleEnter(Session session, EnterWorldRequest enter)
     {

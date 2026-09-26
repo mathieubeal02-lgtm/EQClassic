@@ -97,4 +97,52 @@ namespace EQClassic.Shared.Characters
         public static EnterWorldResponse ReadFields(NetDataReader reader) =>
             new EnterWorldResponse(reader.GetBool(), reader.GetString(), reader.GetString(), reader.GetFloat(), reader.GetFloat(), reader.GetFloat());
     }
+
+    /// <summary>Base statistics chosen at creation (legacy PlayerProfile STR..WIS).</summary>
+    public sealed record CharacterStats(int Str, int Sta, int Cha, int Dex, int Int, int Agi, int Wis);
+
+    /// <summary>
+    /// Client to World: create a character (legacy OP_NameApproval + OP_CharacterCreate in one).
+    /// StartZone is the city the player picked (short name), as the Trilogy client puts it in the profile.
+    /// </summary>
+    public sealed record CreateCharacterRequest(string Name, int Race, int Class, int Gender, int Deity, int Face, string StartZone, CharacterStats Stats) : IMessage
+    {
+        public MessageType Type => MessageType.CreateCharacterRequest;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(Name);
+            writer.Put((ushort)Race);
+            writer.Put((byte)Class);
+            writer.Put((byte)Gender);
+            writer.Put((ushort)Deity);
+            writer.Put((byte)Face);
+            writer.Put(StartZone);
+            foreach (var v in new[] { Stats.Str, Stats.Sta, Stats.Cha, Stats.Dex, Stats.Int, Stats.Agi, Stats.Wis })
+                writer.Put((byte)v);
+        }
+
+        public static CreateCharacterRequest ReadFields(NetDataReader reader) =>
+            new CreateCharacterRequest(reader.GetString(), reader.GetUShort(), reader.GetByte(), reader.GetByte(), reader.GetUShort(), reader.GetByte(), reader.GetString(),
+                new CharacterStats(reader.GetByte(), reader.GetByte(), reader.GetByte(), reader.GetByte(), reader.GetByte(), reader.GetByte(), reader.GetByte()));
+    }
+
+    /// <summary>World to client: the outcome and, on success, the refreshed character list (legacy SendCharInfo).</summary>
+    public sealed record CreateCharacterResponse(bool Accepted, string Message, IReadOnlyList<CharacterSummary> Characters) : IMessage
+    {
+        public MessageType Type => MessageType.CreateCharacterResponse;
+
+        public void WriteFields(NetDataWriter writer) => new WorldLoginResponse(Accepted, Message, Characters).WriteFields(writer);
+
+        public static CreateCharacterResponse ReadFields(NetDataReader reader)
+        {
+            var r = WorldLoginResponse.ReadFields(reader);
+            return new CreateCharacterResponse(r.Accepted, r.Message, r.Characters);
+        }
+
+        public bool Equals(CreateCharacterResponse? other) =>
+            other != null && Accepted == other.Accepted && Message == other.Message && Characters.SequenceEqual(other.Characters);
+
+        public override int GetHashCode() => Characters.Count;
+    }
 }

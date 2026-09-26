@@ -19,4 +19,6 @@ public enum MessageType : byte
     WorldLoginResponse = 11,
     EnterWorldRequest = 12,
     EnterWorldResponse = 13,
+    CreateCharacterRequest = 14,
+    CreateCharacterResponse = 15,
 }

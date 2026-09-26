@@ -44,6 +44,8 @@ public static class MessageCodec
                 MessageType.WorldLoginResponse => WorldLoginResponse.ReadFields(reader),
                 MessageType.EnterWorldRequest => EnterWorldRequest.ReadFields(reader),
                 MessageType.EnterWorldResponse => EnterWorldResponse.ReadFields(reader),
+                MessageType.CreateCharacterRequest => CreateCharacterRequest.ReadFields(reader),
+                MessageType.CreateCharacterResponse => CreateCharacterResponse.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

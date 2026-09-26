@@ -44,6 +44,7 @@ else
 IAccountStore accounts = db is null ? InMemoryAccountStore.WithTestAccount() : new MySqlAccountStore(db);
 IWorldAccountStore worldAccounts = db is null ? new InMemoryWorldAccountStore() : new MySqlWorldAccountStore(db);
 ICharacterStore characters = db is null ? new InMemoryCharacterStore() : new MySqlCharacterStore(db);
+ICreationData creationData = db is null ? new InMemoryCreationData() : new MySqlCreationData(db);
 
 var worlds = new WorldDirectory();
 worlds.Register(new WorldServerInfo(1, "EverQuest Classic", worldAddress, worldPort, 0, WorldStatus.Up));
@@ -54,7 +55,7 @@ using var server = new LoginServer(new LoginService(accounts), worlds, rsa)
     AllowPlaintextLogin = allowPlaintext,
 };
 server.Start(port);
-using var world = new WorldServer(1, worlds, worldAccounts, characters) { Log = server.Log };
+using var world = new WorldServer(1, worlds, worldAccounts, characters, creationData) { Log = server.Log };
 world.Start(worldPort);
 Console.WriteLine($"World server listening on UDP {world.Port}, announced as {worldAddress}:{worldPort}.");
 Console.WriteLine($"Login server listening on UDP {server.Port} (protocol {ProtocolInfo.ConnectionKey}), accounts: {(db is null ? "test account only" : "database")}.");
