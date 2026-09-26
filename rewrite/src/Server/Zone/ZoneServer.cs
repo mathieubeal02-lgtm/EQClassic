@@ -230,6 +230,11 @@ public sealed class ZoneServer : IDisposable
                 Group(peer, grouper, group);
                 break;
 
+            case PetCommand petCommand when _players.TryGetValue(peer, out var master):
+                master.Instance.CommandPet(master.EntityId, (ZoneInstance.PetOrder)(int)petCommand.Order);
+                Broadcast(master.Instance, master.Instance.DrainEvents());
+                break;
+
             case TradeCommand trade when _players.TryGetValue(peer, out var trader):
                 var ti = trader.Instance;
                 switch (trade.Action)

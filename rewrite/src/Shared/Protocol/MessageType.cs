@@ -74,4 +74,5 @@ public enum MessageType : byte
     ZoneWeather = 66,
     TradeCommand = 67,
     TradeWindow = 68,
+    PetCommand = 69,
 }

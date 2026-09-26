@@ -124,6 +124,16 @@ namespace EQClassic.ClientCore
                     _campFrom = Player.Position;
                     MessageReceived?.Invoke("It will take you about 30 seconds to prepare your camp.");
                     break;
+                case ChatAction.Pet:
+                    if (parsed.Target.StartsWith("attack"))
+                        _connection?.Send(new PetCommand(PetOrder.Attack));
+                    else if (parsed.Target.StartsWith("back"))
+                        _connection?.Send(new PetCommand(PetOrder.BackOff));
+                    else if (parsed.Target.StartsWith("get lost") || parsed.Target.StartsWith("dismiss"))
+                        _connection?.Send(new PetCommand(PetOrder.GetLost));
+                    else
+                        MessageReceived?.Invoke("Usage: /pet attack | /pet back off | /pet get lost");
+                    break;
                 case ChatAction.Trade:
                     if (TargetId is int tradeWith && Zone.Get(tradeWith) is { Spawn: { IsPlayer: true } })
                         _connection?.Send(new TradeCommand(TradeAction.Request, tradeWith));

@@ -16,7 +16,7 @@ public sealed partial class ZoneInstance
 
     private void Emergencies()
     {
-        foreach (var npc in _entities.Values.Where(e => !e.IsPlayer && !e.IsCorpse && e.TargetId is not null).ToList())
+        foreach (var npc in _entities.Values.Where(e => !e.IsPlayer && !e.IsCorpse && e.TargetId is not null && e.OwnerId is null).ToList())
         {
             if (npc.Fleeing)
             {

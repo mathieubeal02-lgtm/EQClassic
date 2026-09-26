@@ -993,4 +993,14 @@ namespace EQClassic.Shared.Zone
 
         public static TradeWindow ReadFields(NetDataReader reader) => new TradeWindow(reader.GetString(), Read(reader), Read(reader));
     }
+
+    public enum PetOrder : byte { Attack = 0, BackOff = 1, GetLost = 2 }
+
+    /// <summary>Client to zone server: /pet attack, /pet back off, /pet get lost (legacy OP_PetCommands).</summary>
+    public sealed record PetCommand(PetOrder Order) : IMessage
+    {
+        public MessageType Type => MessageType.PetCommand;
+        public void WriteFields(NetDataWriter writer) => writer.Put((byte)Order);
+        public static PetCommand ReadFields(NetDataReader reader) => new PetCommand((PetOrder)reader.GetByte());
+    }
 }

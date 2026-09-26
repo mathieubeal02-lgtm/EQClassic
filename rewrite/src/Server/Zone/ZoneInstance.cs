@@ -125,6 +125,9 @@ public sealed partial class ZoneInstance
         public bool Hidden { get; internal set; }
         internal Vec3 HiddenAt;
         public bool Sneaking { get; internal set; }
+        /// <summary>Pets: their owner; players: their pet.</summary>
+        public int? OwnerId { get; internal set; }
+        public int? PetId { get; internal set; }
         /// <summary>Players: their side of a trade in progress, or null.</summary>
         public TradeSide? Trade { get; internal set; }
         /// <summary>Players: the merchant whose window is open, and its goods.</summary>
@@ -435,6 +438,7 @@ public sealed partial class ZoneInstance
         if (!_entities.TryGetValue(id, out var e) || !e.IsPlayer)
             return false;
         CancelTrade(id);
+        RemovePet(e);
         _entities.Remove(id);
         foreach (var npc in _entities.Values.Where(n => n.TargetId == id))
             Disengage(npc);
@@ -574,6 +578,8 @@ public sealed partial class ZoneInstance
             return false;
         _entities.Remove(npcId);
         _events.Add(new Removed(npcId));
+        if (npc.OwnerId is int owner && _entities.TryGetValue(owner, out var master))
+            master.PetId = null;
         if (npc.Spawn is { } spawn)
             _respawns.Add((spawn, _time + RespawnDelay(spawn)));
         if (npc.Npc is { } template)
@@ -821,6 +827,11 @@ public sealed partial class ZoneInstance
         {
             if (e.IsPlayer || e.IsCorpse || Incapacitated(e) || e.Cast is not null)
                 continue; // casting NPCs stand still
+            if (e.OwnerId is not null)
+            {
+                PetStep(e, seconds);
+                continue;
+            }
             if (e.Fleeing)
             {
                 FleeStep(e, seconds);
@@ -946,16 +957,22 @@ public sealed partial class ZoneInstance
     /// </summary>
     private void AfterHarm(Entity attacker, Entity defender, int damage)
     {
-        if (damage > 0 && attacker.IsPlayer && !defender.IsPlayer)
+        // A pet's damage is its owner's (experience, loot rights).
+        var credited = attacker.IsPlayer ? attacker : attacker.OwnerId is int ownerId && _entities.TryGetValue(ownerId, out var o) ? o : null;
+        if (damage > 0 && credited is not null && !defender.IsPlayer)
         {
             defender.DamageBy ??= new Dictionary<int, int>();
-            defender.DamageBy[attacker.Id] = defender.DamageBy.GetValueOrDefault(attacker.Id) + damage;
+            defender.DamageBy[credited.Id] = defender.DamageBy.GetValueOrDefault(credited.Id) + damage;
         }
-        if (!defender.IsPlayer && defender.TargetId is null && attacker.IsPlayer)
+        if (!defender.IsPlayer && defender.TargetId is null && (attacker.IsPlayer || attacker.OwnerId is not null || defender.OwnerId is not null))
         {
-            defender.TargetId = attacker.Id; // hit by a player: it fights back
-            _events.Add(new Engaged(defender.Id, attacker.Id));
+            defender.TargetId = attacker.Id; // hit by a player or a pet: it fights back (a pet fights back anything)
+            if (attacker.IsPlayer)
+                _events.Add(new Engaged(defender.Id, attacker.Id));
         }
+        // A pet defends its owner.
+        if (defender.IsPlayer && !attacker.IsPlayer && defender.PetId is int petId && _entities.TryGetValue(petId, out var pet) && pet.TargetId is null)
+            pet.TargetId = attacker.Id;
         if (damage > 0 && defender.Bonuses.Mezzed)
             BreakMez(defender);
         if (defender.IsPlayer && damage > 0)
@@ -1048,6 +1065,7 @@ public sealed partial class ZoneInstance
         player.Sitting = false;
         player.Cast = null;
         CancelTrade(player.Id);
+        RemovePet(player);
         if (player.BuffList.Count > 0)
         {
             player.BuffList.Clear(); // death takes every buff away

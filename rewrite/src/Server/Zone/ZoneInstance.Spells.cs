@@ -75,10 +75,10 @@ public sealed partial class ZoneInstance
         BuffRules.StackingBlock, BuffRules.StackingOverwrite,
         BuffRules.DiseaseCounter, BuffRules.PoisonCounter, BuffRules.CurseCounter, // what cures count down: nothing to do until cures exist
         SpellEffect.Invisibility, SpellEffect.InvisVsUndead, SpellEffect.Stun, SpellEffect.BindAffinity, SpellEffect.Gate, SpellEffect.Mez,
-        SpellEffect.SummonItem, SpellEffect.Levitate, SpellEffect.Teleport, SpellEffect.Root, WipeHateList,
+        SpellEffect.SummonItem, SpellEffect.Levitate, SpellEffect.Teleport, SpellEffect.Root, WipeHateList, SummonPetEffect, NecPetEffect,
     ];
 
-    private const int WipeHateList = 63;
+    private const int WipeHateList = 63, SummonPetEffect = 33, NecPetEffect = 71;
 
     /// <summary>
     /// Whether the rewrite applies every effect of the spell: hit points now or over time, stat and
@@ -467,6 +467,9 @@ public sealed partial class ZoneInstance
                 case SpellEffect.Teleport when target.IsPlayer && spell.TeleportZone.Length > 0:
                     Teleport(target, spell.TeleportZone, new Vec3(spell.Base[1], spell.Base[0], spell.Base[2]), "teleport");
                     return;
+                case SummonPetEffect or NecPetEffect when target.IsPlayer && target == caster:
+                    SummonPet(caster, spell);
+                    break;
                 case SpellEffect.SummonItem when target.IsPlayer:
                     SummonItem(target, spell.Base[i], Math.Clamp(v, 1, 20));
                     break;

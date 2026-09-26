@@ -100,6 +100,7 @@ public static class MessageCodec
                 MessageType.ZoneWeather => ZoneWeather.ReadFields(reader),
                 MessageType.TradeCommand => TradeCommand.ReadFields(reader),
                 MessageType.TradeWindow => TradeWindow.ReadFields(reader),
+                MessageType.PetCommand => PetCommand.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)
