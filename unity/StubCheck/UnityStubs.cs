@@ -35,6 +35,7 @@ namespace UnityEngine
         public Vector3 position { get; set; }
         public Quaternion rotation { get; set; }
         public Vector3 localScale { get; set; }
+        public Vector3 localPosition { get; set; }
         public Transform parent { get; set; }
         public void LookAt(Vector3 worldPosition) { }
         public void SetParent(Transform parent, bool worldPositionStays) { }
@@ -97,6 +98,11 @@ namespace UnityEngine
     {
         public static void Log(object message) { }
         public static void LogWarning(object message) { }
+    }
+
+    public static class Application
+    {
+        public static string dataPath => "Assets";
     }
 
     public static class PlayerPrefs

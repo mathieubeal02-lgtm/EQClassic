@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using EQClassic.ClientCore;
 using EQClassic.Shared.World;
 using UnityEngine;
@@ -18,6 +19,7 @@ namespace EQClassic.Unity
         private readonly Dictionary<int, GameObject> _objects = new Dictionary<int, GameObject>();
         private readonly HashSet<string> _missingModels = new HashSet<string>();
         private GameObject _zoneRoot;
+        private ZoneCollisionMesh _mesh;
         private Camera _camera;
 
         public void Enter(ZoneView zone)
@@ -30,6 +32,7 @@ namespace EQClassic.Unity
                 Debug.LogWarning($"EQClassic: zone '{zone.Zone}' is not imported (EQ > Assets > Import Zone). Drawing entities only.");
                 _zoneRoot = new GameObject(zone.Zone + " (not imported)");
             }
+            _mesh = LoadCollision(zone.Zone);
             foreach (var e in zone.Entities)
                 AddEntity(e);
             zone.Added += AddEntity;
@@ -47,7 +50,10 @@ namespace EQClassic.Unity
             float forward = Input.GetAxis("Vertical");
             float strafe = Input.GetAxis("Horizontal");
             float turn = (Input.GetKey(KeyCode.E) ? 1f : 0f) - (Input.GetKey(KeyCode.Q) ? 1f : 0f);
-            player.Move(forward, strafe, turn, deltaTime);
+            if (_mesh != null)
+                player.Move(forward, strafe, turn, deltaTime, _mesh); // ground, steps and walls
+            else
+                player.Move(forward, strafe, turn, deltaTime);
 
             foreach (var pair in _objects)
             {
@@ -91,8 +97,12 @@ namespace EQClassic.Unity
             {
                 if (_missingModels.Add(entity.ModelCode))
                     Debug.Log($"EQClassic: character model '{entity.ModelCode}' not imported (EQ > Assets > Import Characters); drawing a capsule.");
-                go = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-                go.transform.localScale = new Vector3(1f, entity.Spawn.Size / 6f, 1f) * (Scale * 6f);
+                // The capsule's pivot is its centre: raise it under an empty parent so it stands on the ground.
+                go = new GameObject("entity");
+                var capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                capsule.transform.localScale = new Vector3(1f, entity.Spawn.Size / 6f, 1f) * (Scale * 6f);
+                capsule.transform.SetParent(go.transform, false);
+                capsule.transform.localPosition = new Vector3(0f, capsule.transform.localScale.y, 0f);
             }
             go.name = entity.Spawn.Name + " #" + entity.Id;
             // Entities stay at the scene root: under the (scaled) zone root their positions would be scaled twice.
@@ -116,6 +126,19 @@ namespace EQClassic.Unity
             if (_zoneRoot != null)
                 Destroy(_zoneRoot);
             _zoneRoot = null;
+        }
+
+        /// <summary>
+        /// The collision mesh the server walks NPCs on (LanternExtractor export, copied into
+        /// Assets/EQAssets by tools/unity/setup-client.sh). Without it the player keeps its height.
+        /// </summary>
+        private static ZoneCollisionMesh LoadCollision(string zone)
+        {
+            var path = Path.Combine(Application.dataPath, "EQAssets", zone, "Zone", "Meshes", zone + "_collision.txt");
+            if (File.Exists(path))
+                return ZoneCollisionMesh.LoadLantern(path);
+            Debug.LogWarning($"EQClassic: no collision mesh at {path}; the player will not follow the ground.");
+            return null;
         }
 
         private void EnsureCamera()

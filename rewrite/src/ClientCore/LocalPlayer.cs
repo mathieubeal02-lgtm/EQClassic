@@ -15,6 +15,10 @@ namespace EQClassic.ClientCore
         public const float RunSpeed = 45f;
         public const float TurnDegreesPerSecond = 120f;
         public const float SendRate = 10f;
+        /// <summary>Highest step (units) the character climbs without jumping.</summary>
+        public const float StepUp = 6f;
+        /// <summary>Height of the wall check above the feet: above <see cref="StepUp"/>, so steps are not walls.</summary>
+        public const float WaistHeight = 8f;
 
         private float _sendIn;
         private bool _dirty;
@@ -31,6 +35,30 @@ namespace EQClassic.ClientCore
         /// <summary>EverQuest degrees: 0 faces +Y (north), clockwise.</summary>
         public float Heading { get; private set; }
         public string? LastCorrection { get; private set; }
+
+        /// <summary>
+        /// Moves on the zone's collision mesh: the character follows the ground (climbing at most
+        /// <see cref="StepUp"/>, dropping off ledges), and does not move when a wall crosses the path
+        /// at waist height or when there is no ground at the destination (outside the zone).
+        /// Returns false when the move was blocked.
+        /// </summary>
+        public bool Move(float forward, float strafe, float turn, float seconds, ZoneCollisionMesh mesh)
+        {
+            var from = Position;
+            bool blocked = false;
+            Move(forward, strafe, turn, seconds, (x, y, z) =>
+            {
+                var ground = mesh.GroundZ(x, y, z, StepUp);
+                if (ground is float g
+                    && mesh.LineOfSight(new Vec3(from.X, from.Y, from.Z + WaistHeight), new Vec3(x, y, g + WaistHeight)))
+                    return g;
+                blocked = true;
+                return z;
+            });
+            if (blocked)
+                Position = from;
+            return !blocked;
+        }
 
         /// <summary>forward/strafe in [-1, 1], turn in [-1, 1] (positive = clockwise).</summary>
         public void Move(float forward, float strafe, float turn, float seconds, Func<float, float, float, float>? groundZ = null)

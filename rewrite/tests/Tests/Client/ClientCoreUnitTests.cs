@@ -60,6 +60,38 @@ public class ClientCoreUnitTests
         Assert.NotNull(player.Due(0.1f));
     }
 
+    // Lantern meshes are (x, y up, z) = EverQuest (y, z, x). Quads: EverQuest x0..x1, y 0..100, height z.
+    private static string[] Floor(float x0, float x1, float z, int first) =>
+    [
+        $"v,0,{z},{x0}", $"v,100,{z},{x0}", $"v,100,{z},{x1}", $"v,0,{z},{x1}",
+        $"i,0,{first},{first + 1},{first + 2}", $"i,0,{first},{first + 2},{first + 3}",
+    ];
+
+    [Fact]
+    public void Movement_on_the_mesh_climbs_steps()
+    {
+        var mesh = ZoneCollisionMesh.ParseLantern([.. Floor(0, 50, 0, 0), .. Floor(50, 200, 4, 4)]);
+        var player = new LocalPlayer(1, new Vec3(40, 50, 0), heading: 90);
+        Assert.True(player.Move(1, 0, 0, 1, mesh));
+        Assert.Equal(40 + LocalPlayer.RunSpeed, player.Position.X, precision: 3);
+        Assert.Equal(4f, player.Position.Z);
+    }
+
+    [Fact]
+    public void Walls_and_the_edge_of_the_zone_stop_the_player()
+    {
+        string[] wallAt60 = ["v,0,0,60", "v,100,0,60", "v,100,50,60", "v,0,50,60", "i,0,4,5,6", "i,0,4,6,7"];
+        var walled = ZoneCollisionMesh.ParseLantern([.. Floor(0, 200, 0, 0), .. wallAt60]);
+        var player = new LocalPlayer(1, new Vec3(40, 50, 0), heading: 90);
+        Assert.False(player.Move(1, 0, 0, 1, walled));
+        Assert.Equal(new Vec3(40, 50, 0), player.Position);
+
+        var edge = ZoneCollisionMesh.ParseLantern(Floor(0, 50, 0, 0));
+        Assert.False(player.Move(1, 0, 0, 1, edge));
+        Assert.Equal(new Vec3(40, 50, 0), player.Position);
+        Assert.True(player.Move(-0.5f, 0, 0, 1, edge)); // back into the zone
+    }
+
     [Fact]
     public void Server_correction_wins()
     {

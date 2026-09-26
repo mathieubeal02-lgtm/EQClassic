@@ -4,16 +4,24 @@
 #   - our scripts: unity/Assets/EQClassic/;
 #   - our libraries built for netstandard2.1: EQClassic.Shared, EQClassic.ClientCore, LiteNetLib;
 #   - LanternExtractor exports (build/lantern-work/Exports, from tools/lantern/extract.sh) in Assets/EQAssets/.
-# Then open build/unity-client with Unity 2021.3.18f1, run EQ > Assets > Import Zone / Import Characters,
-# and press Play in an empty scene (docs/unity-client.md).
+# Then open build/unity-client with Unity 2021.3.18f1, run EQClassic > Import Zones and Characters
+# (or EQ > Assets > Import Zone / Import Characters), and press Play in an empty scene
+# (docs/unity-client.md). Rerunning this script keeps the imported assets (Assets/Content/AssetBundleContent).
 set -euo pipefail
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 OUT=${1:-$REPO/build/unity-client}
 
 git -C "$REPO" submodule update --init externals/LanternUnityTools
+# LanternUnityTools keeps its DLLs (DryWetMidi...) in Git LFS: without git-lfs they are
+# 130-byte pointer files and Lantern.EQ fails to compile ("Melanchall could not be found").
+if ! git -C "$REPO/externals/LanternUnityTools" lfs pull; then
+  echo "git-lfs is required (apt install git-lfs)" >&2
+  exit 1
+fi
 mkdir -p "$OUT"
 rsync -a --delete --exclude Library --exclude Temp --exclude Logs --exclude obj \
   --exclude Assets/EQClassic --exclude Assets/Plugins/EQClassic --exclude Assets/EQAssets \
+  --exclude 'Assets/Content/AssetBundleContent/*' \
   "$REPO/externals/LanternUnityTools/" "$OUT/"
 rm -rf "$OUT/.git"
 
