@@ -79,7 +79,7 @@ public sealed partial class ZoneInstance
         SpellEffect.Invisibility, SpellEffect.InvisVsUndead, SpellEffect.Stun, SpellEffect.BindAffinity, SpellEffect.Gate, SpellEffect.Mez,
         SpellEffect.SummonItem, SpellEffect.Levitate, SpellEffect.Teleport, SpellEffect.Root, WipeHateList, SummonPetEffect, NecPetEffect,
         SpellEffect.DamageShield, SpellEffect.Rune, SpellEffect.Stamina, SpellEffect.CancelMagic, SpellEffect.Fear,
-        SpellEffect.Lull, SpellEffect.FrenzyRadius, SpellEffect.Harmony, SpellEffect.Succor, SpellEffect.Illusion, SpellEffect.Charm,
+        SpellEffect.Lull, SpellEffect.FrenzyRadius, SpellEffect.Harmony, SpellEffect.Succor, SpellEffect.Illusion, SpellEffect.Charm, SpellEffect.DivineAura,
     ];
 
     private const int WipeHateList = 63, SummonPetEffect = 33, NecPetEffect = 71;
@@ -399,6 +399,8 @@ public sealed partial class ZoneInstance
     {
         if (damage <= 0)
             return damage;
+        if (e.Bonuses.Invulnerable)
+            return 0;
         var used = new List<Buff>();
         foreach (var buff in e.BuffList.Where(b => b.RuneLeft > 0))
         {

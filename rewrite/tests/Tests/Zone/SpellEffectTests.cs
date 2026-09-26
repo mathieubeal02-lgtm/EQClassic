@@ -113,6 +113,19 @@ public class SpellEffectTests
     }
 
     [Fact]
+    public void Divine_aura_keeps_every_blow_out()
+    {
+        var (zone, player) = Setup(factions: new Kos(), npcs: (new Vec3(5, 0, 0), Orc(level: 20)));
+        zone.SetTarget(player.Id, player.Id);
+        Cast(zone, player, 207); // Divine Aura
+        Assert.True(player.Bonuses.Invulnerable);
+        int hp = player.Hp;
+        var events = Run(zone, 10f);
+        Assert.Contains(events, e => e is ZoneInstance.Swung s && s.DefenderId == player.Id);
+        Assert.True(player.Hp >= hp);
+    }
+
+    [Fact]
     public void Cancel_magic_takes_a_buff_off()
     {
         var (zone, player) = Setup();
