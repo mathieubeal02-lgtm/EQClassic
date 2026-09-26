@@ -44,6 +44,13 @@ public sealed class ZoneServer : IDisposable
     /// <summary>Combat events reach the players this close to the fight.</summary>
     public float CombatHearingRange { get; set; } = 200f;
 
+    private readonly System.Diagnostics.Stopwatch _uptime = System.Diagnostics.Stopwatch.StartNew();
+    /// <summary>Real seconds since the server started, the clock's time base.</summary>
+    public double UptimeSeconds => _uptime.Elapsed.TotalSeconds;
+    /// <summary>Norrath's clock (from time_of_day at start-up; the legacy World keeps that table).</summary>
+    public EqClock Clock { get; set; } = new(8, 0, 0);
+    public (int Day, int Month, int Year) Date { get; set; } = (1, 1, 3100);
+
     // type byte + tick (4) + count (2); each position is id + 4 floats.
     private const int PositionsHeaderSize = 7, PositionSize = 20;
 
@@ -129,6 +136,8 @@ public sealed class ZoneServer : IDisposable
                     Send(peer, DoorsOf(entered.Instance), DeliveryMethod.ReliableOrdered); // after the entry: same channel, in order
                     if (entered.Instance.Info is { } info)
                         Send(peer, info, DeliveryMethod.ReliableOrdered);
+                    var (hour, minute) = Clock.TimeAt(UptimeSeconds);
+                    Send(peer, new TimeOfDay(hour, minute, Date.Day, Date.Month, Date.Year), DeliveryMethod.ReliableOrdered);
                     if (entered.Instance.Get(entered.EntityId) is { } me)
                     {
                         Send(peer, new PlayerHealth(me.Hp, me.Fighter.MaxHp), DeliveryMethod.ReliableOrdered);

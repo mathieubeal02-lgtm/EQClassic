@@ -59,6 +59,8 @@ namespace EQClassic.ClientCore
         /// <summary>The legacy zone header of the current zone (fog, clip, safe point), when the server has it.</summary>
         public ZoneInfo? ZoneInfo { get; private set; }
         public event Action<ZoneInfo>? ZoneInfoReceived;
+        /// <summary>Norrath's clock, from the server's time at zone entry (advanced with <see cref="Now"/>).</summary>
+        public EqClock? Clock { get; private set; }
         public int MaxHp { get; private set; }
         /// <summary>A melee swing near the player (for animations; the text goes to <see cref="MessageReceived"/>).</summary>
         public event Action<CombatEvent>? CombatReceived;
@@ -354,6 +356,9 @@ namespace EQClassic.ClientCore
                     break;
                 case EntityAppearance appearance:
                     Zone?.Apply(appearance);
+                    break;
+                case TimeOfDay time:
+                    Clock = new EqClock(time.Hour, time.Minute, Now);
                     break;
                 case ZoneInfo info:
                     ZoneInfo = info;

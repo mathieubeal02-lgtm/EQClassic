@@ -49,6 +49,7 @@ namespace EQClassic.Unity
         private Camera _camera;
         private Light _playerLight;
         private readonly CameraRig _rig = new CameraRig(Scale);
+        private readonly SkyPresenter _sky = new SkyPresenter();
         private bool _autorun;
         private float _eyeHeight = 2.5f; // Unity units above the feet; measured from the player's model
         private bool _playerHidden;
@@ -161,6 +162,7 @@ namespace EQClassic.Unity
 
             foreach (var door in _doors.Values)
                 AnimateDoor(door, deltaTime);
+            _sky.Update(_camera, client, deltaTime);
 
             if (_objects.TryGetValue(player.EntityId, out var me) && _playerLight == null)
                 _playerLight = AddPlayerLight(me);
@@ -241,6 +243,7 @@ namespace EQClassic.Unity
             _camera.farClipPlane = Mathf.Max(Mathf.Max(info.FogMax, info.MaxClip), 100f) * Scale + 5f;
             _camera.clearFlags = CameraClearFlags.SolidColor;
             _camera.backgroundColor = colour;
+            _sky.Enter(_camera, info, LoadPrefab);
         }
 
         /// <summary>

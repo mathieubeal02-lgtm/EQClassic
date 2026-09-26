@@ -59,6 +59,21 @@ namespace EQClassic.Unity.Editor
 
         public static void ImportCharacters() => Invariant(ImportCharactersCore);
 
+        /// <summary>The skies (the "sky" export in Assets/EQAssets/sky) → Content/AssetBundleContent/Sky/Sky.prefab.</summary>
+        public static void ImportSky() => Invariant(() =>
+        {
+            var importer = ScriptableObject.CreateInstance<SkyImporter>();
+            try
+            {
+                Call(importer, "ImportSky"); // its closing dialog goes through HeadlessDialog (EQC_HEADLESS)
+                Debug.Log("EQClassicBatch: sky imported");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(importer);
+            }
+        });
+
         private static void Invariant(Action import)
         {
             var culture = Thread.CurrentThread.CurrentCulture;

@@ -477,4 +477,22 @@ namespace EQClassic.Shared.Zone
                 F(344), F(348), F(352), F(360), F(364), F(368), cfg[230 + shift]);
         }
     }
+
+    /// <summary>Zone server to the client after entering: Norrath's time (legacy OP_TimeOfDay); the client advances it.</summary>
+    public sealed record TimeOfDay(int Hour, int Minute, int Day, int Month, int Year) : IMessage
+    {
+        public MessageType Type => MessageType.TimeOfDay;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put((byte)Hour);
+            writer.Put((byte)Minute);
+            writer.Put((byte)Day);
+            writer.Put((byte)Month);
+            writer.Put((ushort)Year);
+        }
+
+        public static TimeOfDay ReadFields(NetDataReader reader) =>
+            new TimeOfDay(reader.GetByte(), reader.GetByte(), reader.GetByte(), reader.GetByte(), reader.GetUShort());
+    }
 }

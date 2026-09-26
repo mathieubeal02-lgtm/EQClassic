@@ -27,6 +27,7 @@ namespace UnityEngine
         public Transform transform => null;
         public string tag { get; set; }
         public T AddComponent<T>() where T : Component => default;
+        public T GetComponent<T>() => default;
         public static GameObject CreatePrimitive(PrimitiveType type) => null;
         public T[] GetComponentsInChildren<T>() => System.Array.Empty<T>();
         public T GetComponentInChildren<T>() => default;
@@ -60,6 +61,7 @@ namespace UnityEngine
         public Transform parent { get; set; }
         public void LookAt(Vector3 worldPosition) { }
         public void SetParent(Transform parent, bool worldPositionStays) { }
+        public void SetPositionAndRotation(Vector3 position, Quaternion rotation) { }
     }
 
     public struct Vector2
@@ -120,8 +122,21 @@ namespace UnityEngine
         public static float fogEndDistance { get; set; }
     }
 
+    public struct LayerMask
+    {
+        public static int GetMask(params string[] layerNames) => 0;
+    }
+
+    public static class Shader
+    {
+        public static int PropertyToID(string name) => 0;
+        public static void SetGlobalColor(int nameID, Color value) { }
+    }
+
     public sealed class Camera : Behaviour
     {
+        public int cullingMask { get; set; }
+        public float fieldOfView { get; set; }
         public float farClipPlane { get; set; }
         public CameraClearFlags clearFlags { get; set; }
         public Color backgroundColor { get; set; }
@@ -142,6 +157,7 @@ namespace UnityEngine
         public Color(float r, float g, float b) { }
         public Color(float r, float g, float b, float a) { }
         public static Color white => default;
+        public static Color Lerp(Color a, Color b, float t) => a;
         public static Color green => default;
         public static Color yellow => default;
         public static Color red => default;
@@ -275,5 +291,34 @@ namespace Lantern.EQ.Animation
         public void SetNewConstantState(AnimationType animationType, int priority, float speed = 1f) { }
         public void PlayOneShotAnimation(AnimationType animationType, float speed = 1f, int importance = 0, bool canSelfInterrupt = true, AnimationType? newConstantState = null) { }
         public bool HasAnimation(string animationName) => false;
+    }
+}
+
+namespace UnityEngine.Rendering.Universal
+{
+    public enum CameraRenderType { Base, Overlay }
+
+    public sealed class UniversalAdditionalCameraData : UnityEngine.MonoBehaviour
+    {
+        public CameraRenderType renderType { get; set; }
+        public System.Collections.Generic.List<UnityEngine.Camera> cameraStack => null;
+    }
+
+    public static class CameraExtensions
+    {
+        public static UniversalAdditionalCameraData GetUniversalAdditionalCameraData(this UnityEngine.Camera camera) => null;
+    }
+}
+
+namespace Lantern.EQ.Environment
+{
+    public class SkyController : UnityEngine.MonoBehaviour
+    {
+        public void SetActiveCameraTransform(UnityEngine.Transform cameraTransform, bool instant = false) { }
+        public void SetSecondsPerDay(float seconds) { }
+        public void SetEnabledSky(int skyIndex) { }
+        public void UpdateSkyPosition() { }
+        public void UpdateTime(float time) { }
+        public void UpdateTimeLate(float deltaTime, float currentTime) { }
     }
 }

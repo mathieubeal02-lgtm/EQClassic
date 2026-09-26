@@ -17,7 +17,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Characters | Race/gender models, textures, size | Partial: models by race; no armour textures, no face/hair, size ignored | 2 |
 | Equipment | Weapons in hand, armour tint and material | Todo | 3 |
 | Animations | Walk, run, idle, combat, damage, death, social | Partial: idle/walk/run, attack, flinch | 2 |
-| Sky, day and night | Sky dome, sun/moon, day/night light from the server clock | Todo | 2 |
+| Sky, day and night | Sky dome, sun/moon, day/night light from the server clock | Written (Lantern sky on its own URP camera, sky type from the zone header, Norrath's clock from time_of_day, night ambient), to check in Unity | 2 |
 | Weather | Rain, snow | Todo | 4 |
 | Fog and clip plane | Per zone (legacy cfg/<zone>.cfg: fog colour and distances, clip) | Written (linear fog, far clip, fog-coloured background), to check in Unity | 2 |
 | Underworld | Falling below the zone's floor returns you to the safe point | Done (server, from the zone header) | — |

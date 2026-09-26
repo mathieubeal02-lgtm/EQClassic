@@ -12,6 +12,7 @@ namespace EQClassic.Unity
     public static class ClientBundles
     {
         public const string CharacterBundle = "characters";
+        public const string SkyBundle = "sky";
         public static string ZoneBundle(string zone) => "zone-" + zone.ToLowerInvariant();
 
         public static string Directory => Path.Combine(Application.streamingAssetsPath, "EQClassic");
@@ -39,6 +40,8 @@ namespace EQClassic.Unity
             int i = System.Array.IndexOf(parts, "Zones");
             if (i >= 0 && i + 1 < parts.Length)
                 return ZoneBundle(parts[i + 1]);
+            if (System.Array.IndexOf(parts, "Sky") >= 0)
+                return SkyBundle;
             return System.Array.IndexOf(parts, "Characters") >= 0 ? CharacterBundle : null;
         }
     }

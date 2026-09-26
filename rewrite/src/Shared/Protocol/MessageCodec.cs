@@ -72,6 +72,7 @@ public static class MessageCodec
                 MessageType.WhoRequest => new WhoRequest(),
                 MessageType.PlayerExperience => PlayerExperience.ReadFields(reader),
                 MessageType.ZoneInfo => ZoneInfo.ReadFields(reader),
+                MessageType.TimeOfDay => TimeOfDay.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

@@ -57,6 +57,8 @@ namespace EQClassic.Unity.Editor
                     mesh.WriteLantern(writer);
                 }
             }
+            if (File.Exists(Content + "Sky/Sky.prefab"))
+                builds.Add(new AssetBundleBuild { assetBundleName = ClientBundles.SkyBundle, assetNames = new[] { Content + "Sky/Sky.prefab" } });
             var characters = Directory.GetFiles(Content + "Characters", "*.prefab").Select(p => p.Replace('\\', '/')).ToArray();
             if (characters.Length > 0)
                 builds.Add(new AssetBundleBuild { assetBundleName = ClientBundles.CharacterBundle, assetNames = characters });

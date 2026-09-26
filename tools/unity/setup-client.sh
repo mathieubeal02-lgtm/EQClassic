@@ -23,6 +23,11 @@ rsync -a --delete --exclude Library --exclude Temp --exclude Logs --exclude obj 
   --exclude 'Assets/Content/AssetBundleContent/*' \
   "$REPO/externals/LanternUnityTools/" "$OUT/"
 rm -rf "$OUT/.git"
+# LanternUnityTools' importers end with a blocking dialog: in this copy, route them through
+# HeadlessDialog, which only logs when EQC_HEADLESS is set (tools/unity/import-zones.sh sets it).
+cp "$REPO/tools/unity/overlay/HeadlessDialog.cs" "$OUT/Assets/Scripts/Lantern/EQ/Editor/HeadlessDialog.cs"
+grep -rl 'EditorUtility.DisplayDialog(' "$OUT/Assets/Scripts/Lantern/EQ/Editor" --include=*.cs | grep -v HeadlessDialog.cs |
+  xargs -r sed -i 's/EditorUtility\.DisplayDialog(/HeadlessDialog.Show(/g'
 
 rsync -a --delete "$REPO/unity/Assets/EQClassic/" "$OUT/Assets/EQClassic/"
 

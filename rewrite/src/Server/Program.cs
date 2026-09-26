@@ -84,6 +84,11 @@ using var zones = new ZoneServer(zoneKeys, name =>
     return new ZoneInstance(data, mesh) { Info = info };
 }) { Log = server.Log, Characters = characters, PublicAddress = worldAddress, Items = db is null ? null : new EQClassic.Server.Combat.MySqlItemSource(db) };
 zones.Start(zonePort);
+if (db is not null && ReadTimeOfDay(db) is { } tod)
+{
+    zones.Clock = new EqClock(tod.Hour, 0, zones.UptimeSeconds);
+    zones.Date = (tod.Day, tod.Month, tod.Year);
+}
 
 using var world = new WorldServer(1, worlds, worldAccounts, characters, creationData)
 {
@@ -113,4 +118,24 @@ while (!stop.IsCancellationRequested)
         nextTick += TickSeconds;
     }
     Thread.Sleep(5);
+}
+
+// World/Source/TimeOfDay.cpp: the legacy World keeps Norrath's time in time_of_day (hour, day, month,
+// year) and advances it; the rewrite reads it once and runs its own clock from there (no write back
+// while both servers share the database).
+static (int Hour, int Day, int Month, int Year)? ReadTimeOfDay(string connectionString)
+{
+    try
+    {
+        using var connection = new MySqlConnector.MySqlConnection(connectionString);
+        connection.Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT hour, day, month, year FROM time_of_day LIMIT 1";
+        using var r = cmd.ExecuteReader();
+        return r.Read() ? (Convert.ToInt32(r.GetValue(0)), Convert.ToInt32(r.GetValue(1)), Convert.ToInt32(r.GetValue(2)), Convert.ToInt32(r.GetValue(3))) : null;
+    }
+    catch (MySqlConnector.MySqlException)
+    {
+        return null; // no table: the default clock
+    }
 }
