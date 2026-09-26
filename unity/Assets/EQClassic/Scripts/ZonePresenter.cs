@@ -139,13 +139,17 @@ namespace EQClassic.Unity
             // Swimming: Space up, Ctrl down (the Trilogy client used the jump and crouch keys).
             player.Regions = _regions;
             player.SwimInput = !InputEnabled ? 0f : Input.GetKey(KeyCode.Space) ? 1f : Input.GetKey(KeyCode.LeftControl) ? -1f : 0f;
-            float forward = InputEnabled ? Input.GetAxis("Vertical") : 0f;
+            var keys = client.Keys;
+            bool Held(char key) => Input.GetKey((KeyCode)key); // KeyCode.A is 'a', ...
+            float forward = !InputEnabled ? 0f
+                : (Held(keys.Forward) || Input.GetKey(KeyCode.UpArrow) ? 1f : 0f) - (Held(keys.Back) || Input.GetKey(KeyCode.DownArrow) ? 1f : 0f);
             if (forward < -0.1f)
                 _autorun = false; // backing up stops autorun, as in the old client
             if (_autorun)
                 forward = 1f;
-            float strafe = InputEnabled ? Input.GetAxis("Horizontal") : 0f;
-            float turn = !InputEnabled ? 0f : (Input.GetKey(KeyCode.E) ? 1f : 0f) - (Input.GetKey(KeyCode.Q) ? 1f : 0f);
+            float strafe = !InputEnabled ? 0f : (Held(keys.StrafeRight) ? 1f : 0f) - (Held(keys.StrafeLeft) ? 1f : 0f);
+            float turn = !InputEnabled ? 0f
+                : (Held(keys.TurnRight) || Input.GetKey(KeyCode.RightArrow) ? 1f : 0f) - (Held(keys.TurnLeft) || Input.GetKey(KeyCode.LeftArrow) ? 1f : 0f);
             player.Walking = InputEnabled && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
             if (_mesh != null)
                 player.Move(forward, strafe, turn, deltaTime, _mesh); // ground, steps and walls

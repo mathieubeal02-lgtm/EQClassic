@@ -61,3 +61,20 @@ public class ChatLogTests
         Assert.Equal(ChatKind.Other, ChatLog.Kind("You have become better at Offense! (5)"));
     }
 }
+
+public class KeyBindingsTests
+{
+    [Fact]
+    public void Azerty_by_default_and_qwerty_on_request()
+    {
+        var client = new GameClient();
+        Assert.Equal(KeyboardLayout.Azerty, client.Keys.Layout);
+        Assert.Equal(('z', 'q', 'd', 'a'), (client.Keys.Forward, client.Keys.StrafeLeft, client.Keys.StrafeRight, client.Keys.TurnLeft));
+        var parsed = Chat.Parse("/keys qwerty");
+        Assert.Equal((ChatAction.Keys, "qwerty"), (parsed.Action, parsed.Target));
+        var qwerty = KeyBindings.Parse(parsed.Target)!;
+        Assert.Equal(('w', 'a', 'd', 'q'), (qwerty.Forward, qwerty.StrafeLeft, qwerty.StrafeRight, qwerty.TurnLeft));
+        Assert.Same(KeyBindings.Azerty, KeyBindings.Parse(" AZERTY "));
+        Assert.Null(KeyBindings.Parse("dvorak"));
+    }
+}

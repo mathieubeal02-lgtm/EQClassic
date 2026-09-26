@@ -43,6 +43,9 @@ namespace EQClassic.ClientCore
         public event Action<ZoneView>? ZoneEntered;
         /// <summary>A line from the server for the chat window.</summary>
         public event Action<string>? MessageReceived;
+        /// <summary>The movement keys (AZERTY by default); /keys changes them.</summary>
+        public KeyBindings Keys { get; set; } = KeyBindings.Azerty;
+        public event Action<KeyBindings>? KeysChanged;
 
         /// <summary>Reach of the Use key: the server accepts clicks within 40 units (ZoneInstance.DoorReach).</summary>
         public const float DoorUseReach = 30f;
@@ -142,6 +145,14 @@ namespace EQClassic.ClientCore
                     break;
                 case ChatAction.Hail:
                     Hail();
+                    break;
+                case ChatAction.Keys:
+                    if (KeyBindings.Parse(parsed.Target) is { } keys)
+                    {
+                        Keys = keys;
+                        KeysChanged?.Invoke(keys);
+                    }
+                    MessageReceived?.Invoke($"Keyboard: {Keys.Layout.ToString().ToUpperInvariant()} - {Keys.Help}. (/keys azerty or /keys qwerty)");
                     break;
                 case ChatAction.Help:
                     foreach (var help in Chat.HelpLines)

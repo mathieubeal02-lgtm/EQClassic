@@ -106,7 +106,7 @@ namespace UnityEngine
     {
         Tab = 9, Escape = 27, Space = 32, Q = 113, C = 99, E = 101, F = 102, H = 104, I = 105, L = 108, R = 114, T = 116, U = 117, X = 120, Numlock = 300, RightShift = 303, LeftShift = 304,
         Home = 278, PageUp = 280, PageDown = 281, F9 = 290, Return = 13, KeypadEnter = 271, Slash = 47,
-        LeftControl = 306, K = 107, B = 98, Alpha1 = 49, Alpha2 = 50, Alpha3 = 51, Alpha4 = 52, Alpha5 = 53, Alpha6 = 54, Alpha7 = 55, Alpha8 = 56, UpArrow = 273, DownArrow = 274,
+        LeftControl = 306, K = 107, B = 98, Alpha1 = 49, Alpha2 = 50, Alpha3 = 51, Alpha4 = 52, Alpha5 = 53, Alpha6 = 54, Alpha7 = 55, Alpha8 = 56, UpArrow = 273, DownArrow = 274, RightArrow = 275, LeftArrow = 276, W = 119, A = 97, S = 115, D = 100, Z = 122,
     }
     public enum RuntimeInitializeLoadType { AfterSceneLoad, BeforeSceneLoad }
 

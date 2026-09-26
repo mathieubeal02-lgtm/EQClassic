@@ -642,7 +642,7 @@ namespace EQClassic.Unity
             var state = _client?.State ?? GameState.Disconnected;
             if (state == GameState.InZone)
             {
-                GUI.Label(new Rect(10, 10, 1200, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows move, Q/E turn, R autorun, Shift walk, Space jump, X sit, right mouse look, wheel zoom, F9 view, U door/merchant, Tab target, T face, C consider, F attack, L loot, I inventory, B spell book, K skills, 1-8 cast");
+                GUI.Label(new Rect(10, 10, 1200, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  {_client.Keys.Help}, R autorun, Shift walk, Space jump, X sit, right mouse look, wheel zoom, F9 view, U door/merchant, Tab target, T face, C consider, F attack, L loot, I inventory, B spell book, K skills, 1-8 cast");
                 if (_presenter.MissingZone != null)
                     GUI.Box(new Rect(Screen.width / 2 - 300, 80, 600, 44),
                         $"The zone '{_presenter.MissingZone}' is not installed in this client (not imported from Lantern).\nYou are there for the server, but nothing can be drawn.");
@@ -768,6 +768,8 @@ namespace EQClassic.Unity
             PlayerPrefs.SetString("eqc.fingerprint", _fingerprint);
             _client?.Dispose();
             _client = new GameClient(string.IsNullOrWhiteSpace(_fingerprint) ? null : _fingerprint.Trim());
+            _client.Keys = KeyBindings.Parse(PlayerPrefs.GetString("eqc.keys", "azerty")) ?? KeyBindings.Azerty;
+            _client.KeysChanged += keys => PlayerPrefs.SetString("eqc.keys", keys.Layout.ToString().ToLowerInvariant());
             _client.ZoneEntered += zone => _presenter.Enter(zone);
             _client.CombatReceived += _presenter.OnCombat;
             _client.SpellCastReceived += _presenter.OnSpellCast;

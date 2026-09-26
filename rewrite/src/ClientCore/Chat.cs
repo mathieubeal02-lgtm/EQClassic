@@ -4,7 +4,7 @@ using EQClassic.Shared.Zone;
 namespace EQClassic.ClientCore
 {
     /// <summary>What a line typed in the chat box asks for.</summary>
-    public enum ChatAction { None, Send, Who, Location, Sit, Stand, Camp, Consider, Target, Cast, Ability, Invite, Follow, Decline, Disband, Help, Trade, Pet, Hail, Unknown }
+    public enum ChatAction { None, Send, Who, Location, Sit, Stand, Camp, Consider, Target, Cast, Ability, Invite, Follow, Decline, Disband, Help, Trade, Pet, Hail, Keys, Unknown }
 
     public readonly struct ParsedChat
     {
@@ -64,6 +64,7 @@ namespace EQClassic.ClientCore
                 case "help": case "h": return new ParsedChat(ChatAction.Help);
                 case "trade": case "give": return new ParsedChat(ChatAction.Trade);
                 case "hail": return new ParsedChat(ChatAction.Hail);
+                case "keys": return new ParsedChat(ChatAction.Keys, target: rest);
                 case "pet": return new ParsedChat(ChatAction.Pet, target: rest.ToLowerInvariant());
                 case "gsay": case "g": return Said(ChatChannel.Group, rest);
                 case "invite": case "inv": return new ParsedChat(ChatAction.Invite, target: rest);
@@ -102,6 +103,7 @@ namespace EQClassic.ClientCore
             "Info: /who /loc /con /target <name> /help",
             "Actions: /sit /stand /camp /cast <1-8> /kick /bash /taunt /mend /hide /sneak /forage",
             "Groups: /invite [name] /follow /decline /disband; /trade with the targeted player (or NPC: quest hand-ins); /hail (H) the target; /pet attack, /pet back off, /pet get lost",
+            "Keyboard: /keys azerty (default: ZQSD, A/E turn) or /keys qwerty (WASD, Q/E turn); arrows always move and turn",
             "Keys: I inventory, B spell book, K skills, 1-8 spells, Tab target, F attack, C consider, H hail, L loot, U use (doors, merchants), X sit, Space jump or swim up, Ctrl swim down, F9 view",
         };
 
