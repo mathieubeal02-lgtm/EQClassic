@@ -221,6 +221,18 @@ public class SpellEffectTests
     }
 
     [Fact]
+    public void Translocate_sends_yourself_and_gift_of_magic_raises_the_mana_pool()
+    {
+        var (zone, player) = Setup();
+        zone.SetTarget(player.Id, player.Id);
+        int before = player.MaxMana;
+        Cast(zone, player, 1408); // Gift of Magic
+        Assert.True(player.MaxMana > before);
+        var events = Cast(zone, player, 1336); // Translocate: Fay
+        Assert.Contains(events, e => e is ZoneInstance.CrossedZoneLine c && c.Line.TargetZone == "gfaydark");
+    }
+
+    [Fact]
     public void A_rooted_npc_does_not_chase()
     {
         var (zone, player) = Setup(npcs: (new Vec3(40, 0, 0), Orc()));

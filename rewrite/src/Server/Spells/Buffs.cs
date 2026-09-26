@@ -65,6 +65,8 @@ public sealed record StatBonuses
     public bool Charmed { get; init; }
     /// <summary>Divine aura: no damage gets through (Client::Damage's IsInvulnerable).</summary>
     public bool Invulnerable { get; init; }
+    /// <summary>SE_ManaPool: added to the maximum mana.</summary>
+    public int ManaPool { get; init; }
 
     /// <summary>
     /// Adds up the buffs. AC on beneficial spells goes through the legacy AproximateSpellAC curve;
@@ -76,7 +78,7 @@ public sealed record StatBonuses
         int ac = 0, atk = 0, str = 0, sta = 0, agi = 0, dex = 0, @int = 0, wis = 0, cha = 0, hp = 0, hpTic = 0, manaTic = 0;
         int mr = 0, fr = 0, cr = 0, pr = 0, dr = 0, haste = 0, slow = 0, speed = 0;
         bool invisible = false, invisibleToUndead = false, rooted = false, mezzed = false, levitating = false, feared = false, charmed = false, invulnerable = false;
-        int damageShield = 0, damageShieldType = 0, reverseDamageShield = 0, frenzyRadius = 0, illusion = 0;
+        int damageShield = 0, damageShieldType = 0, reverseDamageShield = 0, frenzyRadius = 0, illusion = 0, manaPool = 0;
         foreach (var buff in buffs)
         {
             var s = buff.Spell;
@@ -122,6 +124,7 @@ public sealed record StatBonuses
                     case SpellEffect.Illusion: illusion = s.Base[i]; break;
                     case SpellEffect.Charm: charmed = true; break;
                     case SpellEffect.DivineAura: invulnerable = true; break;
+                    case SpellEffect.ManaPool: manaPool += v; break;
                     case SpellEffect.AttackSpeed:
                         if (v > 100) haste = Math.Max(haste, v - 100);
                         else if (v > 0 && v < 100) slow = Math.Max(slow, 100 - v);
@@ -135,7 +138,7 @@ public sealed record StatBonuses
             HpPerTic = hpTic, ManaPerTic = manaTic, MR = mr, FR = fr, CR = cr, PR = pr, DR = dr, Haste = haste, Slow = slow,
             MovementSpeed = speed, Invisible = invisible, InvisibleToUndead = invisibleToUndead, Rooted = rooted, Mezzed = mezzed,
             Levitating = levitating, DamageShield = damageShield, DamageShieldType = damageShieldType, ReverseDamageShield = reverseDamageShield,
-            FrenzyRadius = frenzyRadius, Feared = feared, IllusionRace = illusion, Charmed = charmed, Invulnerable = invulnerable,
+            FrenzyRadius = frenzyRadius, Feared = feared, IllusionRace = illusion, Charmed = charmed, Invulnerable = invulnerable, ManaPool = manaPool,
         };
     }
 

@@ -82,6 +82,7 @@ public sealed partial class ZoneInstance
         SpellEffect.SummonItem, SpellEffect.Levitate, SpellEffect.Teleport, SpellEffect.Root, WipeHateList, SummonPetEffect, NecPetEffect,
         SpellEffect.DamageShield, SpellEffect.Rune, SpellEffect.Stamina, SpellEffect.CancelMagic, SpellEffect.Fear,
         SpellEffect.Lull, SpellEffect.FrenzyRadius, SpellEffect.Harmony, SpellEffect.Succor, SpellEffect.Illusion, SpellEffect.Charm, SpellEffect.DivineAura,
+        SpellEffect.Translocate, SpellEffect.ManaPool, SpellEffect.SummonCorpse,
     ];
 
     private const int WipeHateList = 63, SummonPetEffect = 33, NecPetEffect = 71;
@@ -599,6 +600,23 @@ public sealed partial class ZoneInstance
                 case SpellEffect.CancelMagic:
                     CancelMagic(caster, target, spell.Base[i]);
                     break;
+                case SpellEffect.Translocate when target.IsPlayer && spell.TeleportZone.Length > 0:
+                    // SE_Translocate: yourself or a member of your group (the legacy client asked the target first).
+                    if (target != caster && !(Groups?.MembersOf(caster.Name).Contains(target.Name, StringComparer.OrdinalIgnoreCase) ?? false))
+                    {
+                        _events.Add(new Told(caster.Id, "You can only cast that spell on players in your group."));
+                        return;
+                    }
+                    Teleport(target, spell.TeleportZone, new Vec3(spell.Base[1], spell.Base[0], spell.Base[2]), "teleport");
+                    return;
+                case SpellEffect.SummonCorpse when target.IsPlayer:
+                    // SE_SummonCorpse: the target's corpses in this zone come to the caster.
+                    foreach (var body in _entities.Values.Where(b => b.Corpse is { Owner: { } owner } && string.Equals(owner, target.Name, StringComparison.OrdinalIgnoreCase)).ToList())
+                    {
+                        body.Position = caster.Position;
+                        body.Moved = true;
+                    }
+                    break;
                 case SpellEffect.Charm when !target.IsPlayer && target.OwnerId is null:
                     Charm(caster, target);
                     break;
@@ -702,7 +720,7 @@ public sealed partial class ZoneInstance
         RebuildFighter(e);
         if (e.Magic is { } magic)
         {
-            e.MaxMana = SpellRules.MaxMana(e.Fighter.Class, e.Level, magic.Wis + e.Bonuses.Wis, magic.Int + e.Bonuses.Int);
+            e.MaxMana = SpellRules.MaxMana(e.Fighter.Class, e.Level, magic.Wis + e.Bonuses.Wis, magic.Int + e.Bonuses.Int) + e.Bonuses.ManaPool;
             if (e.Mana > e.MaxMana)
                 e.Mana = e.MaxMana;
             _events.Add(new ManaChanged(e.Id, e.Mana, e.MaxMana));
@@ -824,7 +842,7 @@ public sealed partial class ZoneInstance
     {
         if (player.Magic is not { } magic)
             return;
-        player.MaxMana = SpellRules.MaxMana(player.Fighter.Class, player.Level, magic.Wis, magic.Int);
+        player.MaxMana = SpellRules.MaxMana(player.Fighter.Class, player.Level, magic.Wis + player.Bonuses.Wis, magic.Int + player.Bonuses.Int) + player.Bonuses.ManaPool;
         player.Mana = player.MaxMana;
         _events.Add(new ManaChanged(player.Id, player.Mana, player.MaxMana));
     }
