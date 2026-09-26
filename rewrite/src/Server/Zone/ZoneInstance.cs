@@ -166,6 +166,10 @@ public sealed partial class ZoneInstance
         public double FreeForAllAt;
         public HashSet<int> Rights = new();
         public int? Looter;
+        /// <summary>Player corpses: whose it is (only they loot it), its player_corpses id, class and deity for saving.</summary>
+        public string? Owner;
+        public int DbId;
+        public int Class, Deity;
     }
 
     /// <summary>A player's inventory: item id and charges for each of the 30 profile slots, and money.</summary>
@@ -611,6 +615,11 @@ public sealed partial class ZoneInstance
             _events.Add(new Told(playerId, "You are too far away to loot that corpse."));
             return;
         }
+        if (corpse.Owner is { } owner && !string.Equals(owner, player.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            _events.Add(new Told(playerId, "You may not loot this corpse."));
+            return;
+        }
         if (_time < corpse.FreeForAllAt && corpse.Rights.Count > 0 && !corpse.Rights.Contains(playerId))
         {
             _events.Add(new Told(playerId, "You may not loot this corpse at this time."));
@@ -628,6 +637,7 @@ public sealed partial class ZoneInstance
             _events.Add(new Told(playerId, $"You receive {corpse.Coins} from the corpse."));
             corpse.Coins = Coins.None;
             _events.Add(new InventoryChanged(playerId));
+            SavePlayerCorpse(body);
         }
         _events.Add(new LootShown(playerId, corpseId, corpse.Items.ToList()));
     }
@@ -729,7 +739,9 @@ public sealed partial class ZoneInstance
             || corpse.Looter != playerId || index < 0 || index >= corpse.Items.Count)
             return;
         var item = corpse.Items[index];
-        int slot = inventory.FreeSlotFor(Items?.Get(item.ItemId), id => Items?.Get(id));
+        // A player's own item goes back where it was, when that slot is free (a bag cell needs its bag).
+        int slot = item.Slot >= 0 && inventory.ItemAt(item.Slot) == 0 && ValidSlot(inventory, item.Slot)
+            ? item.Slot : inventory.FreeSlotFor(Items?.Get(item.ItemId), id => Items?.Get(id));
         if (slot < 0)
         {
             _events.Add(new Told(playerId, "There is no room in your inventory for that item."));
@@ -739,6 +751,9 @@ public sealed partial class ZoneInstance
         inventory.Set(slot, item.ItemId, item.Charges);
         _events.Add(new Told(playerId, $"You have looted a {Items?.Get(item.ItemId)?.Name ?? "item #" + item.ItemId}."));
         _events.Add(new InventoryChanged(playerId));
+        SavePlayerCorpse(body);
+        if (slot is >= 0 and < PlayerInventory.FirstGeneral)
+            RebuildFighter(player);
         _events.Add(new LootShown(playerId, corpseId, corpse.Items.ToList()));
     }
 
@@ -750,6 +765,7 @@ public sealed partial class ZoneInstance
         corpse.Looter = null;
         if (corpse.Items.Count == 0 && corpse.Coins.IsZero)
         {
+            SavePlayerCorpse(body); // deletes a stored player corpse
             _entities.Remove(corpseId);
             _events.Add(new Removed(corpseId));
         }
@@ -759,6 +775,8 @@ public sealed partial class ZoneInstance
     {
         foreach (var body in _entities.Values.Where(e => e.Corpse is { } c && _time >= c.DecayAt).ToList())
         {
+            if (body.Corpse!.Owner is not null && body.Corpse.DbId != 0)
+                PlayerCorpses?.Delete(body.Corpse.DbId);
             _entities.Remove(body.Id);
             _events.Add(new Removed(body.Id));
         }
@@ -785,6 +803,7 @@ public sealed partial class ZoneInstance
     {
         _time += seconds;
         TickCount++;
+        LoadPlayerCorpses();
 
         foreach (var door in _doors.Values)
             if (door.Open && _time - door.LastClick >= DoorCloseSeconds)
@@ -1037,6 +1056,7 @@ public sealed partial class ZoneInstance
         uint loss = Experience.DeathLoss(player.Level, player.Exp);
         if (loss > 0)
             SetExperience(player, player.Exp - loss);
+        MakePlayerCorpse(player);
         player.Hp = player.Fighter.MaxHp;
         _events.Add(new HealthChanged(player.Id, player.Hp, player.Fighter.MaxHp));
         SendToBind(player, DeathReason);

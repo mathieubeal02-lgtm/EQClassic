@@ -31,4 +31,16 @@ public class MySqlFactionTests
         Assert.Contains((135, 10), gnoll.Hits);
         Assert.Equal(1500, data.Faction(135)!.Modifiers(1, 1, 140)); // humans and the Guards of Qeynos
     }
+
+    [DbFact]
+    public void Stored_player_corpses_are_read_from_player_corpses()
+    {
+        if (!TablesExist())
+            return;
+        var corpses = new EQClassic.Server.Zone.MySqlPlayerCorpseStore(DbFactAttribute.ConnectionString!).InZone("everfrost");
+        if (corpses.FirstOrDefault(c => c.Owner == "Qbottwo") is not { } corpse)
+            return; // looted or rotten since
+        Assert.Equal(3, corpse.Items.Count);
+        Assert.True(corpse.SecondsLeft > 0);
+    }
 }

@@ -83,6 +83,7 @@ ILootSource? loot = db is null ? null : new MySqlLootSource(db);
 IMerchantSource? merchants = db is null ? null : new MySqlMerchantSource(db);
 IForageSource? forage = db is null ? null : new MySqlForageSource(db);
 INpcSpellSource? npcSpells = db is null ? null : new MySqlNpcSpellSource(db);
+IPlayerCorpseStore? playerCorpses = db is null ? null : new MySqlPlayerCorpseStore(db);
 IFactionStandings factions = db is null ? new IndifferentFactions() : new DatabaseFactions(new MySqlFactionData(db));
 using var zones = new ZoneServer(zoneKeys, name =>
 {
@@ -95,7 +96,7 @@ using var zones = new ZoneServer(zoneKeys, name =>
     var regions = bsp is not null && File.Exists(bsp) ? ZoneRegions.Load(bsp) : null;
     var cfg = zoneCfg is null ? null : Path.Combine(zoneCfg, name + ".cfg");
     var info = cfg is not null && File.Exists(cfg) ? ZoneInfo.FromLegacyCfg(File.ReadAllBytes(cfg)) : null;
-    return new ZoneInstance(data, mesh) { Info = info, Loot = loot, Items = items, Spells = spells, Factions = factions, Merchants = merchants, Regions = regions, Forage = forage, NpcSpells = npcSpells };
+    return new ZoneInstance(data, mesh) { Info = info, Loot = loot, Items = items, Spells = spells, Factions = factions, Merchants = merchants, Regions = regions, Forage = forage, NpcSpells = npcSpells, PlayerCorpses = playerCorpses };
 })
 {
     Log = server.Log, Characters = characters, PublicAddress = worldAddress, Items = items,

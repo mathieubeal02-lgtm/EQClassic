@@ -42,7 +42,8 @@ public readonly record struct Coins(int Platinum, int Gold, int Silver, int Copp
     }
 }
 
-public sealed record LootDrop(int ItemId, int Charges);
+/// <summary>An item on a corpse; Slot is where a player's own item came from (−1 for NPC loot).</summary>
+public sealed record LootDrop(int ItemId, int Charges, int Slot = -1);
 
 /// <summary>A loottable row and its entries (loottable, loottable_entries).</summary>
 public sealed record LootTable(int Id, int MinCash, int MaxCash, int AvgCoin, IReadOnlyList<(int DropId, int Multiplier, int Probability)> Entries);
