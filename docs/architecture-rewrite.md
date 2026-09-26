@@ -78,7 +78,7 @@ some ordered reliable messages (chat, inventory, combat results), and occasional
 
 **Decision: LiteNetLib with our own binary messages** (`EQClassic.Shared.Protocol`): one type byte,
 then the fields, decoded strictly (unknown type, truncation or trailing bytes are errors). The
-protocol version is the connection key (`EQClassic/1`), so mismatched builds are refused at
+protocol version is the connection key (`EQClassic/2` since the doors), so mismatched builds are refused at
 connect time. Movement will use unreliable-sequenced delivery, everything else reliable-ordered.
 
 **Encryption (M1, done).** LiteNetLib itself sends plaintext, so the login adds its own layer, built
