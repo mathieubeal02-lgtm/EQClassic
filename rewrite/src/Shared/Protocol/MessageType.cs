@@ -37,4 +37,8 @@ public enum MessageType : byte
     AutoAttack = 29,
     CombatEvent = 30,
     PlayerHealth = 31,
+    ConsiderRequest = 32,
+    ConsiderResult = 33,
+    SetSitting = 34,
+    EntityAppearance = 35,
 }

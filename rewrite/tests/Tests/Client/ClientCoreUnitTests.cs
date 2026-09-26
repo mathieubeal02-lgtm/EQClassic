@@ -122,6 +122,21 @@ public class ClientCoreUnitTests
     }
 
     [Fact]
+    public void Mouse_turns_and_walking_slows_down()
+    {
+        var player = new LocalPlayer(1, new Vec3(0, 0, 0), heading: 350);
+        player.Turn(20);
+        Assert.Equal(10f, player.Heading, precision: 3);
+        player.Turn(-30);
+        Assert.Equal(340f, player.Heading, precision: 3);
+
+        player.Turn(-340); // face north
+        player.Walking = true;
+        player.Move(forward: 1, strafe: 0, turn: 0, seconds: 1);
+        Assert.Equal(LocalPlayer.WalkSpeed, player.Position.Y, precision: 3);
+    }
+
+    [Fact]
     public void Combat_lines_read_like_the_trilogy_client()
     {
         string? Name(int id) => id switch { 1 => "Qbot", 2 => "a rat", 3 => "Guard Liben", _ => null };

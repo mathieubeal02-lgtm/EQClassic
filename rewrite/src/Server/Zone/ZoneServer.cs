@@ -137,6 +137,16 @@ public sealed class ZoneServer : IDisposable
                 Broadcast(targeter.Instance, targeter.Instance.DrainEvents());
                 break;
 
+            case ConsiderRequest consider when _players.TryGetValue(peer, out var considerer):
+                considerer.Instance.Consider(considerer.EntityId, consider.EntityId);
+                Broadcast(considerer.Instance, considerer.Instance.DrainEvents());
+                break;
+
+            case SetSitting sit when _players.TryGetValue(peer, out var sitter):
+                sitter.Instance.SetSitting(sitter.EntityId, sit.Sitting);
+                Broadcast(sitter.Instance, sitter.Instance.DrainEvents());
+                break;
+
             case AutoAttack attack when _players.TryGetValue(peer, out var attacker):
                 attacker.Instance.SetAutoAttack(attacker.EntityId, attack.On);
                 Broadcast(attacker.Instance, attacker.Instance.DrainEvents());
@@ -225,6 +235,12 @@ public sealed class ZoneServer : IDisposable
                     break;
                 case ZoneInstance.HealthChanged health when PeerOf(instance, health.PlayerId) is { } hurt:
                     Send(hurt, new PlayerHealth(health.Hp, health.MaxHp), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.Considered considered when PeerOf(instance, considered.PlayerId) is { } asker:
+                    Send(asker, new ConsiderResult(considered.EntityId, considered.Standing, considered.Con), DeliveryMethod.ReliableOrdered);
+                    break;
+                case ZoneInstance.AppearanceChanged appearance:
+                    SendToZone(instance, new EntityAppearance(appearance.EntityId, appearance.Sitting));
                     break;
                 case ZoneInstance.Slain slain:
                     AnnounceDeath(instance, slain);

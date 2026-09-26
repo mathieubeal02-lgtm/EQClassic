@@ -176,6 +176,23 @@ public sealed class GameClientTests : IDisposable
     }
 
     [Fact]
+    public void Considers_and_sits_through_the_server()
+    {
+        var client = InZone("Qbot");
+        var lines = new List<string>();
+        client.MessageReceived += lines.Add;
+        client.TargetNearest(); // the level 1 rat, for the level 1 Qbot
+        client.Consider();
+        Assert.True(Run(() => lines.Count > 0));
+        Assert.Equal("a rat regards you indifferently -- looks like an even fight.", lines[0]);
+
+        client.ToggleSit();
+        Assert.True(Run(() => client.Sitting), "never saw itself sit");
+        client.ToggleSit();
+        Assert.True(Run(() => !client.Sitting), "never stood up");
+    }
+
+    [Fact]
     public void Follows_a_zone_line_into_the_next_zone()
     {
         var client = InZone("Qbot");

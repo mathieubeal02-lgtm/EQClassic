@@ -48,6 +48,13 @@ namespace EQClassic.Unity
         private ZoneCollisionMesh _mesh;
         private Camera _camera;
         private Light _playerLight;
+        private readonly CameraRig _rig = new CameraRig(Scale);
+        private bool _autorun;
+        private float _eyeHeight = 2.5f; // Unity units above the feet; measured from the player's model
+        private bool _playerHidden;
+
+        /// <summary>The zone the server put us in has no imported assets in this client.</summary>
+        public string MissingZone { get; private set; }
         private readonly Dictionary<int, DoorVisual> _doors = new Dictionary<int, DoorVisual>();
 
         /// <summary>A drawn door: its closed pose, how it opens, and how far it is open (0 to 1).</summary>
@@ -64,11 +71,23 @@ namespace EQClassic.Unity
 
         private const float DoorSeconds = 1f;
 
+        private int _playerId = -1;
+        private ZoneView _zone;
+        private GameClient _client;
+        private readonly Dictionary<int, float> _tops = new Dictionary<int, float>();
+        private GUIStyle _plateStyle;
+        /// <summary>Name plates are drawn for entities this close to the camera (Unity units).</summary>
+        private const float PlateDistance = 60f;
+
         public void Enter(ZoneView zone)
         {
+            _playerId = zone.YourEntityId;
+            _zone = zone;
+            _playerHidden = false;
             Clear();
             var zonePrefab = LoadPrefab(ContentRoot + "Zones/" + zone.Zone + "/" + zone.Zone + ".prefab");
             _zoneRoot = zonePrefab != null ? Instantiate(zonePrefab) : null; // the prefab carries the 0.5 world scale
+            MissingZone = _zoneRoot == null ? zone.Zone : null;
             if (_zoneRoot == null)
             {
                 Debug.LogWarning($"EQClassic: zone '{zone.Zone}' is not imported (EQ > Assets > Import Zone). Drawing entities only.");
@@ -92,14 +111,23 @@ namespace EQClassic.Unity
 
         public void Present(GameClient client, float deltaTime)
         {
+            _client = client;
             var zone = client.Zone;
             var player = client.Player;
             if (zone == null || player == null)
                 return;
 
+            ReadCameraInput(player);
+            if (Input.GetKeyDown(KeyCode.R) || Input.GetKeyDown(KeyCode.Numlock))
+                _autorun = !_autorun;
             float forward = Input.GetAxis("Vertical");
+            if (forward < -0.1f)
+                _autorun = false; // backing up stops autorun, as in the old client
+            if (_autorun)
+                forward = 1f;
             float strafe = Input.GetAxis("Horizontal");
             float turn = (Input.GetKey(KeyCode.E) ? 1f : 0f) - (Input.GetKey(KeyCode.Q) ? 1f : 0f);
+            player.Walking = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
             if (_mesh != null)
                 player.Move(forward, strafe, turn, deltaTime, _mesh); // ground, steps and walls
             else
@@ -124,7 +152,7 @@ namespace EQClassic.Unity
                 pair.Value.transform.position = new Vector3(x, y, z);
                 pair.Value.transform.rotation = Quaternion.Euler(0f, Coordinates.HeadingToUnityYaw(heading), 0f);
                 if (_animated.TryGetValue(pair.Key, out var animated))
-                    Animate(animated, position, deltaTime);
+                    Animate(animated, position, deltaTime, zone.Get(pair.Key)?.Sitting ?? false);
             }
 
             foreach (var door in _doors.Values)
@@ -135,11 +163,10 @@ namespace EQClassic.Unity
 
             if (me != null && _camera != null)
             {
-                var back = me.transform.rotation * new Vector3(0f, 0f, -1f);
-                var head = me.transform.position + new Vector3(0f, 2f, 0f);
-                float distance = CameraDistance(head, back);
-                _camera.transform.position = head + (back * 12f + new Vector3(0f, 4f, 0f)) * distance;
-                _camera.transform.LookAt(head);
+                bool first = _rig.Mode == CameraRig.View.FirstPerson;
+                if (first != _playerHidden)
+                    SetVisible(me, !(_playerHidden = first)); // first person: do not look out from inside our own model
+                _rig.Place(_camera, me.transform.position, me.transform.rotation, _eyeHeight, _mesh);
             }
         }
 
@@ -184,53 +211,71 @@ namespace EQClassic.Unity
                 capsule.transform.localPosition = new Vector3(0f, capsule.transform.localScale.y, 0f);
             }
             go.name = entity.Spawn.Name + " #" + entity.Id;
+            _tops[entity.Id] = ModelTop(go);
+            if (entity.Id == _playerId)
+                _eyeHeight = Mathf.Max(1f, ModelTop(go) * 0.92f);
             // Entities stay at the scene root: under the (scaled) zone root their positions would be scaled twice.
             _objects[entity.Id] = go;
         }
 
         /// <summary>
-        /// Fraction (0.05 to 1) of the full camera distance that keeps the camera on the player's
-        /// side of the walls: the view line from the head is tested on the collision mesh.
+        /// Name plates above the entities near the camera (not our own): white until considered,
+        /// then in the consider colour; the target's name in brackets.
         /// </summary>
-        private float CameraDistance(Vector3 head, Vector3 back)
+        private void OnGUI()
         {
-            if (_mesh == null)
-                return 1f;
-            var from = Coordinates.FromUnity(head.x, head.y, head.z, Scale);
-            for (float f = 1f; f > 0.05f; f -= 0.05f)
-            {
-                var cam = head + (back * 12f + new Vector3(0f, 4f, 0f)) * f;
-                if (_mesh.LineOfSight(from, Coordinates.FromUnity(cam.x, cam.y, cam.z, Scale)))
-                    return f;
-            }
-            return 0.05f;
-        }
-
-        /// <summary>A melee swing: the attacker plays its attack, a defender that was hit flinches.</summary>
-        public void OnCombat(CombatEvent swing)
-        {
-            if (_animated.TryGetValue(swing.AttackerId, out var attacker) && attacker.Attack is AnimationType attack)
-                attacker.Controller.PlayOneShotAnimation(attack);
-            if (swing.Damage > 0 && _animated.TryGetValue(swing.DefenderId, out var defender) && defender.CanFlinch)
-                defender.Controller.PlayOneShotAnimation(AnimationType.Damage1);
-        }
-
-        /// <summary>
-        /// Stand, walk or run from the speed between frames, smoothed so that a late server update
-        /// does not make the model stop for one frame. Missing clips are ignored by the controller.
-        /// </summary>
-        private static void Animate(Animated animated, Vec3 position, float deltaTime)
-        {
-            if (deltaTime <= 0f)
+            if (_zone == null || _camera == null)
                 return;
-            float dx = position.X - animated.Last.X, dy = position.Y - animated.Last.Y;
-            float speed = (float)System.Math.Sqrt(dx * dx + dy * dy) / deltaTime;
-            animated.Last = position;
-            animated.Speed += (speed - animated.Speed) * System.Math.Min(1f, deltaTime * 8f);
-            var state = animated.Speed > RunAbove ? AnimationType.LocomotionRun
-                : animated.Speed > WalkAbove ? AnimationType.LocomotionWalk
-                : AnimationType.PassiveStand;
-            animated.Controller.SetNewConstantState(state, 0);
+            if (_plateStyle == null)
+                _plateStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter };
+            var colour = GUI.color;
+            foreach (var pair in _objects)
+            {
+                if (pair.Key == _playerId || _zone.Get(pair.Key) is not { } entity)
+                    continue;
+                var top = pair.Value.transform.position + new Vector3(0f, _tops.TryGetValue(pair.Key, out var h) ? h + 0.4f : 3f, 0f);
+                var screen = _camera.WorldToScreenPoint(top);
+                if (screen.z <= 0f || screen.z > PlateDistance)
+                    continue;
+                string name = entity.DisplayName;
+                if (_client?.TargetId == pair.Key)
+                    name = "[ " + name + " ]";
+                GUI.color = entity.Con switch
+                {
+                    ConColor.Green => Color.green,
+                    ConColor.Blue => new Color(0.4f, 0.6f, 1f),
+                    ConColor.Yellow => Color.yellow,
+                    ConColor.Red => Color.red,
+                    _ => Color.white,
+                };
+                GUI.Label(new Rect(screen.x - 120f, Screen.height - screen.y - 10f, 240f, 20f), name, _plateStyle);
+            }
+            GUI.color = colour;
+        }
+
+        /// <summary>F9, wheel, Page Up/Down, Home, and the mouse with the right button held.</summary>
+        private void ReadCameraInput(EQClassic.ClientCore.LocalPlayer player)
+        {
+            if (Input.GetKeyDown(KeyCode.F9))
+                _rig.CycleView();
+            _rig.Zoom(Input.mouseScrollDelta.y);
+            if (Input.GetKey(KeyCode.PageUp))
+                _rig.Look(60f * Time.deltaTime);
+            if (Input.GetKey(KeyCode.PageDown))
+                _rig.Look(-60f * Time.deltaTime);
+            if (Input.GetKeyDown(KeyCode.Home))
+                _rig.Centre();
+            if (Input.GetMouseButton(1))
+            {
+                player.Turn(Input.GetAxis("Mouse X") * 3f);
+                _rig.Look(Input.GetAxis("Mouse Y") * 2f);
+            }
+        }
+
+        private static void SetVisible(GameObject go, bool visible)
+        {
+            foreach (var r in go.GetComponentsInChildren<Renderer>())
+                r.enabled = visible;
         }
 
         /// <summary>Height from the lowest point of the model's renderers up to its origin.</summary>
@@ -260,6 +305,7 @@ namespace EQClassic.Unity
             foreach (var go in _objects.Values)
                 Destroy(go);
             _objects.Clear();
+            _tops.Clear();
             _animated.Clear();
             _doors.Clear(); // their objects are children of the zone root
             _playerLight = null; // destroyed with the player's object
@@ -379,6 +425,43 @@ namespace EQClassic.Unity
                 door.Transform.localPosition = door.ClosedPosition + new Vector3(0f, door.Height * door.Amount, 0f);
             else
                 door.Transform.localRotation = door.ClosedRotation * Quaternion.Euler(0f, 90f * door.Amount, 0f);
+        }
+
+        /// <summary>A melee swing: the attacker plays its attack, a defender that was hit flinches.</summary>
+        public void OnCombat(CombatEvent swing)
+        {
+            if (_animated.TryGetValue(swing.AttackerId, out var attacker) && attacker.Attack is AnimationType attack)
+                attacker.Controller.PlayOneShotAnimation(attack);
+            if (swing.Damage > 0 && _animated.TryGetValue(swing.DefenderId, out var defender) && defender.CanFlinch)
+                defender.Controller.PlayOneShotAnimation(AnimationType.Damage1);
+        }
+
+        /// <summary>
+        /// Stand, walk or run from the speed between frames, smoothed so that a late server update
+        /// does not make the model stop for one frame. Missing clips are ignored by the controller.
+        /// </summary>
+        private static void Animate(Animated animated, Vec3 position, float deltaTime, bool sitting)
+        {
+            if (deltaTime <= 0f)
+                return;
+            float dx = position.X - animated.Last.X, dy = position.Y - animated.Last.Y;
+            float speed = (float)System.Math.Sqrt(dx * dx + dy * dy) / deltaTime;
+            animated.Last = position;
+            animated.Speed += (speed - animated.Speed) * System.Math.Min(1f, deltaTime * 8f);
+            var state = sitting ? AnimationType.PassiveSitting
+                : animated.Speed > RunAbove ? AnimationType.LocomotionRun
+                : animated.Speed > WalkAbove ? AnimationType.LocomotionWalk
+                : AnimationType.PassiveStand;
+            animated.Controller.SetNewConstantState(state, 0);
+        }
+
+        /// <summary>Height of the top of a model above its root, in world units.</summary>
+        private static float ModelTop(GameObject model)
+        {
+            float high = float.MinValue;
+            foreach (var r in model.GetComponentsInChildren<Renderer>())
+                high = System.Math.Max(high, r.bounds.max.y);
+            return high > float.MinValue ? high - model.transform.position.y : 2.5f;
         }
 
         private static float ModelHeight(GameObject model)

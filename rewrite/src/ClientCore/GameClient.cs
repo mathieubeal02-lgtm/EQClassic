@@ -70,6 +70,27 @@ namespace EQClassic.ClientCore
             return target;
         }
 
+        /// <summary>Considers the target (C): the answer arrives as a line in <see cref="MessageReceived"/>.</summary>
+        public void Consider()
+        {
+            if (_state != GameState.InZone)
+                return;
+            if (TargetId is int id)
+                _connection?.Send(new ConsiderRequest(id));
+            else
+                MessageReceived?.Invoke("You must first select a target for this command!");
+        }
+
+        /// <summary>Whether the player sits (server-confirmed through EntityAppearance).</summary>
+        public bool Sitting => Zone?.Get(Zone.YourEntityId)?.Sitting ?? false;
+
+        /// <summary>Sit down or stand up (the server stands you up when you move).</summary>
+        public void ToggleSit()
+        {
+            if (_state == GameState.InZone)
+                _connection?.Send(new SetSitting(!Sitting));
+        }
+
         /// <summary>Turns the player toward the target, if any (T).</summary>
         public void FaceTarget()
         {
@@ -245,6 +266,13 @@ namespace EQClassic.ClientCore
                     Zone.Apply(swing);
                     CombatReceived?.Invoke(swing);
                     MessageReceived?.Invoke(CombatText.Describe(swing, Zone.YourEntityId, id => Zone.Get(id)?.DisplayName));
+                    break;
+                case ConsiderResult considered when Zone?.Get(considered.EntityId) is { } seen:
+                    seen.Con = considered.Con;
+                    MessageReceived?.Invoke(ConsiderRules.Message(seen.DisplayName, considered.Standing, considered.Con));
+                    break;
+                case EntityAppearance appearance:
+                    Zone?.Apply(appearance);
                     break;
                 case PlayerHealth health:
                     Hp = health.Hp;

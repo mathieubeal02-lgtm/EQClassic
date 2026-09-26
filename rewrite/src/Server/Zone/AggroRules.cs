@@ -20,19 +20,8 @@ public static class AggroRules
     /// <summary>How often an NPC scans for players (scanarea_timer, 1250 ms).</summary>
     public const float ScanSeconds = 1.25f;
 
-    public static Con LevelCon(int playerLevel, int npcLevel)
-    {
-        int d = npcLevel - playerLevel;
-        int greenAt = playerLevel <= 12 ? -4 : playerLevel <= 24 ? -6 : playerLevel <= 40 ? -11 : playerLevel <= 49 ? -12 : -14;
-        // Legacy quirk for 25-40: -7..-1 falls through to red (the table only lists -10..-8 as blue).
-        int blueFrom = playerLevel is >= 25 and <= 40 ? -10 : greenAt + 1;
-        int blueTo = playerLevel is >= 25 and <= 40 ? -8 : -1;
-        if (d <= greenAt) return Con.Green;
-        if (d >= blueFrom && d <= blueTo) return Con.Blue;
-        if (d == 0) return Con.White;
-        if (d is >= 1 and <= 2) return Con.Yellow;
-        return Con.Red;
-    }
+    /// <summary>Legacy GetLevelCon: shared with the client (EQClassic.Shared.Zone.ConsiderRules).</summary>
+    public static Con LevelCon(int playerLevel, int npcLevel) => (Con)(int)EQClassic.Shared.Zone.ConsiderRules.LevelCon(playerLevel, npcLevel);
 
     /// <summary>Squared aggro radius, or null when this standing never aggroes.</summary>
     public static float? RadiusSquared(FactionStanding standing, int playerLevel, int npcLevel, bool playerSitting = false, bool npcUndead = false, float range = BaseRange)

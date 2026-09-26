@@ -65,6 +65,10 @@ namespace EQClassic.Unity
                     _client.ToggleAutoAttack();
                 if (Input.GetKeyDown(KeyCode.T))
                     _client.FaceTarget();
+                if (Input.GetKeyDown(KeyCode.C))
+                    _client.Consider();
+                if (Input.GetKeyDown(KeyCode.X))
+                    _client.ToggleSit();
                 if (Input.GetKeyDown(KeyCode.Escape))
                     _client.SetTarget(null);
                 _presenter.Present(_client, Time.deltaTime);
@@ -88,8 +92,11 @@ namespace EQClassic.Unity
             var state = _client?.State ?? GameState.Disconnected;
             if (state == GameState.InZone)
             {
-                GUI.Label(new Rect(10, 10, 900, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows move, Q/E turn, U use a door, Tab target, T face it, F attack, Esc clear target");
-                GUI.Label(new Rect(10, 32, 400, 20), $"HP {_client.Hp} / {_client.MaxHp}" + (_client.AutoAttacking ? "   (attacking)" : ""));
+                GUI.Label(new Rect(10, 10, 1200, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows move, Q/E turn, R autorun, Shift walk, X sit, right mouse look, wheel zoom, F9 view, U door, Tab target, T face, C consider, F attack");
+                if (_presenter.MissingZone != null)
+                    GUI.Box(new Rect(Screen.width / 2 - 300, 80, 600, 44),
+                        $"The zone '{_presenter.MissingZone}' is not installed in this client (not imported from Lantern).\nYou are there for the server, but nothing can be drawn.");
+                GUI.Label(new Rect(10, 32, 400, 20), $"HP {_client.Hp} / {_client.MaxHp}" + (_client.AutoAttacking ? "   (attacking)" : "") + (_client.Sitting ? "   (sitting)" : ""));
                 if (_client.TargetId is int target && _client.Zone?.Get(target) is { } t)
                     GUI.Label(new Rect(10, 54, 400, 20), $"Target: {t.DisplayName}  {t.HpPercent}%");
                 for (int i = 0; i < _messages.Count; i++)

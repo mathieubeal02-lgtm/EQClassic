@@ -28,11 +28,18 @@ mkdir -p "$WORK"
 sed "s#^EverQuestDirectory = .*#EverQuestDirectory = $EQDIR/#" \
   "$REPO/externals/LanternExtractor/LanternExtractor/settings.txt" > "$WORK/settings.txt"
 cd "$WORK"
+failed=()
 for zone in "$@"; do
   # Invariant culture: under a French (or any comma-decimal) locale the extractor writes
   # "285,875" in its comma-separated files, which corrupts every coordinate.
-  DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 dotnet "$OUT/LanternExtractor.dll" "$zone"
+  # One zone crashing the extractor (it happens) must not stop the others.
+  if ! DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 dotnet "$OUT/LanternExtractor.dll" "$zone"; then
+    failed+=("$zone")
+  fi
 done
+if [ ${#failed[@]} -gt 0 ]; then
+  echo "extraction failed for: ${failed[*]}" >&2
+fi
 if grep -q 'Exception' log.txt 2>/dev/null; then
   echo "warning: errors in $WORK/log.txt (missing libgdiplus gives no textures)" >&2
 fi

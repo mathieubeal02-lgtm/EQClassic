@@ -63,6 +63,10 @@ public static class MessageCodec
                 MessageType.AutoAttack => AutoAttack.ReadFields(reader),
                 MessageType.CombatEvent => CombatEvent.ReadFields(reader),
                 MessageType.PlayerHealth => PlayerHealth.ReadFields(reader),
+                MessageType.ConsiderRequest => ConsiderRequest.ReadFields(reader),
+                MessageType.ConsiderResult => ConsiderResult.ReadFields(reader),
+                MessageType.SetSitting => SetSitting.ReadFields(reader),
+                MessageType.EntityAppearance => EntityAppearance.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

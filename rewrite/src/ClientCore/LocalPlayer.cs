@@ -13,6 +13,8 @@ namespace EQClassic.ClientCore
     {
         /// <summary>Units per second: EverQuest run speed, under the server's 70 u/s cap.</summary>
         public const float RunSpeed = 45f;
+        /// <summary>Walking (Shift held): about a third of the run speed, as in the Trilogy client.</summary>
+        public const float WalkSpeed = 15f;
         public const float TurnDegreesPerSecond = 120f;
         public const float SendRate = 10f;
         /// <summary>Highest step (units) the character climbs without jumping.</summary>
@@ -35,6 +37,17 @@ namespace EQClassic.ClientCore
         /// <summary>EverQuest degrees: 0 faces +Y (north), clockwise.</summary>
         public float Heading { get; private set; }
         public string? LastCorrection { get; private set; }
+        /// <summary>Walk instead of run.</summary>
+        public bool Walking { get; set; }
+
+        /// <summary>Turns by <paramref name="degrees"/> (positive = clockwise), as the mouse does with the right button held.</summary>
+        public void Turn(float degrees)
+        {
+            if (degrees == 0)
+                return;
+            Heading = ((Heading + degrees) % 360f + 360f) % 360f;
+            _dirty = true;
+        }
 
         /// <summary>
         /// Moves on the zone's collision mesh: the character follows the ground (climbing at most
@@ -75,8 +88,9 @@ namespace EQClassic.ClientCore
             float sx = fy, sy = -fx;                                      // right of the heading
             float length = Math.Min(1f, (float)Math.Sqrt(forward * forward + strafe * strafe));
             float norm = length / (float)Math.Sqrt(forward * forward + strafe * strafe);
-            float dx = (fx * forward + sx * strafe) * norm * RunSpeed * seconds;
-            float dy = (fy * forward + sy * strafe) * norm * RunSpeed * seconds;
+            float speed = Walking ? WalkSpeed : RunSpeed;
+            float dx = (fx * forward + sx * strafe) * norm * speed * seconds;
+            float dy = (fy * forward + sy * strafe) * norm * speed * seconds;
             float x = Position.X + dx, y = Position.Y + dy;
             float z = groundZ?.Invoke(x, y, Position.Z) ?? Position.Z;
             Position = new Vec3(x, y, z);

@@ -90,6 +90,10 @@ public sealed class ZoneInstance
     /// <summary>A player's hit points changed (hit, regeneration, death).</summary>
     public sealed record HealthChanged(int PlayerId, int Hp, int MaxHp) : ZoneEvent;
     public sealed record Slain(int VictimId, string VictimName, int KillerId, string KillerName) : ZoneEvent;
+    public sealed record Considered(int PlayerId, int EntityId, Standing Standing, ConColor Con) : ZoneEvent;
+    public sealed record AppearanceChanged(int EntityId, bool Sitting) : ZoneEvent;
+
+    private const int BankerClass = 40, MerchantClass = 41;
 
     private sealed class DoorSlot
     {
@@ -146,6 +150,34 @@ public sealed class ZoneInstance
         new(true, level, CombatFormulas.Warrior, CombatFormulas.ClientBaseHp(level, CombatFormulas.Warrior, 75),
             Offense: level * 5 + 5, ToHit: 7 + 2 * (level * 5 + 5), Avoidance: level * 5 + 5, Mitigation: level * 3 + 5,
             DamageBonus: 0, BaseDamage: 2, DelaySeconds: 3.6f);
+
+    /// <summary>
+    /// Consider (Client::ProcessOP_Consider): the NPC's faction standing towards the player (merchants
+    /// and bankers never worse than dubious) and the colour by level. Players are indifferent.
+    /// </summary>
+    public void Consider(int playerId, int entityId)
+    {
+        if (!_entities.TryGetValue(playerId, out var player) || !player.IsPlayer || entityId == playerId
+            || !_entities.TryGetValue(entityId, out var other))
+            return;
+        var standing = Standing.Indifferent;
+        if (other.Npc is { } npc)
+        {
+            standing = (Standing)(int)Factions.Standing(player, npc);
+            if (npc.Combat.Class is BankerClass or MerchantClass && standing is Standing.Scowls or Standing.Threatenly)
+                standing = Standing.Dubious;
+        }
+        _events.Add(new Considered(playerId, entityId, standing, ConsiderRules.LevelCon(player.Level, other.Level)));
+    }
+
+    /// <summary>A player sits down or stands up (legacy OP_SpawnAppearance); sitting doubles regeneration and gets you always hit.</summary>
+    public void SetSitting(int playerId, bool sitting)
+    {
+        if (!_entities.TryGetValue(playerId, out var player) || !player.IsPlayer || player.Sitting == sitting)
+            return;
+        player.Sitting = sitting;
+        _events.Add(new AppearanceChanged(playerId, sitting));
+    }
 
     /// <summary>A player targets an entity (null clears the target, and stops auto-attack).</summary>
     public void SetTarget(int playerId, int? targetId)
@@ -258,6 +290,8 @@ public sealed class ZoneInstance
         float distance = MathF.Sqrt(Distance2(player.Position, to));
         if (distance > MaxPlayerSpeed * elapsed + MoveTolerance)
             return $"moved {distance:0} units in {elapsed:0.00} s";
+        if (player.Sitting && Distance2(player.Position, to) > 0.01f)
+            SetSitting(id, false); // walking stands you up
         player.Position = to;
         player.Heading = heading;
         player.LastMoveTime = _time;

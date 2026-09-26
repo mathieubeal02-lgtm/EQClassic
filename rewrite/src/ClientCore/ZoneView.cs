@@ -30,6 +30,9 @@ namespace EQClassic.ClientCore
             public string DisplayName => CombatText.DisplayName(Spawn.Name);
             /// <summary>Hit points in percent, from the last combat event about it.</summary>
             public int HpPercent { get; internal set; } = 100;
+            public bool Sitting { get; internal set; }
+            /// <summary>Colour from the last consider, null before (name plates use it).</summary>
+            public ConColor? Con { get; internal set; }
             internal readonly List<(double Time, Vec3 Position, float Heading)> Snapshots = new List<(double, Vec3, float)>();
             internal uint LastTick;
 
@@ -60,6 +63,16 @@ namespace EQClassic.ClientCore
 
         private readonly Dictionary<int, DoorInfo> _doors = new Dictionary<int, DoorInfo>();
         public IReadOnlyCollection<DoorInfo> Doors => _doors.Values;
+
+        public event Action<EntityView>? AppearanceChanged;
+
+        public void Apply(EntityAppearance appearance)
+        {
+            if (!_entities.TryGetValue(appearance.EntityId, out var e) || e.Sitting == appearance.Sitting)
+                return;
+            e.Sitting = appearance.Sitting;
+            AppearanceChanged?.Invoke(e);
+        }
 
         /// <summary>A swing: remembers the defender's health for the target window.</summary>
         public void Apply(CombatEvent swing)

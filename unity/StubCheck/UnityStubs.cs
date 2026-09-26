@@ -40,6 +40,7 @@ namespace UnityEngine
 
     public class Renderer : Component
     {
+        public bool enabled { get; set; }
         public Bounds bounds => default;
     }
 
@@ -59,6 +60,11 @@ namespace UnityEngine
         public Transform parent { get; set; }
         public void LookAt(Vector3 worldPosition) { }
         public void SetParent(Transform parent, bool worldPositionStays) { }
+    }
+
+    public struct Vector2
+    {
+        public float x, y;
     }
 
     public struct Vector3
@@ -85,7 +91,11 @@ namespace UnityEngine
 
     public enum PrimitiveType { Sphere, Capsule, Cylinder, Cube, Plane, Quad }
     public enum LightType { Spot, Directional, Point }
-    public enum KeyCode { Tab = 9, Escape = 27, Q = 113, E = 101, F = 102, T = 116, U = 117 }
+    public enum KeyCode
+    {
+        Tab = 9, Escape = 27, Q = 113, C = 99, E = 101, F = 102, R = 114, T = 116, U = 117, X = 120, Numlock = 300, RightShift = 303, LeftShift = 304,
+        Home = 278, PageUp = 280, PageDown = 281, F9 = 290,
+    }
     public enum RuntimeInitializeLoadType { AfterSceneLoad, BeforeSceneLoad }
 
     [System.AttributeUsage(System.AttributeTargets.Method)]
@@ -96,6 +106,7 @@ namespace UnityEngine
 
     public sealed class Camera : Behaviour
     {
+        public Vector3 WorldToScreenPoint(Vector3 position) => default;
         public static Camera main => null;
     }
 
@@ -110,13 +121,21 @@ namespace UnityEngine
     public struct Color
     {
         public Color(float r, float g, float b) { }
+        public static Color white => default;
+        public static Color green => default;
+        public static Color yellow => default;
+        public static Color red => default;
     }
+
+    public enum TextAnchor { MiddleCenter = 4 }
 
     public static class Input
     {
         public static float GetAxis(string axisName) => 0;
         public static bool GetKey(KeyCode key) => false;
         public static bool GetKeyDown(KeyCode key) => false;
+        public static bool GetMouseButton(int button) => false;
+        public static Vector2 mouseScrollDelta => default;
     }
 
     public static class Time
@@ -133,11 +152,14 @@ namespace UnityEngine
     public static class Screen
     {
         public static int height => 0;
+        public static int width => 0;
     }
 
     public static class Mathf
     {
         public static float MoveTowards(float current, float target, float maxDelta) => target;
+        public static float Clamp(float value, float min, float max) => value;
+        public static float Max(float a, float b) => a;
     }
 
     public static class Application
@@ -152,15 +174,24 @@ namespace UnityEngine
         public static void SetString(string key, string value) { }
     }
 
-    public class GUIStyle { }
+    public class GUIStyle
+    {
+        public GUIStyle() { }
+        public GUIStyle(GUIStyle other) { }
+        public TextAnchor alignment { get; set; }
+    }
 
     public class GUISkin : Object
     {
         public GUIStyle box => null;
+        public GUIStyle label => null;
     }
 
     public static class GUI
     {
+        public static Color color { get; set; }
+        public static void Label(Rect position, string text, GUIStyle style) { }
+        public static void Box(Rect position, string text) { }
         public static GUISkin skin => null;
         public static void Label(Rect position, string text) { }
     }
@@ -191,7 +222,7 @@ namespace Lantern.EQ.Animation
     public enum AnimationType
     {
         CombatKick = 1, CombatPiercing = 2, Combat2HSlash = 3, Combat2HBlunt = 4, Combat1HSlash = 5, CombatHandToHand = 8,
-        Damage1 = 12, LocomotionWalk = 17, LocomotionRun = 18, PassiveStand = 32,
+        Damage1 = 12, LocomotionWalk = 17, LocomotionRun = 18, PassiveStand = 32, PassiveSitting = 38,
     }
 
     public class CharacterAnimationController : UnityEngine.MonoBehaviour

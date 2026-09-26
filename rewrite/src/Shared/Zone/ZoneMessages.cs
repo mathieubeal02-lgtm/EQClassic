@@ -320,4 +320,50 @@ namespace EQClassic.Shared.Zone
 
         public static PlayerHealth ReadFields(NetDataReader reader) => new PlayerHealth(reader.GetInt(), reader.GetInt());
     }
+
+    /// <summary>Client to zone server: consider an entity (legacy OP_Consider).</summary>
+    public sealed record ConsiderRequest(int EntityId) : IMessage
+    {
+        public MessageType Type => MessageType.ConsiderRequest;
+        public void WriteFields(NetDataWriter writer) => writer.Put(EntityId);
+        public static ConsiderRequest ReadFields(NetDataReader reader) => new ConsiderRequest(reader.GetInt());
+    }
+
+    /// <summary>Zone server to the client: the standing and colour it words (<see cref="ConsiderRules.Message"/>).</summary>
+    public sealed record ConsiderResult(int EntityId, Standing Standing, ConColor Con) : IMessage
+    {
+        public MessageType Type => MessageType.ConsiderResult;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(EntityId);
+            writer.Put((byte)Standing);
+            writer.Put((byte)Con);
+        }
+
+        public static ConsiderResult ReadFields(NetDataReader reader) =>
+            new ConsiderResult(reader.GetInt(), (Standing)reader.GetByte(), (ConColor)reader.GetByte());
+    }
+
+    /// <summary>Client to zone server: sit down or stand up (legacy OP_SpawnAppearance).</summary>
+    public sealed record SetSitting(bool Sitting) : IMessage
+    {
+        public MessageType Type => MessageType.SetSitting;
+        public void WriteFields(NetDataWriter writer) => writer.Put(Sitting);
+        public static SetSitting ReadFields(NetDataReader reader) => new SetSitting(reader.GetBool());
+    }
+
+    /// <summary>Zone server to the clients: an entity sat down or stood up.</summary>
+    public sealed record EntityAppearance(int EntityId, bool Sitting) : IMessage
+    {
+        public MessageType Type => MessageType.EntityAppearance;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put(EntityId);
+            writer.Put(Sitting);
+        }
+
+        public static EntityAppearance ReadFields(NetDataReader reader) => new EntityAppearance(reader.GetInt(), reader.GetBool());
+    }
 }
