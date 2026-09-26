@@ -18,6 +18,11 @@ namespace EQClassic.Unity
         public Texture2D Book { get; private set; }
         /// <summary>The spells' square icons (spelicon.bmp): 40 × 40, five a row; spdat icon − 2500.</summary>
         public Texture2D SpellIcons { get; private set; }
+        /// <summary>PERSONA's pieces: main3.bmp (inventory and statistics columns), main4.bmp (worn slot strips, money).</summary>
+        public Texture2D Persona { get; private set; }
+        public Texture2D Strips { get; private set; }
+        /// <summary>The items' icons: dragitem01.bmp to dragitem04.bmp (the last in bmpwad2.s3d).</summary>
+        public Texture2D[] ItemIcons { get; private set; }
 
         public static Rect SpellIconUv(int icon)
         {
@@ -44,8 +49,18 @@ namespace EQClassic.Unity
                 var files = PfsArchive.Read(File.ReadAllBytes(path));
                 if (!files.TryGetValue("main1.bmp", out var frame) || !files.TryGetValue("spelgems.bmp", out var gems))
                     return null;
+                // dragitem04 is in bmpwad2.s3d, next to bmpwad.s3d.
+                var second = Path.Combine(Path.GetDirectoryName(path) ?? "", "bmpwad2.s3d");
+                if (File.Exists(second))
+                    foreach (var pair in PfsArchive.Read(File.ReadAllBytes(second)))
+                        if (!files.ContainsKey(pair.Key))
+                            files[pair.Key] = pair.Value;
+                Texture2D Optional(string name) => files.TryGetValue(name, out var bmp) ? Texture(bmp) : null;
                 return new ClassicSkin
                 {
+                    Persona = Optional("main3.bmp"),
+                    Strips = Optional("main4.bmp"),
+                    ItemIcons = new[] { Optional("dragitem01.bmp"), Optional("dragitem02.bmp"), Optional("dragitem03.bmp"), Optional("dragitem04.bmp") },
                     Frame = Texture(frame), Gems = Texture(gems),
                     Book = files.TryGetValue("book.bmp", out var book) ? Texture(book) : null,
                     SpellIcons = files.TryGetValue("spelicon.bmp", out var icons) ? Texture(icons) : null,
@@ -60,7 +75,9 @@ namespace EQClassic.Unity
 
         private static Texture2D Texture(byte[] bmp)
         {
-            var (w, h, rgba) = ClassicBitmap.Decode(bmp);
+            var (w0, h0, pixels) = ClassicBitmap.Decode(bmp);
+            // The art is 640 × 480: doubled with Scale2x (sharp edges) before the screen's own stretch.
+            var (w, h, rgba) = ClassicBitmap.Scale2x(w0, h0, pixels);
             var texture = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
             texture.LoadRawTextureData(rgba);
             texture.Apply();

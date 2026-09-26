@@ -75,6 +75,9 @@ namespace EQClassic.Unity
             float W = Screen.width, H = Screen.height, sx = W / ClassicSkin.Width, sy = H / ClassicSkin.Height;
             Rect R(float x, float y, float w, float h) => new Rect(x * sx, y * sy, w * sx, h * sy);
             EnsureClassicStyles(sy);
+            // PERSONA takes the whole screen, as in the Trilogy client.
+            if (_layout.IsOpen(HudLayout.Inventory) && DrawPersona(skin))
+                return;
             // The view: the magenta hole of the frame (119, 0) to (518, 319).
             _presenter.Viewport = new Rect(119f / ClassicSkin.Width, 1f - 320f / ClassicSkin.Height, 400f / ClassicSkin.Width, 320f / ClassicSkin.Height);
             GUI.DrawTexture(new Rect(0, 0, W, H), skin.Frame);

@@ -58,7 +58,12 @@ public class ChatLogTests
     {
         Assert.Equal(kind, ChatLog.Kind(Chat.Format(new ChatMessage(channel, "Bob", "Ann", "hi"), "Ann")));
         Assert.Equal(kind, ChatLog.Kind(Chat.Format(new ChatMessage(channel, "Ann", "Bob", "hi"), "Ann")));
-        Assert.Equal(ChatKind.Other, ChatLog.Kind("You have become better at Offense! (5)"));
+        Assert.Equal(ChatKind.SkillUp, ChatLog.Kind("You have become better at Offense! (5)"));
+        Assert.Equal(ChatKind.Experience, ChatLog.Kind("You gain experience!!"));
+        Assert.Equal(ChatKind.Experience, ChatLog.Kind("You have gained a level! Welcome to level 2!"));
+        Assert.Equal(ChatKind.Hurt, ChatLog.Kind("A rat hits YOU for 2 points of damage."));
+        Assert.Equal(ChatKind.Hurt, ChatLog.Kind("Auto attack is on."));
+        Assert.Equal(ChatKind.Other, ChatLog.Kind("You hit a rat for 3 points of damage."));
     }
 }
 

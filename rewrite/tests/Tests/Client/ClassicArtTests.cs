@@ -28,4 +28,17 @@ public class ClassicArtTests
         var (gw, gh, _) = ClassicBitmap.Decode(files["spelgems.bmp"]); // 8-bit with a palette
         Assert.Equal((640, 480), (gw, gh));
     }
+
+    [Fact]
+    public void Scale2x_doubles_and_keeps_a_diagonal_sharp()
+    {
+        // 2 × 2: white on the diagonal, black elsewhere.
+        byte[] W = [255, 255, 255, 255], K = [0, 0, 0, 255];
+        byte[] image = [.. W, .. K, .. K, .. W];
+        var (w, h, rgba) = ClassicBitmap.Scale2x(2, 2, image);
+        Assert.Equal((4, 4), (w, h));
+        Assert.Equal(64, rgba.Length);
+        Assert.Equal(255, rgba[0]);              // the corner stays white
+        Assert.Equal(0, rgba[(0 * 4 + 3) * 4]); // the opposite corner of the row stays black
+    }
 }

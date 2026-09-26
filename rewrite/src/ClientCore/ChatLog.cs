@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace EQClassic.ClientCore
 {
     /// <summary>What a chat line is, for its colour in the chat window.</summary>
-    public enum ChatKind { Other, Say, Tell, Group, Shout, OutOfCharacter, Auction }
+    public enum ChatKind { Other, Say, Tell, Group, Shout, OutOfCharacter, Auction, Experience, Hurt, SkillUp }
 
     /// <summary>
     /// The chat window's text: the last <see cref="Capacity"/> lines with scrolling (the view stays
@@ -75,6 +75,16 @@ namespace EQClassic.ClientCore
         /// <summary>The kind of a line as <see cref="Chat.Format"/> writes it.</summary>
         public static ChatKind Kind(string line)
         {
+            // The Trilogy client's game messages: experience and levels in yellow, what hurts you in red.
+            if (line.StartsWith("You gain experience", StringComparison.Ordinal) || line.StartsWith("You gain party experience", StringComparison.Ordinal)
+                || line.StartsWith("You have gained a level", StringComparison.Ordinal) || line.StartsWith("You have lost experience", StringComparison.Ordinal)
+                || line.StartsWith("You have lost a level", StringComparison.Ordinal))
+                return ChatKind.Experience;
+            if (line.Contains(" YOU for ") || line.Contains(" hit you for ") || line.StartsWith("You have been slain", StringComparison.Ordinal)
+                || line.StartsWith("Auto attack is", StringComparison.Ordinal) || line.StartsWith("YOU are ", StringComparison.Ordinal))
+                return ChatKind.Hurt;
+            if (line.StartsWith("You have become better at", StringComparison.Ordinal))
+                return ChatKind.SkillUp;
             if (line.Contains(" tells you, '") || line.StartsWith("You told ", StringComparison.Ordinal))
                 return ChatKind.Tell;
             if (line.Contains(" tells the group, '") || line.StartsWith("You tell your party, '", StringComparison.Ordinal))

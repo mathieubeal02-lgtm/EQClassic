@@ -119,5 +119,32 @@ namespace EQClassic.ClientCore
             }
             return (width, height, rgba);
         }
+
+        /// <summary>
+        /// Scale2x (AdvMAME2x): twice the size, the edges of flat areas (letters, button borders) kept
+        /// sharp instead of the blur a plain stretch gives; photographic parts are just doubled.
+        /// </summary>
+        public static (int Width, int Height, byte[] Rgba) Scale2x(int width, int height, byte[] rgba)
+        {
+            int w2 = width * 2;
+            var output = new byte[w2 * height * 2 * 4];
+            int Pixel(int x, int y) => BitConverter.ToInt32(rgba, (Math.Clamp(y, 0, height - 1) * width + Math.Clamp(x, 0, width - 1)) * 4);
+            void Put(int x, int y, int value)
+            {
+                int o = (y * w2 + x) * 4;
+                output[o] = (byte)value; output[o + 1] = (byte)(value >> 8); output[o + 2] = (byte)(value >> 16); output[o + 3] = (byte)(value >> 24);
+            }
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                {
+                    int p = Pixel(x, y), a = Pixel(x, y + 1), b = Pixel(x + 1, y), c = Pixel(x - 1, y), d = Pixel(x, y - 1);
+                    // a is the row above in the image (rows run bottom-up here), d the row below.
+                    Put(2 * x, 2 * y + 1, c == a && c != d && a != b ? a : p);
+                    Put(2 * x + 1, 2 * y + 1, a == b && a != c && b != d ? b : p);
+                    Put(2 * x, 2 * y, d == c && d != b && c != a ? c : p);
+                    Put(2 * x + 1, 2 * y, b == d && b != a && d != c ? d : p);
+                }
+            return (w2, height * 2, output);
+        }
     }
 }

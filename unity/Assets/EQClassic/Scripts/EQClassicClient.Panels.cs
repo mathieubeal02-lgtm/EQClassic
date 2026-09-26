@@ -57,6 +57,9 @@ namespace EQClassic.Unity
                 case ChatKind.Shout: return new Color(1f, 0.35f, 0.35f);
                 case ChatKind.OutOfCharacter:
                 case ChatKind.Auction: return new Color(0.4f, 1f, 0.4f);
+                case ChatKind.Experience: return new Color(1f, 0.95f, 0.3f);
+                case ChatKind.Hurt: return new Color(1f, 0.3f, 0.3f);
+                case ChatKind.SkillUp: return new Color(0.6f, 0.8f, 1f);
                 default: return Color.white;
             }
         }
@@ -71,6 +74,9 @@ namespace EQClassic.Unity
                 case ChatKind.Shout: return new Color(0.6f, 0f, 0f);
                 case ChatKind.OutOfCharacter:
                 case ChatKind.Auction: return new Color(0f, 0.38f, 0f);
+                case ChatKind.Experience: return new Color(0.6f, 0.45f, 0f);
+                case ChatKind.Hurt: return new Color(0.7f, 0.05f, 0.05f);
+                case ChatKind.SkillUp: return new Color(0.05f, 0.25f, 0.5f);
                 default: return new Color(0.12f, 0.08f, 0.04f);
             }
         }

@@ -602,6 +602,9 @@ namespace EQClassic.Shared.Zone
     public sealed record PlayerInventory(IReadOnlyList<ItemView> Slots, int Platinum, int Gold, int Silver, int Copper, IReadOnlyList<ItemView>? Bags = null) : IMessage
     {
         public const int BagSlotBase = 250, BagCells = 10;
+        /// <summary>The eight general slots are 22 to 29 (worn 0 to 21).</summary>
+        public const int FirstGeneral = 22, GeneralSlots = 8;
+        public static bool IsGeneralSlot(int slot) => slot >= FirstGeneral && slot < FirstGeneral + GeneralSlots;
         public IReadOnlyList<ItemView> BagCellsOrEmpty => Bags ?? System.Array.Empty<ItemView>();
 
         public MessageType Type => MessageType.PlayerInventory;

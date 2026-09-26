@@ -73,6 +73,7 @@ namespace UnityEngine
     {
         public float x, y;
         public Vector2(float x, float y) { this.x = x; this.y = y; }
+        public static Vector2 zero => default;
     }
 
     public struct Vector3
