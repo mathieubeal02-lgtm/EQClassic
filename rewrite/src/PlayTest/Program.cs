@@ -173,6 +173,13 @@ Step("melee: kill a rodent", () =>
 });
 Step("loot the corpse", () =>
 {
+    // The rodent may have moved before dying: wait for its corpse, then go next to it.
+    ZoneView.EntityView? corpse = null;
+    Run(() => (corpse = client.Player is { } me ? client.Zone?.NearestCorpse(me.Position, 200) : null) != null, 5);
+    if (corpse is null) return (false, "no corpse appeared");
+    client.SetTarget(corpse.Id);
+    Chat("#goto");
+    Run(() => false, 1.5);
     client.Loot();
     bool opened = Run(() => client.LootingCorpse != null, 8);
     int items = client.LootItems.Count;
