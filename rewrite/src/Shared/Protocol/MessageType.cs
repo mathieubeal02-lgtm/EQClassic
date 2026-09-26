@@ -15,4 +15,8 @@ public enum MessageType : byte
     ServerHello = 7,
     SecureLoginRequest = 8,
     Sealed = 9,
+    WorldLoginRequest = 10,
+    WorldLoginResponse = 11,
+    EnterWorldRequest = 12,
+    EnterWorldResponse = 13,
 }

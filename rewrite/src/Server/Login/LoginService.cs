@@ -19,8 +19,12 @@ public sealed class LoginService
 
     public LoginService(IAccountStore accounts) => _accounts = accounts;
 
-    public LoginResponse Authenticate(string username, string password)
+    public LoginResponse Authenticate(string username, string password) => Authenticate(username, password, out _);
+
+    /// <param name="accountName">On success, the name as stored (legacy strcpy(iUsername, row[1])): what World receives.</param>
+    public LoginResponse Authenticate(string username, string password, out string accountName)
     {
+        accountName = "";
         if (username.Length > LoginLimits.MaxNameOrPasswordLength || password.Length > LoginLimits.MaxNameOrPasswordLength)
             return LoginResponse.Failure(LoginResult.BadCredentials);
 
@@ -37,6 +41,7 @@ public sealed class LoginService
             if (account.LsStatus == 50)
                 return LoginResponse.Failure(LoginResult.Banned);
         }
+        accountName = account.Name;
         return LoginResponse.Success(account.Id);
     }
 }

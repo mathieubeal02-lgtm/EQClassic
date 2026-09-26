@@ -5,8 +5,8 @@ Target architecture, protocol choice and milestones: [`docs/architecture-rewrite
 | Project | What it is |
 |---|---|
 | `src/Shared` | Message contracts and codec (`Protocol/`, `Login/`), client library (`Client/LoginClient`), zone collision mesh from Lantern exports (`World/`), legacy Trilogy credential block (`Legacy/`). Targets `net10.0` and `netstandard2.1` for Unity 2021.3: no newer APIs here. |
-| `src/Server` | Login server on LiteNetLib (`Login/`), accounts (`Accounts/`), zone simulation bricks (`Zone/`). |
-| `src/Cli` | Command-line client: encrypted login, world list, world key. |
+| `src/Server` | Login server on LiteNetLib (`Login/`), World (`WorldServer/`: character list, enter world), accounts (`Accounts/`), characters and the legacy profile blob (`Characters/`), zone simulation bricks (`Zone/`). |
+| `src/Cli` | Command-line client: encrypted login, world list, world key, character list, `--enter NAME`. |
 | `tests/Tests` | xUnit tests, including UDP end-to-end tests on localhost; MariaDB tests run when `EQC_REWRITE_TEST_DB` is set. |
 
 ```sh

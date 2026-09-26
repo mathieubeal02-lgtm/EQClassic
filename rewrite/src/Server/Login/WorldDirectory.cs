@@ -11,7 +11,7 @@ namespace EQClassic.Server.Login;
 public sealed class WorldDirectory
 {
     private readonly ConcurrentDictionary<int, WorldServerInfo> _worlds = new();
-    private readonly ConcurrentDictionary<(int AccountId, int WorldId), (string Key, DateTime Expires)> _pending = new();
+    private readonly ConcurrentDictionary<(int AccountId, int WorldId), (string Key, string AccountName, DateTime Expires)> _pending = new();
     private readonly TimeSpan _keyLifetime;
     private readonly Func<DateTime> _now;
 
@@ -26,7 +26,7 @@ public sealed class WorldDirectory
     public IReadOnlyList<WorldServerInfo> List() => _worlds.Values.OrderBy(w => w.Id).ToList();
 
     /// <summary>Checks the world like Client::SendSessionKey / OP_RequestServerStatus, then issues a key.</summary>
-    public PlayResponse RequestPlay(int accountId, int worldId)
+    public PlayResponse RequestPlay(int accountId, int worldId, string accountName = "")
     {
         if (!_worlds.TryGetValue(worldId, out var world))
             return PlayResponse.Refused(LoginMessages.WorldNotFound);
@@ -36,17 +36,27 @@ public sealed class WorldDirectory
             return PlayResponse.Refused(LoginMessages.WorldLocked);
 
         var key = WorldKeys.New();
-        _pending[(accountId, worldId)] = (key, _now() + _keyLifetime);
+        _pending[(accountId, worldId)] = (key, accountName, _now() + _keyLifetime);
         return new PlayResponse(true, "", key, world.Address, world.Port);
     }
 
-    /// <summary>World side: accepts a player once, with the key issued for this account and world.</summary>
-    public bool TryRedeem(int accountId, int worldId, string key)
+    /// <summary>
+    /// World side: accepts a player once, with the key issued for this account and world. The legacy
+    /// World never removed a used key (LWorld RemoveAuth is commented out); here a key works once.
+    /// </summary>
+    public bool TryRedeem(int accountId, int worldId, string key) => TryRedeem(accountId, worldId, key, out _);
+
+    /// <param name="accountName">The login account name, which World uses for its own account row.</param>
+    public bool TryRedeem(int accountId, int worldId, string key, out string accountName)
     {
+        accountName = "";
         if (!_pending.TryGetValue((accountId, worldId), out var entry))
             return false;
         if (entry.Expires < _now() || !string.Equals(entry.Key, key, StringComparison.Ordinal))
             return false;
-        return _pending.TryRemove(new KeyValuePair<(int, int), (string, DateTime)>((accountId, worldId), entry));
+        if (!_pending.TryRemove(new KeyValuePair<(int, int), (string, string, DateTime)>((accountId, worldId), entry)))
+            return false;
+        accountName = entry.AccountName;
+        return true;
     }
 }

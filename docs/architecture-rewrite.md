@@ -36,9 +36,9 @@ the *game* (rules, data, database) and replaces the *technology* around it:
 | Component | Role | Status |
 |---|---|---|
 | `rewrite/src/Shared` | Message contracts, codec, client library (`LoginClient`), zone collision mesh. Targets `net10.0` and `netstandard2.1` (Unity 2021.3). | Started |
-| `rewrite/src/Server` | Login (authentication against MariaDB or memory, encrypted login, world list, world keys), then World and Zone. One process, one tick loop per zone. | Login done (M1) |
-| `rewrite/src/Cli` | Command-line client: login, world list, world key, one line per step. | Done |
-| `rewrite/tests/Tests` | xUnit: unit tests, UDP end-to-end tests on localhost, MariaDB tests when `EQC_REWRITE_TEST_DB` is set. | 91 tests |
+| `rewrite/src/Server` | Login (authentication against MariaDB or memory, encrypted login, world list, world keys) and World (character list, enter world) in one process; then Zone, one tick loop per zone. | Login done (M1), World started (M2) |
+| `rewrite/src/Cli` | Command-line client: login, world list, world key, character list, enter world; one line per step. | Done |
+| `rewrite/tests/Tests` | xUnit: unit tests, UDP end-to-end tests on localhost, MariaDB tests when `EQC_REWRITE_TEST_DB` is set. | 106 tests |
 | Unity client | New Unity project using LanternUnityTools for assets and `EQClassic.Shared.dll` for networking. | Not started |
 | `tools/lantern/extract.sh` | Builds LanternExtractor and exports zones from a client install (exports are not in git). | Done |
 
@@ -110,7 +110,7 @@ Each milestone ends with automated tests plus one manual check, and is merged on
 |---|---|---|
 | M0 | **Foundations** (this branch): Lantern tools, solution, login server, shared client library, collision mesh, waypoint walker. | `dotnet build` and `dotnet test` pass in `rewrite/`; Permafrost and Qeynos export with `tools/lantern/extract.sh`; `EQClassic.Server` accepts `test`/`test`. |
 | M1 | **Real accounts and a secure login** (done): `login_accounts` read from MariaDB (MySqlConnector), encrypted login with a pinnable server key, sealed world key, `EQClassic.Cli`. | Store tests against a MariaDB container in CI; the bot account logs in from the CLI against the live database as `LS#16`; tests prove the login packet holds no password, replays fail, and the world key is sealed. |
-| M2 | **World**: character list and creation (same `character_` rows, profile blob decoded into typed fields), world key redemption (`WorldDirectory.TryRedeem`), zone assignment. | A character created by the rewrite loads in the current C++ zone server and vice versa; tests for creation rules and key reuse/expiry. |
+| M2 | **World** (in progress): world key redemption (single use), world account created on first visit like the legacy World, character list from `character_` with the profile blob decoded (`PlayerProfile`), enter world → saved zone and position. Next: character creation (name approval, starting items and zone). | Done so far: over UDP, the CLI logs `bot` into World and lists Qbot/Qbottwo from the live database; the offsets decode the creation packet captured from the Trilogy client (troll shaman). Still to do: a character created by the rewrite loads in the current C++ zone server and vice versa. |
 | M3 | **Zone core**: zone instance with a 20 Hz tick, spawns from `spawn2`/`spawngroup`, NPC waypoints on the Lantern collision mesh, player movement with server validation, position broadcast. | Headless test: a client enters Qeynos, sees the guards patrol without leaving the street (`WaypointWalker` on real exports), and is refused a teleport-like move. |
 | M4 | **Unity client, first light**: Unity 2021.3 + URP 12 project, LanternUnityTools import of one zone, `EQClassic.Shared.dll` networking: login screen → zone, walk, see NPCs move. | Manual play test on Linux and Windows; the client runs against the M3 server with two players seeing each other. |
 | M5 | **Combat and spells**: port `CombatFormulas` (already pure functions with tests) and the spell data (`spdat.eff`/`spells_en.txt`). | Formula parity tests against the C++ versions; a scripted fight produces the same hit/damage distribution. |
@@ -124,7 +124,7 @@ cd rewrite
 dotnet build && dotnet test
 dotnet run --project src/Server -- --port 5999      # login server with the test account (test / test)
 dotnet run --project src/Server -- --db "Server=127.0.0.1;User ID=eqc;Password=eqc;Database=eqclassic;SslMode=None"
-dotnet run --project src/Cli -- 127.0.0.1 test test --fingerprint <printed by the server>
+dotnet run --project src/Cli -- 127.0.0.1 test test --fingerprint <printed by the server> --enter Qtest
 EQC_REWRITE_TEST_DB="Server=127.0.0.1;User ID=eqc;Password=eqc;Database=eqclassic;SslMode=None" dotnet test
 
 tools/lantern/extract.sh ~/eq-client permafrost qeynos2   # from the repo root; needs libgdiplus on Linux

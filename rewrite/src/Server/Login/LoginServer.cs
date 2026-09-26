@@ -21,6 +21,7 @@ public sealed class LoginServer : IDisposable
     {
         public byte[] Nonce = LoginCrypto.RandomBytes(LoginCrypto.NonceSize);
         public int? AccountId;
+        public string AccountName = "";
         public SessionKeys? Keys;
     }
 
@@ -106,7 +107,7 @@ public sealed class LoginServer : IDisposable
                 break;
 
             case LoginRequest plain when AllowPlaintextLogin:
-                Complete(peer, session, plain.Username, _login.Authenticate(plain.Username, plain.Password), keys: null);
+                Complete(peer, session, _login.Authenticate(plain.Username, plain.Password, out var plainName), plain.Username, plainName, keys: null);
                 break;
 
             case LoginRequest plain:
@@ -119,7 +120,7 @@ public sealed class LoginServer : IDisposable
                 break;
 
             case PlayRequest play when session.AccountId is int accountId:
-                var response = _worlds.RequestPlay(accountId, play.WorldId);
+                var response = _worlds.RequestPlay(accountId, play.WorldId, session.AccountName);
                 Log?.Invoke($"{peer.Address}: account {accountId} play on world {play.WorldId} -> {(response.Accepted ? "key issued" : response.Message)}");
                 // The world key lets whoever holds it enter the world as this account: never in clear
                 // when the session has keys.
@@ -145,15 +146,16 @@ public sealed class LoginServer : IDisposable
             return;
         }
         var keys = LoginCrypto.DeriveSessionKeys(secret, nonce);
-        Complete(peer, session, user, _login.Authenticate(user, password), keys);
+        Complete(peer, session, _login.Authenticate(user, password, out var accountName), user, accountName, keys);
     }
 
-    private void Complete(NetPeer peer, Session session, string user, LoginResponse response, SessionKeys? keys)
+    private void Complete(NetPeer peer, Session session, LoginResponse response, string user, string accountName, SessionKeys? keys)
     {
         Log?.Invoke($"{peer.Address}: login '{user}' -> {response.Result}");
         if (response.Result == LoginResult.Success)
         {
             session.AccountId = response.AccountId;
+            session.AccountName = accountName;
             session.Keys = keys;
             Send(peer, response);
         }

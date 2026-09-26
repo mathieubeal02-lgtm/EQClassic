@@ -1,19 +1,22 @@
+using EQClassic.Shared.Characters;
 using EQClassic.Shared.Client;
 using EQClassic.Shared.Login;
 using EQClassic.Shared.Protocol;
 
-// Command-line client for the rewrite's login server: logs in (encrypted), lists the worlds and
-// asks for a world key. One [ OK ]/[FAIL] line per step; exit code 0 when every step passed.
-//   EQClassic.Cli <host> <user> <password> [--port N] [--fingerprint HEX] [--world ID]
+// Command-line client for the rewrite: logs in (encrypted), lists the worlds, gets a world key, then
+// joins World, lists the characters and optionally enters the world with one of them.
+// One [ OK ]/[FAIL] line per step; exit code 0 when every step passed.
+//   EQClassic.Cli <host> <user> <password> [--port N] [--fingerprint HEX] [--world ID] [--enter NAME]
 if (args.Length < 3)
 {
-    Console.Error.WriteLine("usage: EQClassic.Cli <host> <user> <password> [--port N] [--fingerprint HEX] [--world ID]");
+    Console.Error.WriteLine("usage: EQClassic.Cli <host> <user> <password> [--port N] [--fingerprint HEX] [--world ID] [--enter NAME]");
     return 2;
 }
 string host = args[0], user = args[1], password = args[2];
 int port = ProtocolInfo.DefaultLoginPort;
 int? worldId = null;
 string? fingerprint = null;
+string? enter = null;
 for (int i = 3; i < args.Length - 1; i++)
 {
     switch (args[i])
@@ -21,6 +24,7 @@ for (int i = 3; i < args.Length - 1; i++)
         case "--port": port = int.Parse(args[++i]); break;
         case "--fingerprint": fingerprint = args[++i]; break;
         case "--world": worldId = int.Parse(args[++i]); break;
+        case "--enter": enter = args[++i]; break;
     }
 }
 
@@ -31,7 +35,7 @@ void Step(bool ok, string name, string detail)
     if (!ok) failures++;
 }
 
-using var client = new LoginClient { ExpectedServerFingerprint = fingerprint };
+var client = new LoginClient { ExpectedServerFingerprint = fingerprint };
 var inbox = new Queue<IMessage>();
 bool WaitUntil(Func<bool> condition, int ms = 5000)
 {
@@ -79,6 +83,35 @@ client.Send(new PlayRequest(worldId ?? list.Worlds[0].Id));
 var play = Next<PlayResponse>();
 Step(play?.Accepted == true, "world key", play is null ? "no answer" : play.Accepted ? $"key issued for {play.Address}:{play.Port} ({play.SessionKey.Length} characters)" : play.Message);
 
+if (play?.Accepted != true)
+    return 1;
+string sessionId = login.SessionId;
 client.Disconnect();
 WaitUntil(() => false, 200);
+client.Dispose();
+
+// World: a new connection to the address the login server gave.
+client = new LoginClient();
+inbox.Clear();
+client.Connect(play.Address, play.Port);
+if (!WaitUntil(() => client.State != ConnectionState.Connecting) || client.State != ConnectionState.Connected)
+{
+    Step(false, "world", $"{play.Address}:{play.Port}: {client.DisconnectReason ?? "no answer"}");
+    return 1;
+}
+client.Send(new WorldLoginRequest(sessionId, play.SessionKey));
+var world = Next<WorldLoginResponse>();
+Step(world?.Accepted == true, "characters", world is null ? "no answer" : !world.Accepted ? world.Message
+    : world.Characters.Count == 0 ? "(none)" : string.Join(", ", world.Characters.Select(c => $"{c.Name} (race {c.Race}, class {c.Class}, level {c.Level}, {c.Zone})")));
+
+if (enter is not null && world?.Accepted == true)
+{
+    client.Send(new EnterWorldRequest(enter));
+    var entered = Next<EnterWorldResponse>();
+    Step(entered?.Accepted == true, "enter world", entered is null ? "no answer" : entered.Accepted ? $"{enter} in {entered.Zone} at ({entered.X:0.#}, {entered.Y:0.#}, {entered.Z:0.#})" : entered.Message);
+}
+
+client.Disconnect();
+WaitUntil(() => false, 200);
+client.Dispose();
 return failures == 0 ? 0 : 1;
