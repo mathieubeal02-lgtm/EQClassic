@@ -109,6 +109,11 @@ public sealed partial class ZoneInstance
         internal readonly Dictionary<int, int> FactionValues = new();
         public int FactionValue(int factionId) => FactionValues.GetValueOrDefault(factionId);
         internal void SetFactionValue(int factionId, int value) => FactionValues[factionId] = value;
+        /// <summary>NPC casters: their spells (npc_spells), spell credits spent, and when they next consider casting.</summary>
+        internal NpcSpellSet? SpellSet;
+        internal bool SpellSetChecked;
+        internal int SpellCredit;
+        internal double NextOffense, NextDefense, NextRescue, NextCredit;
         /// <summary>Players: skill values by skill id (the fighter builder reads the same array).</summary>
         public int[] Skills { get; internal set; } = new int[SkillCaps.SkillCount];
         /// <summary>Players: when each ability can be used again; hidden (and where), sneaking.</summary>
@@ -733,6 +738,7 @@ public sealed partial class ZoneInstance
 
         AdvanceCasting();
         Fight(seconds);
+        NpcCasting();
         if (_time >= _nextRegen)
             TickBuffs(); // before the regeneration below moves _nextRegen: same 6 s tic
         Regenerate();
@@ -754,7 +760,7 @@ public sealed partial class ZoneInstance
     {
         foreach (var e in _entities.Values.ToList())
         {
-            if (!_entities.ContainsKey(e.Id) || Incapacitated(e)) // slain earlier in this tick, or stunned or mesmerized
+            if (!_entities.ContainsKey(e.Id) || Incapacitated(e) || !e.IsPlayer && e.Cast is not null) // slain earlier in this tick, stunned, mesmerized, casting
                 continue;
             int? targetId = e.IsPlayer ? (e.AutoAttack ? e.PlayerTargetId : null) : e.TargetId;
             if (targetId is not int tid)
@@ -979,8 +985,8 @@ public sealed partial class ZoneInstance
             Disengage(npc);
             return;
         }
-        if (npc.Bonuses.Rooted)
-            return; // rooted: fights whoever is in reach, goes nowhere
+        if (npc.Bonuses.Rooted || npc.Cast is not null)
+            return; // rooted: fights whoever is in reach, goes nowhere; casting: stands still
         float dx = target.Position.X - npc.Position.X, dy = target.Position.Y - npc.Position.Y;
         float distance = MathF.Sqrt(dx * dx + dy * dy);
         if (distance <= MeleeRange)
@@ -997,6 +1003,7 @@ public sealed partial class ZoneInstance
     private void Disengage(Entity npc)
     {
         npc.TargetId = null;
+        npc.SpellCredit = 0; // NPC::CheckMyLosStatus / leash: a fresh start
         // Back to the grid from where the chase ended (the legacy NPC walks home, then resumes).
         if (npc.Grid is not null)
         {

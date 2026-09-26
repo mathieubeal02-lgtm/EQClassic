@@ -393,8 +393,9 @@ public sealed partial class ZoneInstance
         bool hostile = !spell.Beneficial && target != caster;
         if (hostile)
             caster.LastCombatTime = target.LastCombatTime = _time;
-        if (hostile && target.Npc is { } npc
-            && SpellRules.Resists(SpellRules.ResistChance(spell.ResistType, NpcResist(target, npc, spell.ResistType), target.Level, caster.Level), _random))
+        int? resist = !hostile ? null : target.Npc is { } npc ? NpcResist(target, npc, spell.ResistType)
+            : BonusResist(target, spell.ResistType); // players: no base resists in the legacy zone (Client's BaseStats are 0), only buffs
+        if (resist is int save && SpellRules.Resists(SpellRules.ResistChance(spell.ResistType, save, target.Level, caster.Level), _random))
         {
             _events.Add(new Told(caster.Id, $"Your target resisted the {spell.Name} spell."));
             AfterHarm(caster, target, 0); // a resisted spell still angers
@@ -426,10 +427,12 @@ public sealed partial class ZoneInstance
     }
 
     private static int NpcResist(Entity target, NpcTemplate npc, int resistType) =>
-        SpellRules.NpcResist(resistType, npc.Combat) + resistType switch
-        {
-            1 => target.Bonuses.MR, 2 => target.Bonuses.FR, 3 => target.Bonuses.CR, 4 => target.Bonuses.PR, 5 => target.Bonuses.DR, _ => 0,
-        };
+        SpellRules.NpcResist(resistType, npc.Combat) + BonusResist(target, resistType);
+
+    private static int BonusResist(Entity target, int resistType) => resistType switch
+    {
+        1 => target.Bonuses.MR, 2 => target.Bonuses.FR, 3 => target.Bonuses.CR, 4 => target.Bonuses.PR, 5 => target.Bonuses.DR, _ => 0,
+    };
 
     /// <summary>
     /// SpellEffect's single-time part: hit points (for buffs too, then every tic), mana, stun, bind
