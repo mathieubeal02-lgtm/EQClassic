@@ -124,6 +124,12 @@ namespace EQClassic.ClientCore
                     _campFrom = Player.Position;
                     MessageReceived?.Invoke("It will take you about 30 seconds to prepare your camp.");
                     break;
+                case ChatAction.Ability:
+                    UseAbility(parsed.Target switch
+                    {
+                        "kick" => 30, "bash" => 10, "taunt" => 73, "mend" => 32, "hide" => 29, "sneak" => 42, _ => 27,
+                    });
+                    break;
                 case ChatAction.Cast:
                     if (int.TryParse(parsed.Target, out int gem) && gem >= 1 && gem <= GemCount)
                         Cast(gem - 1);
@@ -321,6 +327,22 @@ namespace EQClassic.ClientCore
                 return "npc";
             }
             return null;
+        }
+
+        /// <summary>Skill values (the skills window) and the abilities the class can use, from the server.</summary>
+        public PlayerSkills? Skills { get; private set; }
+
+        /// <summary>Uses an ability (kick, bash, taunt, mend, hide, sneak, forage) by its skill id.</summary>
+        public void UseAbility(int skill)
+        {
+            if (_state != GameState.InZone)
+                return;
+            if (Skills != null && !Skills.Abilities.Contains(skill))
+            {
+                MessageReceived?.Invoke("You do not have that ability.");
+                return;
+            }
+            _connection?.Send(new UseAbility(skill));
         }
 
         /// <summary>The open merchant window (goods with their values), or null.</summary>
@@ -522,6 +544,9 @@ namespace EQClassic.ClientCore
                     break;
                 case PlayerExperience experience:
                     Experience = experience;
+                    break;
+                case PlayerSkills skills:
+                    Skills = skills;
                     break;
                 case MerchantGoods goods:
                     Merchant = goods.NpcId == 0 ? null : goods;

@@ -4,7 +4,7 @@ using EQClassic.Shared.Zone;
 namespace EQClassic.ClientCore
 {
     /// <summary>What a line typed in the chat box asks for.</summary>
-    public enum ChatAction { None, Send, Who, Location, Sit, Stand, Camp, Consider, Target, Cast, Unknown }
+    public enum ChatAction { None, Send, Who, Location, Sit, Stand, Camp, Consider, Target, Cast, Ability, Unknown }
 
     public readonly struct ParsedChat
     {
@@ -61,6 +61,8 @@ namespace EQClassic.ClientCore
                 case "con": case "consider": return new ParsedChat(ChatAction.Consider);
                 case "target": case "tar": return new ParsedChat(ChatAction.Target, target: rest);
                 case "cast": return new ParsedChat(ChatAction.Cast, target: rest);
+                case "kick": case "bash": case "taunt": case "mend": case "hide": case "sneak": case "forage":
+                    return new ParsedChat(ChatAction.Ability, target: command);
                 default: return new ParsedChat(ChatAction.Unknown, text: "That is not a valid command. Please use /help.");
             }
         }

@@ -7,6 +7,7 @@ public sealed partial class ZoneInstance
 {
     /// <summary>A player's skill went up; the server saves the skills when they leave.</summary>
     public sealed record SkillUp(int PlayerId, int Skill, int Value) : ZoneEvent;
+    public sealed record SkillsChanged(int PlayerId) : ZoneEvent;
 
     private static int SkillOf(Entity e, int skill) => skill >= 0 && skill < e.Skills.Length ? e.Skills[skill] : 0;
 
@@ -29,5 +30,6 @@ public sealed partial class ZoneInstance
         _events.Add(new SkillUp(player.Id, skill, value + 1));
         if (skill is SkillCaps.Offense or SkillCaps.Defense || skill == player.Fighter.WeaponSkill)
             RebuildFighter(player);
+        _events.Add(new SkillsChanged(player.Id));
     }
 }

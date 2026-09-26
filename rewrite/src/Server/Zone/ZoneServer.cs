@@ -152,6 +152,7 @@ public sealed class ZoneServer : IDisposable
                         Send(peer, SpellBookOf(entered.Instance, me), DeliveryMethod.ReliableOrdered);
                         Send(peer, new PlayerMana(me.Mana, me.MaxMana), DeliveryMethod.ReliableOrdered);
                         Send(peer, BuffsOf(me), DeliveryMethod.ReliableOrdered);
+                        Send(peer, SkillsOf(me), DeliveryMethod.ReliableOrdered);
                     }
                 }
                 break;
@@ -217,6 +218,11 @@ public sealed class ZoneServer : IDisposable
             case CastSpell cast when _players.TryGetValue(peer, out var caster):
                 caster.Instance.CastSpell(caster.EntityId, cast.Gem);
                 Broadcast(caster.Instance, caster.Instance.DrainEvents());
+                break;
+
+            case UseAbility ability when _players.TryGetValue(peer, out var user):
+                user.Instance.UseAbility(user.EntityId, ability.Skill);
+                Broadcast(user.Instance, user.Instance.DrainEvents());
                 break;
 
             case MerchantRequest shop when _players.TryGetValue(peer, out var shopper):
@@ -292,6 +298,7 @@ public sealed class ZoneServer : IDisposable
             {
                 Deity = profile.Deity,
                 Skills = skills,
+                Str = profile.Str,
                 Factions = FactionValues?.Load(ticket.CharacterName),
             };
         var entity = instance.AddPlayer(ticket.CharacterName, ticket.Race, ticket.Gender, profile?.Level ?? ticket.Level, ticket.Position,
@@ -389,6 +396,9 @@ public sealed class ZoneServer : IDisposable
                 case ZoneInstance.FactionsChanged factions when instance.Get(factions.PlayerId) is { } fighter
                         && _players.Values.FirstOrDefault(p => p.Instance == instance && p.EntityId == factions.PlayerId) is { } factionPlayer:
                     FactionValues?.Save(factionPlayer.Ticket.CharacterName, fighter.FactionValues);
+                    break;
+                case ZoneInstance.SkillsChanged changedSkills when PeerOf(instance, changedSkills.PlayerId) is { } skilledPeer && instance.Get(changedSkills.PlayerId) is { } skilled:
+                    Send(skilledPeer, SkillsOf(skilled), DeliveryMethod.ReliableOrdered);
                     break;
                 case ZoneInstance.MerchantShown shown when PeerOf(instance, shown.PlayerId) is { } shopPeer:
                     Send(shopPeer, new MerchantGoods(shown.NpcId, shown.Goods.Select(id => View(id, 1)).ToList()), DeliveryMethod.ReliableOrdered);
@@ -506,6 +516,9 @@ public sealed class ZoneServer : IDisposable
                 Send(peer, new ZoneMessage($"{targetName} was hit by non-melee for {-landed.Amount} points of damage."), DeliveryMethod.ReliableOrdered);
         }
     }
+
+    private static PlayerSkills SkillsOf(ZoneInstance.Entity p) =>
+        new(p.Skills, ZoneInstance.ReuseSeconds.Keys.Where(s => ZoneInstance.CanUse(s, p.Fighter.Class)).OrderBy(s => s).ToList());
 
     private static PlayerBuffs BuffsOf(ZoneInstance.Entity p) =>
         new(p.Buffs.Select(b => new BuffView(b.Spell.Id, b.Spell.Name, b.TicsLeft, b.Spell.Beneficial)).ToList(),

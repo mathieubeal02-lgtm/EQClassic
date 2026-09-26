@@ -93,6 +93,8 @@ public static class MessageCodec
                 MessageType.MerchantBuy => MerchantBuy.ReadFields(reader),
                 MessageType.MerchantSell => MerchantSell.ReadFields(reader),
                 MessageType.MerchantEnd => MerchantEnd.ReadFields(reader),
+                MessageType.UseAbility => UseAbility.ReadFields(reader),
+                MessageType.PlayerSkills => PlayerSkills.ReadFields(reader),
                 _ => throw new MessageFormatException($"unknown message type {(byte)type}"),
             };
             if (!reader.EndOfData)

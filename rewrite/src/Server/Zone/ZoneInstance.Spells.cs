@@ -331,7 +331,10 @@ public sealed partial class ZoneInstance
             return;
         }
         if (!spell.Beneficial)
+        {
             BreakInvisibility(caster);
+            caster.Hidden = false;
+        }
         var targets = spell.TargetType switch
         {
             SpellTarget.AECaster => InArea(caster.Position, spell, except: caster),

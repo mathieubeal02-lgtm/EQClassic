@@ -81,6 +81,7 @@ EQClassic.Server.Combat.IItemSource? items = db is null ? null : new EQClassic.S
 ILootSource? loot = db is null ? null : new MySqlLootSource(db);
 // Factions (faction_list, npc_faction, npc_faction_entries); without a database every NPC is indifferent.
 IMerchantSource? merchants = db is null ? null : new MySqlMerchantSource(db);
+IForageSource? forage = db is null ? null : new MySqlForageSource(db);
 IFactionStandings factions = db is null ? new IndifferentFactions() : new DatabaseFactions(new MySqlFactionData(db));
 using var zones = new ZoneServer(zoneKeys, name =>
 {
@@ -93,7 +94,7 @@ using var zones = new ZoneServer(zoneKeys, name =>
     var regions = bsp is not null && File.Exists(bsp) ? ZoneRegions.Load(bsp) : null;
     var cfg = zoneCfg is null ? null : Path.Combine(zoneCfg, name + ".cfg");
     var info = cfg is not null && File.Exists(cfg) ? ZoneInfo.FromLegacyCfg(File.ReadAllBytes(cfg)) : null;
-    return new ZoneInstance(data, mesh) { Info = info, Loot = loot, Items = items, Spells = spells, Factions = factions, Merchants = merchants, Regions = regions };
+    return new ZoneInstance(data, mesh) { Info = info, Loot = loot, Items = items, Spells = spells, Factions = factions, Merchants = merchants, Regions = regions, Forage = forage };
 })
 {
     Log = server.Log, Characters = characters, PublicAddress = worldAddress, Items = items,

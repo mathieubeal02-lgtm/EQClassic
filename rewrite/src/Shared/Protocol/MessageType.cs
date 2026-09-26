@@ -67,4 +67,6 @@ public enum MessageType : byte
     MerchantBuy = 59,
     MerchantSell = 60,
     MerchantEnd = 61,
+    UseAbility = 62,
+    PlayerSkills = 63,
 }

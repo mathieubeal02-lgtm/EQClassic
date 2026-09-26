@@ -838,4 +838,41 @@ namespace EQClassic.Shared.Zone
         public void WriteFields(NetDataWriter writer) => writer.Put(NpcId);
         public static MerchantEnd ReadFields(NetDataReader reader) => new MerchantEnd(reader.GetInt());
     }
+
+    /// <summary>Client to zone server: use an ability by its skill id (kick, bash, taunt, mend, hide, sneak, forage).</summary>
+    public sealed record UseAbility(int Skill) : IMessage
+    {
+        public MessageType Type => MessageType.UseAbility;
+        public void WriteFields(NetDataWriter writer) => writer.Put((byte)Skill);
+        public static UseAbility ReadFields(NetDataReader reader) => new UseAbility(reader.GetByte());
+    }
+
+    /// <summary>Zone server to the player: skill values by skill id (the skills window) and the abilities they can use.</summary>
+    public sealed record PlayerSkills(IReadOnlyList<int> Values, IReadOnlyList<int> Abilities) : IMessage
+    {
+        public MessageType Type => MessageType.PlayerSkills;
+
+        public void WriteFields(NetDataWriter writer)
+        {
+            writer.Put((byte)Values.Count);
+            foreach (int v in Values)
+                writer.Put((byte)System.Math.Clamp(v, 0, 255));
+            writer.Put((byte)Abilities.Count);
+            foreach (int a in Abilities)
+                writer.Put((byte)a);
+        }
+
+        public static PlayerSkills ReadFields(NetDataReader reader)
+        {
+            int count = reader.GetByte();
+            var values = new List<int>(count);
+            for (int i = 0; i < count; i++)
+                values.Add(reader.GetByte());
+            int abilities = reader.GetByte();
+            var list = new List<int>(abilities);
+            for (int i = 0; i < abilities; i++)
+                list.Add(reader.GetByte());
+            return new PlayerSkills(values, list);
+        }
+    }
 }

@@ -111,6 +111,11 @@ public sealed partial class ZoneInstance
         internal void SetFactionValue(int factionId, int value) => FactionValues[factionId] = value;
         /// <summary>Players: skill values by skill id (the fighter builder reads the same array).</summary>
         public int[] Skills { get; internal set; } = new int[SkillCaps.SkillCount];
+        /// <summary>Players: when each ability can be used again; hidden (and where), sneaking.</summary>
+        internal readonly Dictionary<int, double> AbilityReadyAt = new();
+        public bool Hidden { get; internal set; }
+        internal Vec3 HiddenAt;
+        public bool Sneaking { get; internal set; }
         /// <summary>Players: the merchant whose window is open, and its goods.</summary>
         public int? MerchantId { get; internal set; }
         internal IReadOnlyList<int> MerchantGoods = Array.Empty<int>();
@@ -268,6 +273,8 @@ public sealed partial class ZoneInstance
         public int Deity { get; init; } = FactionRules.AgnosticDeity;
         /// <summary>The character's skills; skill-ups change this array, which <see cref="FighterAt"/> may read.</summary>
         public int[]? Skills { get; init; }
+        /// <summary>STR, for kicks and bashes.</summary>
+        public int Str { get; init; } = 75;
         /// <summary>faction_values of the character.</summary>
         public IReadOnlyDictionary<int, int>? Factions { get; init; }
     }
@@ -333,7 +340,10 @@ public sealed partial class ZoneInstance
         }
         player.AutoAttack = on;
         if (on)
+        {
             BreakInvisibility(player);
+            player.Hidden = false;
+        }
         player.SwingIn = 0; // the first swing goes out as soon as the target is in reach
         _events.Add(new Told(playerId, on ? "Auto attack is on." : "Auto attack is off."));
     }
@@ -444,6 +454,11 @@ public sealed partial class ZoneInstance
         }
         if (player.Sitting && Distance2(player.Position, to) > 0.01f)
             SetSitting(id, false); // walking stands you up
+        if (player.Hidden && !player.Sneaking && Distance2(player.HiddenAt, to) > 1f)
+        {
+            player.Hidden = false;
+            _events.Add(new Told(id, "You are no longer hidden."));
+        }
         player.Position = to;
         player.Heading = heading;
         player.LastMoveTime = _time;
@@ -921,7 +936,7 @@ public sealed partial class ZoneInstance
         float bestD2 = float.MaxValue;
         foreach (var p in _entities.Values)
         {
-            if (!p.IsPlayer || p.Bonuses.Invisible || p.Bonuses.InvisibleToUndead && npc.Npc!.Undead)
+            if (!p.IsPlayer || p.Hidden || p.Bonuses.Invisible || p.Bonuses.InvisibleToUndead && npc.Npc!.Undead)
                 continue;
             var r2 = AggroRules.RadiusSquared(Factions.Standing(p, npc.Npc!), p.Level, npc.Level, p.Sitting, npc.Npc!.Undead);
             float d2 = Distance2(p.Position, npc.Position);

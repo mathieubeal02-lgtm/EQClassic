@@ -26,6 +26,19 @@ namespace EQClassic.Unity
         private bool _chatOpen;
         private bool _inventoryOpen;
         private bool _bookOpen;
+        private bool _skillsOpen;
+        private Vector2 _skillsScroll;
+        private static readonly string[] SkillNames =
+        {
+            "1H Blunt", "1H Slashing", "2H Blunt", "2H Slashing", "Abjuration", "Alteration", "Apply Poison", "Archery", "Backstab", "Bind Wound",
+            "Bash", "Block", "Brass Instruments", "Channeling", "Conjuration", "Defense", "Disarm", "Disarm Traps", "Divination", "Dodge",
+            "Double Attack", "Dragon Punch", "Dual Wield", "Eagle Strike", "Evocation", "Feign Death", "Flying Kick", "Forage", "Hand to Hand", "Hide",
+            "Kick", "Meditate", "Mend", "Offense", "Parry", "Pick Lock", "Piercing", "Riposte", "Round Kick", "Safe Fall",
+            "Sense Heading", "Singing", "Sneak", "Specialize Abjure", "Specialize Alteration", "Specialize Conjuration", "Specialize Divination", "Specialize Evocation", "Pick Pockets", "Stringed Instruments",
+            "Swimming", "Throwing", "Tiger Claw", "Tracking", "Wind Instruments", "Fishing", "Make Poison", "Tinkering", "Research", "Alchemy",
+            "Baking", "Tailoring", "Sense Traps", "Blacksmithing", "Fletching", "Brewing", "Alcohol Tolerance", "Begging", "Jewelry Making", "Pottery",
+            "Percussion Instruments", "Intimidation", "Berserking", "Taunt",
+        };
         private Vector2 _bookScroll;
 
         private static readonly string[] SlotNames =
@@ -103,6 +116,8 @@ namespace EQClassic.Unity
                     _inventoryOpen = !_inventoryOpen;
                 if (Input.GetKeyDown(KeyCode.B))
                     _bookOpen = !_bookOpen;
+                if (Input.GetKeyDown(KeyCode.K))
+                    _skillsOpen = !_skillsOpen;
                 for (int gem = 0; gem < GameClient.GemCount; gem++)
                     if (Input.GetKeyDown(KeyCode.Alpha1 + gem))
                         _client.Cast(gem);
@@ -266,6 +281,36 @@ namespace EQClassic.Unity
             }
         }
 
+        /// <summary>The ability buttons (kick, bash, taunt...), above the chat.</summary>
+        private void DrawAbilities()
+        {
+            if (_client.Skills == null)
+                return;
+            float x = 10;
+            foreach (int skill in _client.Skills.Abilities)
+            {
+                if (GUI.Button(new Rect(x, Screen.height - 300, 80, 22), SkillNames[skill]))
+                    _client.UseAbility(skill);
+                x += 84;
+            }
+        }
+
+        /// <summary>The skills window (K): every skill the character has, with its value.</summary>
+        private void DrawSkills()
+        {
+            GUILayout.BeginArea(new Rect(Screen.width / 2 - 160, 80, 320, Screen.height - 200), GUI.skin.box);
+            GUILayout.Label("Skills");
+            _skillsScroll = GUILayout.BeginScrollView(_skillsScroll);
+            var values = _client.Skills?.Values;
+            for (int i = 0; values != null && i < values.Count && i < SkillNames.Length; i++)
+                if (values[i] > 0)
+                    GUILayout.Label($"{SkillNames[i]}: {values[i]}");
+            GUILayout.EndScrollView();
+            if (GUILayout.Button("Close"))
+                _skillsOpen = false;
+            GUILayout.EndArea();
+        }
+
         /// <summary>The buff window: each spell lasting on you with the time left (a tic is 6 s), detrimental ones in red.</summary>
         private void DrawBuffs()
         {
@@ -407,7 +452,7 @@ namespace EQClassic.Unity
             var state = _client?.State ?? GameState.Disconnected;
             if (state == GameState.InZone)
             {
-                GUI.Label(new Rect(10, 10, 1200, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows move, Q/E turn, R autorun, Shift walk, Space jump, X sit, right mouse look, wheel zoom, F9 view, U door/merchant, Tab target, T face, C consider, F attack, L loot, I inventory, B spell book, 1-8 cast");
+                GUI.Label(new Rect(10, 10, 1200, 20), $"{_client.Zone?.Zone}  -  {_client.Zone?.Count} entities  -  WASD/arrows move, Q/E turn, R autorun, Shift walk, Space jump, X sit, right mouse look, wheel zoom, F9 view, U door/merchant, Tab target, T face, C consider, F attack, L loot, I inventory, B spell book, K skills, 1-8 cast");
                 if (_presenter.MissingZone != null)
                     GUI.Box(new Rect(Screen.width / 2 - 300, 80, 600, 44),
                         $"The zone '{_presenter.MissingZone}' is not installed in this client (not imported from Lantern).\nYou are there for the server, but nothing can be drawn.");
@@ -423,6 +468,9 @@ namespace EQClassic.Unity
                     DrawBar(new Rect(Screen.width / 2 - 150, Screen.height - 320, 300, 16), _client.CastProgress, new Color(0.7f, 0.3f, 0.9f), casting.SpellName);
                 DrawGems();
                 DrawBuffs();
+                DrawAbilities();
+                if (_skillsOpen)
+                    DrawSkills();
                 if (_client.TargetId is int target && _client.Zone?.Get(target) is { } t)
                 {
                     var colour = GUI.color;

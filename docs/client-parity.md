@@ -47,7 +47,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Feature | Trilogy client | Status | Priority |
 |---|---|---|---|
 | Chat window | Say, shout, OOC, tells, group, guild, emotes, channels, scrolling | Partial: Enter to type; say, shout, OOC, auction, tells (across zones), emotes; last 12 lines on screen. No group/guild channels, no scrolling back | 1 |
-| Slash commands | /who, /loc, /sit, /camp, /con, /target... | Partial: /say /shout /ooc /auction /tell /em /who /loc /sit /stand /camp /con /target /cast | 1 |
+| Slash commands | /who, /loc, /sit, /camp, /con, /target... | Partial: /say /shout /ooc /auction /tell /em /who /loc /sit /stand /camp /con /target /cast and the abilities | 1 |
 | Player window | HP, mana, stamina, experience bars | Partial: HP, mana and experience bars, level; no stamina yet | 1 |
 | Target window | Name, health, consider colour | Written (name in con colour, health bar), to check in Unity | 1 |
 | Consider (C) | Con colour and faction message | Done (standings from the faction tables and the character's faction values) | — |
@@ -55,7 +55,7 @@ Status: **done**, **partial** (usable, details missing), **todo**.
 | Loot | Corpse window | Done: NPCs leave corpses with their loot table's items and coins (legacy rolls, rot timers, killer's rights then free for all), L opens the loot window, Take / Done | — |
 | Merchants, bank, trade | | Partial: merchants (U on a targeted merchant): goods from `merchantlist` at 2.5 times their value, selling at 0.4 times from the inventory, the legacy refusals (busy, dubious); no bank or trade yet | 3 |
 | Spell book, spell gems, casting bar | Book pages, 8 gems, memorising, scribing scrolls, casting bar | Partial: book window (B, memorise by gem number), 8 gems (keys 1-8 or click, /cast N), casting bar, Scribe button on scrolls in the inventory, casting animation (t05). Direct damage, heals, buffs (stats, AC, HP, haste, slow, speed, damage and heals over time), root, mez, stun, invisibility, levitation, bind, gate, teleports, summoning, area spells; no charm, fear, pets or cures yet; no icons, no memorising time, no spell particles | 2 |
-| Hot buttons, abilities, skills window | | Todo (the server raises skills as the legacy zone did; no skills window or abilities yet) | 2 |
+| Hot buttons, abilities, skills window | | Partial: skills window (K), ability buttons and /kick /bash /taunt /mend /hide /sneak /forage for the classes that have them (reuse times on the server); no hot bar editing, bind wound, backstab, fishing or tracking yet | 2 |
 | Group and guild windows | | Todo | 3 |
 | Buff window | | Partial: list of buffs with time left, detrimental ones in red; no icons, no clicking off | 3 |
 | Options, key bindings | | Todo | 3 |
