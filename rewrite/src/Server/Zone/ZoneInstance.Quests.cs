@@ -18,6 +18,24 @@ public sealed partial class ZoneInstance
 
     private readonly Dictionary<(int NpcId, string Name), (double Every, double Next)> _questTimers = new();
 
+    /// <summary>NPC types by id for quest::spawn (npc_types_without); null: scripts cannot spawn.</summary>
+    public Func<int, NpcTemplate?>? NpcTypes { get; set; }
+
+    /// <summary>QuestManager::spawn2 / unique_spawn: an NPC of that type at a place (the legacy zone never gave it its grid; here it walks it).</summary>
+    private void QuestSpawn(QuestAction a, bool unique, Action<string>? log)
+    {
+        int type = a.Int(0);
+        if (unique && _entities.Values.Any(e => e.Npc?.Id == type && !e.IsCorpse))
+            return;
+        if (NpcTypes?.Invoke(type) is not { } template)
+        {
+            log?.Invoke($"quest::spawn: no NPC type {type}");
+            return;
+        }
+        float F(int i) => float.TryParse(a.Arg(i), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : 0f;
+        SpawnNpc(template, new Vec3(F(3), F(4), F(5)), F(6), a.Int(1), null);
+    }
+
     /// <summary>quest::settimer: EVENT_TIMER every so many seconds until stopped or the NPC goes.</summary>
     private void CheckQuestTimers()
     {
@@ -129,8 +147,18 @@ public sealed partial class ZoneInstance
                         _events.Add(new Told(player.Id, message));
                     _events.Add(new FactionsChanged(player.Id));
                     break;
+                case "depop" when a.Int(0) != 0 && a.Int(0) != npc?.Npc?.Id: // another NPC of that type
+                    if (_entities.Values.FirstOrDefault(e => e.Npc?.Id == a.Int(0) && !e.IsCorpse) is { } other)
+                        Depop(other);
+                    break;
                 case "depop" when npc is not null && !npc.IsPlayer:
                     Depop(npc);
+                    break;
+                case "spawn" or "spawn2":
+                    QuestSpawn(a, unique: false, log);
+                    break;
+                case "unique_spawn":
+                    QuestSpawn(a, unique: true, log);
                     break;
                 case "attack" when npc is not null && player is not null:
                     npc.TargetId = player.Id;

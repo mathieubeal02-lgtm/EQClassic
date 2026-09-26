@@ -96,6 +96,9 @@ INpcSpellSource? npcSpells = db is null ? null : new MySqlNpcSpellSource(db);
 IPlayerCorpseStore? playerCorpses = db is null ? null : new MySqlPlayerCorpseStore(db);
 IPetSource? pets = db is null ? null : new MySqlPetSource(db);
 IFactionStandings factions = db is null ? new IndifferentFactions() : new DatabaseFactions(new MySqlFactionData(db));
+// quest::spawn: NPC types read once each.
+var npcTypeCache = new System.Collections.Concurrent.ConcurrentDictionary<int, NpcTemplate?>();
+Func<int, NpcTemplate?>? npcTypes = zoneData is MySqlZoneDataSource source ? id => npcTypeCache.GetOrAdd(id, source.NpcType) : null;
 using var zones = new ZoneServer(zoneKeys, name =>
 {
     var data = zoneData.Load(name);
@@ -107,7 +110,7 @@ using var zones = new ZoneServer(zoneKeys, name =>
     var regions = bsp is not null && File.Exists(bsp) ? ZoneRegions.Load(bsp) : null;
     var cfg = zoneCfg is null ? null : Path.Combine(zoneCfg, name + ".cfg");
     var info = cfg is not null && File.Exists(cfg) ? ZoneInfo.FromLegacyCfg(File.ReadAllBytes(cfg)) : null;
-    return new ZoneInstance(data, mesh) { Info = info, Loot = loot, Items = items, Spells = spells, Factions = factions, Merchants = merchants, Regions = regions, Forage = forage, NpcSpells = npcSpells, PlayerCorpses = playerCorpses, Pets = pets };
+    return new ZoneInstance(data, mesh) { Info = info, Loot = loot, Items = items, Spells = spells, Factions = factions, Merchants = merchants, Regions = regions, Forage = forage, NpcSpells = npcSpells, PlayerCorpses = playerCorpses, Pets = pets, NpcTypes = npcTypes };
 })
 {
     Log = server.Log, Characters = characters, PublicAddress = worldAddress, Items = items,

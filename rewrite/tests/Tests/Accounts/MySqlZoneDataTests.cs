@@ -112,6 +112,21 @@ public sealed class MySqlZoneDataTests : IDisposable
     /// a pop onto a roof), and none drops further than a ledge (grids sometimes cut straight over
     /// the edge of a floor, e.g. Nax_Ghruna's way down to the sewers, a 13-unit step).
     /// </summary>
+    /// <summary>quest::spawn reads an NPC type as the zone's spawns do.</summary>
+    [DbFact]
+    public void Live_npc_type_matches_the_spawn_template()
+    {
+        if (!TableExists("spawn2") || !TableExists("npc_types_without"))
+            return;
+        var source = new MySqlZoneDataSource(DbFactAttribute.ConnectionString!);
+        var data = source.Load("qeynos2");
+        if (data is null || data.Spawns.Count == 0)
+            return;
+        var fromSpawn = data.Spawns.SelectMany(s => s.Candidates).First(c => c.Npc.Name.StartsWith("Brohan")).Npc;
+        Assert.Equal(fromSpawn, source.NpcType(fromSpawn.Id));
+        Assert.Null(source.NpcType(-5));
+    }
+
     [DbFact]
     public void Live_qeynos_guards_stay_on_the_ground()
     {

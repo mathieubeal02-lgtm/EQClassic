@@ -95,6 +95,21 @@ public class QuestTests
     }
 
     [Fact]
+    public void Scripts_spawn_npcs_once_when_unique_and_depop_them_by_type()
+    {
+        var (zone, ann, npc) = Setup();
+        var rat = new NpcTemplate(99, "a_large_rat", 29, 0, 2, 4f) { Combat = new NpcCombatStats(1, 20, 1, 2) };
+        zone.NpcTypes = id => id == 99 ? rat : null;
+        zone.ApplyQuest(npc.Id, ann.Id, [new QuestAction("spawn", ["99", "0", "0", "10.5", "20", "0"])]);
+        zone.ApplyQuest(npc.Id, ann.Id, [new QuestAction("unique_spawn", ["99", "0", "0", "30", "20", "0"])]);
+        var rats = zone.Entities.Where(e => e.Name == "a_large_rat").ToList();
+        Assert.Equal(new Vec3(10.5f, 20, 0), Assert.Single(rats).Position);
+        zone.ApplyQuest(npc.Id, ann.Id, [new QuestAction("depop", ["99"])]);
+        Assert.DoesNotContain(zone.Entities, e => e.Name == "a_large_rat");
+        Assert.NotNull(zone.Get(npc.Id)); // the speaker stays
+    }
+
+    [Fact]
     public void Quest_faction_moves_the_standing_with_the_message()
     {
         var data = new InMemoryFactionData();

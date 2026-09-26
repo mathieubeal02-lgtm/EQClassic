@@ -122,6 +122,44 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
             ? tablePrefix : throw new ArgumentException("must be a plain SQL identifier prefix", nameof(tablePrefix));
     }
 
+    /// <summary>The npc_types_without columns of an NPC type, in the order <see cref="ReadTemplate"/> reads them.</summary>
+    private const string TemplateColumns =
+        "n.id, n.name, n.race, n.gender, n.level, n.size, n.runspeed, n.bodytype, n.npc_faction_id, " +
+        "n.class, n.hp, n.mindmg, n.maxdmg, n.AC, n.ATK, n.Accuracy, n.avoidance, n.attack_speed, n.STR, n.loottable_id, " +
+        "n.MR, n.CR, n.DR, n.FR, n.PR, n.merchant_id, n.hp_regen_rate";
+
+    private static NpcTemplate ReadTemplate(MySqlDataReader r, int o)
+    {
+        float size = Convert.ToSingle(r.GetValue(o + 5));
+        float runspeed = Convert.ToSingle(r.GetValue(o + 6));
+        return new NpcTemplate(r.GetInt32(o), r.GetString(o + 1), Int(r, o + 2), Int(r, o + 3), Int(r, o + 4), size > 0 ? size : 6f,
+            RunSpeed: runspeed > 0 ? runspeed : 1.25f,
+            Undead: Int(r, o + 7) == 3, // BT_Undead
+            PrimaryFaction: Int(r, o + 8))
+        {
+            Combat = new NpcCombatStats(Int(r, o + 9), Math.Max(1, Int(r, o + 10)), Int(r, o + 11), Int(r, o + 12), Int(r, o + 13), Int(r, o + 14),
+                Int(r, o + 15), Int(r, o + 16), Int(r, o + 17), Int(r, o + 18))
+            {
+                MR = Int(r, o + 20), CR = Int(r, o + 21), DR = Int(r, o + 22), FR = Int(r, o + 23), PR = Int(r, o + 24),
+            },
+            LoottableId = Int(r, o + 19),
+            MerchantId = Int(r, o + 25),
+            RegenRate = Int(r, o + 26),
+        };
+    }
+
+    /// <summary>One NPC type by id (quest::spawn), or null.</summary>
+    public NpcTemplate? NpcType(int id)
+    {
+        using var connection = new MySqlConnection(_connectionString);
+        connection.Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT {TemplateColumns} FROM `{_p}npc_types_without` n WHERE n.id = @id";
+        cmd.Parameters.AddWithValue("@id", id);
+        using var r = cmd.ExecuteReader();
+        return r.Read() ? ReadTemplate(r, 0) : null;
+    }
+
     public ZoneData? Load(string shortName)
     {
         using var connection = new MySqlConnection(_connectionString);
@@ -142,10 +180,7 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
         using (var cmd = connection.CreateCommand())
         {
             cmd.CommandText = $"""
-                SELECT s.id, s.x, s.y, s.z, s.heading, s.pathgrid, n.id, n.name, n.race, n.gender, n.level, n.size, e.chance,
-                       s.respawntime, s.variance, n.runspeed, n.bodytype, n.npc_faction_id,
-                       n.class, n.hp, n.mindmg, n.maxdmg, n.AC, n.ATK, n.Accuracy, n.avoidance, n.attack_speed, n.STR, n.loottable_id,
-                       n.MR, n.CR, n.DR, n.FR, n.PR, n.merchant_id, n.hp_regen_rate
+                SELECT s.id, s.x, s.y, s.z, s.heading, s.pathgrid, e.chance, s.respawntime, s.variance, {TemplateColumns}
                 FROM `{_p}spawn2` s
                 JOIN `{_p}spawnentry` e ON e.spawngroupID = s.spawngroupID
                 JOIN `{_p}npc_types_without` n ON n.id = e.npcID
@@ -159,25 +194,8 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
                 int id = r.GetInt32(0);
                 if (!spawns.TryGetValue(id, out var spawn))
                     spawns[id] = spawn = (new Vec3(r.GetFloat(1), r.GetFloat(2), r.GetFloat(3)), r.GetFloat(4), r.GetInt32(5),
-                        Convert.ToInt32(r.GetValue(13)), Convert.ToInt32(r.GetValue(14)), new List<(NpcTemplate, int)>());
-                float size = Convert.ToSingle(r.GetValue(11));
-                float runspeed = Convert.ToSingle(r.GetValue(15));
-                var npc = new NpcTemplate(r.GetInt32(6), r.GetString(7), Convert.ToInt32(r.GetValue(8)), Convert.ToInt32(r.GetValue(9)),
-                    Convert.ToInt32(r.GetValue(10)), size > 0 ? size : 6f,
-                    RunSpeed: runspeed > 0 ? runspeed : 1.25f,
-                    Undead: Convert.ToInt32(r.GetValue(16)) == 3, // BT_Undead
-                    PrimaryFaction: Convert.ToInt32(r.GetValue(17)))
-                {
-                    Combat = new NpcCombatStats(Int(r, 18), Math.Max(1, Int(r, 19)), Int(r, 20), Int(r, 21), Int(r, 22), Int(r, 23),
-                        Int(r, 24), Int(r, 25), Int(r, 26), Int(r, 27))
-                    {
-                        MR = Int(r, 29), CR = Int(r, 30), DR = Int(r, 31), FR = Int(r, 32), PR = Int(r, 33),
-                    },
-                    LoottableId = Int(r, 28),
-                    MerchantId = Int(r, 34),
-                    RegenRate = Int(r, 35),
-                };
-                spawn.Candidates.Add((npc, Convert.ToInt32(r.GetValue(12))));
+                        Convert.ToInt32(r.GetValue(7)), Convert.ToInt32(r.GetValue(8)), new List<(NpcTemplate, int)>());
+                spawn.Candidates.Add((ReadTemplate(r, 9), Convert.ToInt32(r.GetValue(6))));
             }
         }
 

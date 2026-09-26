@@ -1223,25 +1223,30 @@ public sealed partial class ZoneInstance
 
     private void SpawnAt(SpawnPoint spawn)
     {
-        if (Pick(spawn.Candidates, _random) is not { } npc)
-            return;
-        var start = spawn.Position;
+        if (Pick(spawn.Candidates, _random) is { } npc)
+            SpawnNpc(npc, spawn.Position, spawn.Heading, spawn.GridId, spawn);
+    }
+
+    /// <summary>An NPC appears (from its spawn point, or from a quest: no spawn point, no respawn).</summary>
+    private Entity SpawnNpc(NpcTemplate npc, Vec3 start, float heading, int gridId, SpawnPoint? spawn)
+    {
         if (Mesh?.GroundZ(start.X, start.Y, start.Z, 5f) is float ground)
             start = start with { Z = ground };
-        var entity = Add(npc.Name, false, npc.Race, npc.Gender, npc.Level, npc.Size, start, spawn.Heading);
+        var entity = Add(npc.Name, false, npc.Race, npc.Gender, npc.Level, npc.Size, start, heading);
         entity.Npc = npc;
         entity.Spawn = spawn;
         entity.Fighter = Combatant.ForNpc(npc);
         entity.Hp = entity.Fighter.MaxHp;
         entity.Speed = npc.WalkUnitsPerSecond;
         entity.ScanIn = (float)_random.NextDouble() * AggroRules.ScanSeconds; // legacy: random first scan
-        if (spawn.GridId > 0 && _grids.TryGetValue(spawn.GridId, out var grid) && grid.Waypoints.Count >= 2)
+        if (gridId > 0 && _grids.TryGetValue(gridId, out var grid) && grid.Waypoints.Count >= 2)
         {
             entity.Grid = grid;
             entity.Walker = new WaypointWalker(grid.Waypoints.Select(w => w.Position).ToList(), Mesh, grid.Type, ClosestWaypoint(grid, start));
             entity.Position = entity.Walker.Position;
         }
         _events.Add(new Spawned(entity));
+        return entity;
     }
 
     private Entity Add(string name, bool isPlayer, int race, int gender, int level, float size, Vec3 position, float heading)
