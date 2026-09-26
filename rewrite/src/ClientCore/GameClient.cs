@@ -395,14 +395,30 @@ namespace EQClassic.ClientCore
         /// </summary>
         public string? Use()
         {
-            if (UseNearestDoor() != null)
-                return "door";
-            if (TargetId is int id && Zone?.Get(id) is { Spawn: { IsPlayer: false, IsCorpse: false } })
+            // A targeted NPC close by (a merchant, a banker) comes before the doors around it.
+            if (TargetId is int id && Zone?.Get(id) is { Spawn: { IsPlayer: false, IsCorpse: false } } npc && Player != null
+                && Distance(npc.Latest, Player.Position) <= NpcUseReach)
             {
                 _connection?.Send(new MerchantRequest(id));
                 return "npc";
             }
+            if (UseNearestDoor() != null)
+                return "door";
+            if (TargetId is int far && Zone?.Get(far) is { Spawn: { IsPlayer: false, IsCorpse: false } })
+            {
+                _connection?.Send(new MerchantRequest(far)); // the server says it is too far
+                return "npc";
+            }
             return null;
+        }
+
+        /// <summary>How close a targeted NPC must be for U to talk to it rather than open a door.</summary>
+        public const float NpcUseReach = 30f; // the server's MerchantReach
+
+        private static float Distance(EQClassic.Shared.World.Vec3 a, EQClassic.Shared.World.Vec3 b)
+        {
+            float dx = a.X - b.X, dy = a.Y - b.Y, dz = a.Z - b.Z;
+            return (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
         }
 
         /// <summary>The bank window (U on a banker), or null.</summary>

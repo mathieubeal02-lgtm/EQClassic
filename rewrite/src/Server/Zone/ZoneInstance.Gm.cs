@@ -93,6 +93,24 @@ public sealed partial class ZoneInstance
             SummonItem(player, itemId, Math.Max(1, charges));
     }
 
+    /// <summary>#clearinventory: the general slots and their bags emptied (what is worn stays).</summary>
+    public int GmClearInventory(int playerId)
+    {
+        if (!_entities.TryGetValue(playerId, out var player) || player.Inventory is not { } inventory)
+            return 0;
+        int cleared = 0;
+        for (int slot = PlayerInventory.FirstGeneral; slot < PlayerInventory.Slots; slot++)
+        {
+            if (inventory.ItemAt(slot) != 0)
+                cleared++;
+            inventory.Set(slot, 0, 0);
+            for (int cell = 0; cell < PlayerInventory.BagCells; cell++)
+                inventory.Set(PlayerInventory.BagSlot(slot, cell), 0, 0);
+        }
+        _events.Add(new InventoryChanged(playerId));
+        return cleared;
+    }
+
     /// <summary>#givemoney.</summary>
     public void GmGiveMoney(int playerId, Coins coins)
     {

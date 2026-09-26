@@ -124,6 +124,11 @@ public sealed partial class ZoneServer
         new("invulnerable", GmStatus, "[on|off]", InvulCommand),
         new("summonitem", GmStatus, "<item id> [charges] - an item into your inventory (also #si)", SummonItemCommand),
         new("si", GmStatus, "<item id> [charges]", SummonItemCommand),
+        new("clearinventory", GmStatus, "- empties the general slots and bags of your target player (or yours)", (peer, p, _) =>
+        {
+            var t = Target(p) is { IsPlayer: true } player ? player : Me(p)!;
+            Tell(peer, $"{p.Instance.GmClearInventory(t.Id)} item(s) removed from {t.Name}'s packs.");
+        }),
         new("givemoney", GmStatus, "<copper> [silver] [gold] [platinum] - money for you", (peer, p, a) =>
         {
             int I(int i) => a.Length > i && int.TryParse(a[i], out int v) ? Math.Max(0, v) : 0;
