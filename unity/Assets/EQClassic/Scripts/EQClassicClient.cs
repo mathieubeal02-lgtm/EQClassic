@@ -26,7 +26,27 @@ namespace EQClassic.Unity
             _port = PlayerPrefs.GetString("eqc.port", _port);
             _fingerprint = PlayerPrefs.GetString("eqc.fingerprint", "");
             _user = PlayerPrefs.GetString("eqc.user", "");
+            ApplyCommandLine(System.Environment.GetCommandLineArgs());
             _presenter = gameObject.AddComponent<ZonePresenter>();
+        }
+
+        /// <summary>
+        /// -host, -port, -fingerprint and -user prefill the screens, for a shortcut or a script
+        /// (EQClassic.x86_64 -host 192.168.1.2 -port 5999 -user bob). The password is never taken
+        /// from the command line: other local users can read it there.
+        /// </summary>
+        private void ApplyCommandLine(string[] args)
+        {
+            for (int i = 0; i + 1 < args.Length; i++)
+            {
+                switch (args[i])
+                {
+                    case "-host": _host = args[++i]; break;
+                    case "-port": _port = args[++i]; break;
+                    case "-fingerprint": _fingerprint = args[++i]; break;
+                    case "-user": _user = args[++i]; break;
+                }
+            }
         }
 
         private void Update()

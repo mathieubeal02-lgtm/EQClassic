@@ -45,6 +45,104 @@ public sealed class ZoneCollisionMesh
     {
         var vertices = new List<Vec3>();
         var triangles = new List<int>();
+        ReadLantern(lines, vertices, triangles, static v => v);
+        return new ZoneCollisionMesh(vertices, triangles);
+    }
+
+    /// <summary>
+    /// A zone as the client collides with it: the zone mesh (Zone/Meshes/&lt;zone&gt;_collision.txt)
+    /// plus every placed object (Zone/object_instances.txt) whose model has a collision mesh
+    /// (Objects/Meshes/&lt;model&gt;_collision.txt). Objects without one (crates, barrels) or with an
+    /// empty one are not solid; in Qeynos only the trees are.
+    /// </summary>
+    public static ZoneCollisionMesh LoadLanternZone(string exportDir, string zone)
+    {
+        var instances = Path.Combine(exportDir, zone, "Zone", "object_instances.txt");
+        return ParseLanternZone(
+            File.ReadLines(Path.Combine(exportDir, zone, "Zone", "Meshes", zone + "_collision.txt")),
+            File.Exists(instances) ? File.ReadLines(instances) : Array.Empty<string>(),
+            model =>
+            {
+                var path = Path.Combine(exportDir, zone, "Objects", "Meshes", model + "_collision.txt");
+                return File.Exists(path) ? File.ReadLines(path) : null;
+            });
+    }
+
+    /// <param name="objectMesh">The collision mesh lines of an object model, or null when it has none.</param>
+    public static ZoneCollisionMesh ParseLanternZone(IEnumerable<string> zoneMesh, IEnumerable<string> objectInstances,
+        Func<string, IEnumerable<string>?> objectMesh)
+    {
+        var vertices = new List<Vec3>();
+        var triangles = new List<int>();
+        ReadLantern(zoneMesh, vertices, triangles, static v => v);
+        var models = new Dictionary<string, List<string>?>();
+        int lineNo = 0;
+        foreach (var raw in objectInstances)
+        {
+            lineNo++;
+            var line = raw.Trim();
+            if (line.Length == 0 || line[0] == '#')
+                continue;
+            // ModelName, PosX, PosY, PosZ, RotX, RotY, RotZ, ScaleX, ScaleY, ScaleZ, ColorIndex (Lantern axes)
+            var f = line.Split(',');
+            if (f.Length < 10)
+                throw new FormatException($"object instance line {lineNo}: expected 10 fields or more");
+            var pos = (X: Parse(f[1], lineNo), Y: Parse(f[2], lineNo), Z: Parse(f[3], lineNo));
+            if (pos.Y < -30000f)
+                continue; // fallen to the bottom of the world (LanternUnityTools skips them too)
+            if (!models.TryGetValue(f[0], out var mesh))
+            {
+                mesh = objectMesh(f[0])?.ToList();
+                // LanternExtractor writes most object collision files with no vertices at all, only
+                // "i,0,0,0,0" lines (Qeynos: everything but the trees): nothing solid there.
+                if (mesh is not null && !mesh.Any(l => l.StartsWith("v,", StringComparison.Ordinal)))
+                    mesh = null;
+                models[f[0]] = mesh;
+            }
+            if (mesh is null)
+                continue;
+            var place = Placement(pos, Parse(f[4], lineNo), Parse(f[5], lineNo), Parse(f[6], lineNo),
+                (Parse(f[7], lineNo), Parse(f[8], lineNo), Parse(f[9], lineNo)));
+            ReadLantern(mesh, vertices, triangles, place);
+        }
+        return new ZoneCollisionMesh(vertices, triangles);
+    }
+
+    /// <summary>
+    /// Lantern (Unity) axes: scale, then Unity's Quaternion.Euler(x, y, z) rotation (z first, then
+    /// x, then y; left-handed), then the position.
+    /// </summary>
+    private static Func<(float X, float Y, float Z), (float X, float Y, float Z)> Placement(
+        (float X, float Y, float Z) pos, float rx, float ry, float rz, (float X, float Y, float Z) scale)
+    {
+        const float rad = MathF.PI / 180f;
+        float cx = MathF.Cos(rx * rad), sx = MathF.Sin(rx * rad);
+        float cy = MathF.Cos(ry * rad), sy = MathF.Sin(ry * rad);
+        float cz = MathF.Cos(rz * rad), sz = MathF.Sin(rz * rad);
+        return v =>
+        {
+            float x = v.X * scale.X, y = v.Y * scale.Y, z = v.Z * scale.Z;
+            (x, y) = (x * cz - y * sz, x * sz + y * cz);
+            (y, z) = (y * cx - z * sx, y * sx + z * cx);
+            (x, z) = (x * cy + z * sy, -x * sy + z * cy);
+            return (x + pos.X, y + pos.Y, z + pos.Z);
+        };
+    }
+
+    /// <summary>Writes the mesh back in Lantern's intermediate format (Lantern axes).</summary>
+    public void WriteLantern(TextWriter writer)
+    {
+        writer.WriteLine("# EQClassic collision mesh (Lantern intermediate format)");
+        foreach (var v in _vertices)
+            writer.WriteLine(FormattableString.Invariant($"v,{v.Y:R},{v.Z:R},{v.X:R}"));
+        for (int t = 0; t < TriangleCount; t++)
+            writer.WriteLine(FormattableString.Invariant($"i,0,{_triangles[3 * t]},{_triangles[3 * t + 1]},{_triangles[3 * t + 2]}"));
+    }
+
+    private static void ReadLantern(IEnumerable<string> lines, List<Vec3> vertices, List<int> triangles,
+        Func<(float X, float Y, float Z), (float X, float Y, float Z)> place)
+    {
+        int first = vertices.Count;
         int lineNo = 0;
         foreach (var raw in lines)
         {
@@ -56,19 +154,18 @@ public sealed class ZoneCollisionMesh
             switch (parts[0])
             {
                 case "v" when parts.Length >= 4:
-                    float lx = Parse(parts[1], lineNo), ly = Parse(parts[2], lineNo), lz = Parse(parts[3], lineNo);
+                    var (lx, ly, lz) = place((Parse(parts[1], lineNo), Parse(parts[2], lineNo), Parse(parts[3], lineNo)));
                     vertices.Add(new Vec3(lz, lx, ly));
                     break;
                 case "i" when parts.Length >= 5:
-                    triangles.Add(ParseInt(parts[2], lineNo));
-                    triangles.Add(ParseInt(parts[3], lineNo));
-                    triangles.Add(ParseInt(parts[4], lineNo));
+                    triangles.Add(first + ParseInt(parts[2], lineNo));
+                    triangles.Add(first + ParseInt(parts[3], lineNo));
+                    triangles.Add(first + ParseInt(parts[4], lineNo));
                     break;
                 default:
                     break; // material lists, UVs, colors...: not needed for collision
             }
         }
-        return new ZoneCollisionMesh(vertices, triangles);
     }
 
     /// <summary>

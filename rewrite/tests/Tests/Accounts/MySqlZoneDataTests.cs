@@ -83,7 +83,8 @@ public sealed class MySqlZoneDataTests : IDisposable
         if (data is null || data.Spawns.Count == 0)
             return;
 
-        var zone = new ZoneInstance(data, ZoneCollisionMesh.LoadLantern(mesh));
+        var exports = Path.Combine(PlayerProfileTests.RepoRoot(), "build", "lantern-work", "Exports");
+        var zone = new ZoneInstance(data, ZoneCollisionMesh.LoadLanternZone(exports, "qeynos2")); // as the server loads it
         var last = zone.Entities.ToDictionary(e => e.Id, e => e.Position.Z);
         (float Up, string UpName, float Down, string DownName) worst = (0, "", 0, "");
         for (int i = 0; i < 20 * 120; i++)

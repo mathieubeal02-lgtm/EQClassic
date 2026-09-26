@@ -12,7 +12,8 @@ using EQClassic.Shared.Protocol;
 //   EQClassic.Server [--port N] [--world-port N] [--zone-port N] [--public-address A]
 //                    [--db "<MySqlConnector connection string>"] [--lantern build/lantern-work/Exports]
 //                    [--key login-key.pem] [--allow-plaintext]
-// --lantern: LanternExtractor exports; a zone uses its collision mesh when <zone>/Zone/Meshes/<zone>_collision.txt exists.
+// --lantern: LanternExtractor exports; a zone uses its collision mesh (with its solid objects) when
+// <zone>/Zone/Meshes/<zone>_collision.txt exists.
 // Without --db, only the runbook's test account (test / test) exists (in memory), with no characters.
 // The RSA key is created on first start and kept in --key (default login-key.pem): clients pin its
 // fingerprint, printed below, so it must survive restarts.
@@ -71,7 +72,7 @@ using var zones = new ZoneServer(zoneKeys, name =>
     if (data is null)
         return null;
     var meshPath = lantern is null ? null : Path.Combine(lantern, name, "Zone", "Meshes", name + "_collision.txt");
-    var mesh = meshPath is not null && File.Exists(meshPath) ? ZoneCollisionMesh.LoadLantern(meshPath) : null;
+    var mesh = meshPath is not null && File.Exists(meshPath) ? ZoneCollisionMesh.LoadLanternZone(lantern!, name) : null;
     return new ZoneInstance(data, mesh);
 }) { Log = server.Log, Characters = characters, PublicAddress = worldAddress };
 zones.Start(zonePort);

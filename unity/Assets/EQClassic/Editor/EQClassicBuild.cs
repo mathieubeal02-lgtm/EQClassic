@@ -40,9 +40,14 @@ namespace EQClassic.Unity.Editor
                 if (!File.Exists(prefab))
                     continue;
                 builds.Add(new AssetBundleBuild { assetBundleName = ClientBundles.ZoneBundle(zone), assetNames = new[] { prefab } });
-                var collision = Path.Combine(Application.dataPath, "EQAssets", zone, "Zone", "Meshes", zone + "_collision.txt");
-                if (File.Exists(collision))
-                    File.Copy(collision, Path.Combine(StreamingDir, zone + "_collision.txt"), overwrite: true);
+                var exports = Path.Combine(Application.dataPath, "EQAssets");
+                if (File.Exists(Path.Combine(exports, zone, "Zone", "Meshes", zone + "_collision.txt")))
+                {
+                    // Zone and solid objects in one file: the player build has no Lantern export.
+                    var mesh = EQClassic.Shared.World.ZoneCollisionMesh.LoadLanternZone(exports, zone);
+                    using var writer = new StreamWriter(Path.Combine(StreamingDir, zone + "_collision.txt"));
+                    mesh.WriteLantern(writer);
+                }
             }
             var characters = Directory.GetFiles(Content + "Characters", "*.prefab").Select(p => p.Replace('\\', '/')).ToArray();
             if (characters.Length > 0)

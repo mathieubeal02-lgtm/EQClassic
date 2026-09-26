@@ -215,10 +215,13 @@ namespace EQClassic.Unity
         /// </summary>
         private static ZoneCollisionMesh LoadCollision(string zone)
         {
-            // Editor: the Lantern export; standalone builds: the copy next to the asset bundles.
-            var path = Path.Combine(Application.dataPath, "EQAssets", zone, "Zone", "Meshes", zone + "_collision.txt");
-            if (!File.Exists(path))
-                path = Path.Combine(ClientBundles.Directory, zone + "_collision.txt");
+            // Editor: the Lantern export (zone and solid objects); standalone builds: the merged
+            // copy EQClassicBuild writes next to the asset bundles.
+            var exports = Path.Combine(Application.dataPath, "EQAssets");
+            var path = Path.Combine(exports, zone, "Zone", "Meshes", zone + "_collision.txt");
+            if (File.Exists(path))
+                return ZoneCollisionMesh.LoadLanternZone(exports, zone);
+            path = Path.Combine(ClientBundles.Directory, zone + "_collision.txt");
             if (File.Exists(path))
                 return ZoneCollisionMesh.LoadLantern(path);
             Debug.LogWarning($"EQClassic: no collision mesh at {path}; the player will not follow the ground.");
