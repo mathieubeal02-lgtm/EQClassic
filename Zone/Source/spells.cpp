@@ -1205,6 +1205,8 @@ void Client::GoToBind(bool death)
 		this->tempHeading = GetHeading();
 		this->usingSoftCodedZoneLine = true;
 		this->isZoning = true;
+		strncpy(this->zoningZone, zone_name, sizeof(this->zoningZone) - 1);
+		this->zoningZone[sizeof(this->zoningZone) - 1] = 0;
 	}
 }
 
