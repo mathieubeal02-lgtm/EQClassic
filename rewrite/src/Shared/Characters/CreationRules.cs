@@ -86,6 +86,9 @@ namespace EQClassic.Shared.Characters
         public static int[] ToArray(CharacterStats s) => new[] { s.Str, s.Sta, s.Cha, s.Dex, s.Int, s.Agi, s.Wis };
 
         /// <summary>Null when the statistics are the starting ones plus exactly the bonus points; otherwise why not.</summary>
+        /// <summary>The Trilogy creation screen: at most 25 bonus points in any one statistic (30 to spend: 25 and 5 elsewhere).</summary>
+        public const int MaxPointsPerStat = 25;
+
         public static string? CheckStats(int race, int @class, CharacterStats chosen)
         {
             if (!RaceBase.ContainsKey(race) || !ClassBonus.ContainsKey(@class))
@@ -98,6 +101,8 @@ namespace EQClassic.Shared.Characters
             {
                 if (c[i] < s[i])
                     return "a statistic is below its starting value";
+                if (c[i] - s[i] > MaxPointsPerStat)
+                    return $"more than {MaxPointsPerStat} bonus points in one statistic";
                 spent += c[i] - s[i];
             }
             return spent == points ? null : $"{spent} bonus points spent, {points} expected";

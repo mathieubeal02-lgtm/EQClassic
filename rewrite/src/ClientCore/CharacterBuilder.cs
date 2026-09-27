@@ -63,7 +63,7 @@ namespace EQClassic.ClientCore
 
         public void AddPoint(int index)
         {
-            if (PointsLeft > 0)
+            if (PointsLeft > 0 && _spent[index] < CreationRules.MaxPointsPerStat)
                 _spent[index]++;
         }
 

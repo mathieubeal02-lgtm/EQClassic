@@ -164,7 +164,7 @@ namespace EQClassic.Unity
             int zone = GUILayout.SelectionGrid(zones.IndexOf(b.Zone), zones.ToArray(), 3);
             if (zone >= 0 && zones[zone] != b.Zone)
                 b.SelectZone(zones[zone]);
-            GUILayout.Label($"Statistics ({b.PointsLeft} points left)");
+            GUILayout.Label($"Statistics ({b.PointsLeft} points left, at most {CreationRules.MaxPointsPerStat} in one)");
             for (int i = 0; i < 7; i++)
             {
                 GUILayout.BeginHorizontal();

@@ -66,6 +66,9 @@ public class CharacterCreationTests
         // Lanlaan, a high elf paladin created with the Trilogy client: 20 points, all in STR and STA.
         Assert.Null(CreationRules.CheckStats(5, 3, new CharacterStats(75, 80, 90, 70, 92, 85, 100)));
         Assert.Null(CreationRules.CheckStats(9, 10, TrollShamanStats));
+        // Human warrior (25 points): all 25 in STR is allowed; a troll shaman's 30 in STR is not.
+        Assert.Null(CreationRules.CheckStats(1, 1, new CharacterStats(110, 85, 75, 75, 75, 80, 75)));
+        Assert.NotNull(CreationRules.CheckStats(9, 10, new CharacterStats(138, 114, 45, 75, 52, 83, 70)));
         Assert.Equal((new CharacterStats(85, 85, 75, 75, 75, 80, 75), 25), CreationRules.Starting(1, 1)); // human warrior
         Assert.Equal(new Dictionary<int, int> { [0] = 100, [3] = 100 }, CreationRules.Languages(5));
     }

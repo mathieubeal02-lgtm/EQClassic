@@ -83,6 +83,12 @@ public class CharacterBuilderTests
         var request = b.Request("Qnew");
         Assert.Null(EQClassic.Shared.Characters.CreationRules.CheckStats(request.Race, request.Class, request.Stats));
         Assert.Equal(new EQClassic.Shared.Characters.CharacterStats(108, 119, 45, 75, 52, 83, 95), request.Stats);
+
+        // At most 25 points in one statistic: the last 5 must go elsewhere.
+        var c = new CharacterBuilder(Options);
+        c.SelectRace(9);
+        for (int i = 0; i < 30; i++) c.AddPoint(0);
+        Assert.Equal((5, 108 + 25), (c.PointsLeft, c.Stat(0))); // STR 108 + 25, 5 points left
     }
 
     [Fact]
