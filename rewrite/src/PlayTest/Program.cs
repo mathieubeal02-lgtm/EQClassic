@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using EQClassic.ClientCore;
 using EQClassic.Shared.Zone;
+using EQClassic.Shared.World;
 using MySqlConnector;
 
 // Plays the game against a server, the way a player would, through the client library
@@ -394,6 +395,25 @@ Step("zone change and back", () =>
 var partner = new GameClient(fingerprint == "-" ? null : fingerprint);
 var partnerHeard = new List<string>();
 partner.MessageReceived += line => { lock (partnerHeard) partnerHeard.Add(line); };
+Step("walk through a zone line", () =>
+{
+    // North Qeynos' east line to South Qeynos (zone_points 978, at 369.6, -21.5): walk into it, no #zone.
+    if (!InZone("qeynos2")) { Chat("#zone qeynos2"); Run(() => InZone("qeynos2") && client.Player != null, 30); }
+    var line = new Vec3(369.62f, -21.45f, 2.13f);
+    Chat("#goto 369.62 -46 2.13");
+    if (!Run(() => client.Player is { } me && Math.Abs(me.Position.Y + 46) < 2, 8)) return (false, "the #goto did not land");
+    bool crossed = Run(() =>
+    {
+        if (client.Player is { } me && InZone("qeynos2"))
+        {
+            me.Face(line);
+            me.Move(1, 0, 0, 0.02f);
+        }
+        return InZone("qeynos");
+    }, 15);
+    if (crossed) { Chat("#zone qeynos2"); Run(() => InZone("qeynos2") && client.Player != null, 30); }
+    return (crossed, crossed ? "walked into South Qeynos" : $"still in {client.Zone?.Zone} at {client.Player?.Position}; {Last(2)}");
+});
 Step("second player enters", () =>
 {
     clients.Add(partner);

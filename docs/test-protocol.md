@@ -33,6 +33,7 @@ and plays these scenarios, each reported OK / FAIL with what it saw, in a Markdo
 | merchant: buy | U on a merchant, sell the packs, buy | the goods, sold items, money spent |
 | bank: deposit | South Qeynos banker | one platinum more in the vault |
 | zone change and back | #zone qeynos, back | both zones entered |
+| walk through a zone line | #goto next to North Qeynos' east line (zone_points 978), walk into it | the client lands in South Qeynos (qeynos) |
 | second player enters | bot2 / bot2, Qpartner (made if missing) | both players in one zone |
 | group: invite, follow, chat | /invite, /follow, /g | both see the group, the line reaches the other |
 | trade an item | /trade, offer, accept both | the other player gets the item |
