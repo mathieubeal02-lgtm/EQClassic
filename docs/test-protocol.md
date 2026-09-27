@@ -21,6 +21,9 @@ and plays these scenarios, each reported OK / FAIL with what it saw, in a Markdo
 | target and consider | Tab, C | the consider line (faction and level) |
 | quest: hail Brohan | #goto, hail | Brohan Ironforge's Perl quest answer |
 | quest: hand-in | #givemoney, give Moodoro Finharn 2 gold in a trade | he answers and hands over the Testament of Vanear (17918) |
+| quest: keyword dialog | say "What testament of Vanear?" to Moodoro | he answers the keyword |
+| experience and a level | #addexp 100, then #addexp 3000000 | "You gain experience!!", then a level gained |
+| door: open and close | #goto next to North Qeynos' DOOR2, U, U again | the door opens, then closes |
 | melee: kill a rodent | auto attack | "You have slain a rodent!" |
 | loot the corpse | loot window, take all | the window opens and closes |
 | pet: kills, its owner loots | #cast 164 (Companion Spirit), /pet attack a rodent, loot its corpse | the pet kills, the owner may loot |
@@ -43,6 +46,7 @@ and plays these scenarios, each reported OK / FAIL with what it saw, in a Markdo
 | GM: #flymode | #flymode on, then off | the client flies, then falls again |
 | quest: proximity greeting | #zone erudnint, carry the note 18729, go to Lanken Rjarn | EVENT_SPAWN sets his box, EVENT_ENTER greets |
 | character creation: rules and starting items | bot2 builds Qcreate (troll shaman): 30 clicks on STR, then a request with 30 in STR, then the valid one | the builder stops at 25, the server refuses 30, accepts 25+5, the packs hold the starting items; Qcreate is deleted |
+| camp and come back | /camp, wait 30 s, log in again | same zone, same place |
 
 Setup: a server with the database (`--db`), a GM account for the first player (`UPDATE account SET
 status = 255 WHERE id = <world account>`), and a second login account `bot2` (SHA-1 password). The

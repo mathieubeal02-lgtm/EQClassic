@@ -180,6 +180,39 @@ Step("quest: hand-in", () =>
     Chat("#clearinventory");
     return (book && said, $"book {book}, said {said}; {Last(2)}");
 });
+Step("quest: keyword dialog", () =>
+{
+    // EVENT_SAY with a keyword, not only a hail.
+    if (!GoTo("Moodoro")) return (false, "Moodoro Finharn not in the zone");
+    Chat("What testament of Vanear?");
+    bool ok = Heard(l => l.StartsWith("Moodoro Finharn says, 'So you have heard"), 10);
+    return (ok, ok ? "Moodoro answers the keyword" : Last(2));
+});
+Step("experience and a level", () =>
+{
+    int level = client.Experience?.Level ?? 0;
+    Chat("#addexp 100");
+    bool gain = Heard(l => l == "You gain experience!!", 8);
+    Chat("#addexp 3000000"); // enough for level 11 (1.2 million or so for a troll at 10)
+    bool up = Heard(l => l.StartsWith("You have gained a level!"), 8) && Run(() => client.Experience?.Level > level, 8);
+    Chat($"#level {level}");
+    Run(() => client.Experience?.Level == level, 8);
+    return (gain && up, $"gain {gain}, level up {up}; {Since().LastOrDefault(l => l.Contains("level"))}");
+});
+Step("door: open and close", () =>
+{
+    // North Qeynos' DOOR2 (doorid 1, at -141, -114): U opens it, U again closes it.
+    Chat("#goto -141 -122 1");
+    if (!Run(() => client.Player is { } me && Math.Abs(me.Position.X + 141) < 3 && Math.Abs(me.Position.Y + 122) < 3, 8)) return (false, "the #goto did not land");
+    var door = client.UseNearestDoor();
+    if (door is null) return (false, "no door in reach");
+    bool Open() => client.Zone!.Doors.FirstOrDefault(d => d.Id == door.Id)?.Open == true;
+    bool opened = Run(Open, 5);
+    Run(() => false, 1);
+    client.UseNearestDoor();
+    bool closed = Run(() => !Open(), 8);
+    return (opened && closed, $"{door.Name}: opened {opened}, closed {closed}");
+});
 Step("melee: kill a rodent", () =>
 {
     if (!GoTo("a_rodent")) return (false, "no rodent in the zone");
@@ -596,6 +629,26 @@ Step("character creation: rules and starting items", () =>
         clients.Remove(maker);
         Scalar("DELETE FROM character_ WHERE name = 'Qcreate'");
     }
+});
+
+Step("camp and come back", () =>
+{
+    // /camp: thirty seconds standing still, logged out; logging in again finds the same place.
+    string zone = client.Zone!.Zone;
+    var at = client.Player!.Position;
+    Chat("/camp");
+    if (!Run(() => client.State != GameState.InZone, 45)) return (false, $"still in the zone; {Last(2)}");
+    client.Connect(host, port);
+    if (!Run(() => client.State == GameState.Login, 10)) return (false, $"state {client.State}");
+    client.Login(user, password);
+    if (!Run(() => client.State == GameState.ServerSelect, 10)) return (false, $"login: {client.LastError}");
+    client.SelectWorld(client.Worlds[0].Id);
+    if (!Run(() => client.State == GameState.CharacterSelect, 10)) return (false, $"world: {client.LastError}");
+    client.EnterWorld(character);
+    if (!Run(() => client.State == GameState.InZone && client.Player != null, 30)) return (false, $"enter: {client.LastError}");
+    var back = client.Player!.Position;
+    bool same = client.Zone!.Zone == zone && Math.Abs(back.X - at.X) + Math.Abs(back.Y - at.Y) < 5;
+    return (same, $"camped in {zone} at ({at.X:0}, {at.Y:0}), back in {client.Zone.Zone} at ({back.X:0}, {back.Y:0})");
 });
 
 int failed = results.Count(r => !r.Ok);
