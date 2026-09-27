@@ -440,7 +440,12 @@ Step("aggro: a gnoll attacks", () =>
 {
     // Fippy Darkpaw, the gnoll who runs into North Qeynos, attacks a player next to him by himself.
     if (!InZone("qeynos2")) { Chat("#zone qeynos2"); Run(() => InZone("qeynos2") && client.Player != null, 30); }
-    if (!GoTo("Fippy")) return (false, "Fippy Darkpaw not up");
+    if (!GoTo("Fippy"))
+    {
+        Chat("#repopzone"); // killed by an earlier run: bring the zone's spawns back
+        Run(() => client.Zone!.Entities.Any(e => !e.Spawn.IsCorpse && e.Spawn.Name.StartsWith("Fippy")), 10);
+        if (!GoTo("Fippy")) return (false, "Fippy Darkpaw not up, even after #repopzone");
+    }
     client.SetTarget(null);
     bool attacked = Heard(l => l.StartsWith("Fippy Darkpaw hits YOU") || l.StartsWith("Fippy Darkpaw tries to hit YOU"), 20);
     if (client.Zone!.Entities.FirstOrDefault(e => !e.Spawn.IsPlayer && !e.Spawn.IsCorpse && e.Spawn.Name.StartsWith("Fippy")) is { } fippy)
@@ -457,6 +462,13 @@ Step("buffs: spirit of wolf", () =>
     Chat("#cast 278");
     bool fast = Run(() => client.Buffs?.MovementSpeed > 0 && client.Player?.SpeedFactor > 1f, 8);
     return (fast, $"movement +{client.Buffs?.MovementSpeed}%, speed x{client.Player?.SpeedFactor:0.00}");
+});
+Step("buffs: levitate", () =>
+{
+    client.SetTarget(null);
+    Chat("#cast 261");
+    bool floating = Run(() => client.Buffs?.Levitating == true && client.Player?.Levitating == true, 8);
+    return (floating, $"levitating {floating}");
 });
 Step("sit and regenerate", () =>
 {
@@ -561,9 +573,30 @@ Step("group: invite, follow, chat", () =>
     bool grouped = Run(() => client.Group?.Members.Count == 2 && partner.Group?.Members.Count == 2, 8);
     Chat("/g playtest group");
     bool chat = Run(() => partnerHeard.Any(l => l.Contains("tells the group, 'playtest group'")), 8);
+    // Group experience: Qbot kills an NPC worth experience to him; Qpartner, grouped, gets a share.
+    bool shared = false;
+    string killed = "no NPC of level 7 to 12 near";
+    uint partnerExp = partner.Experience?.Exp ?? 0;
+    int partnerLevel = partner.Experience?.Level ?? 1;
+    var prey = client.Zone!.Entities.Where(e => !e.Spawn.IsPlayer && !e.Spawn.IsCorpse && e.Spawn.Level is >= 7 and <= 12)
+        .OrderBy(e => client.Player is { } me ? Math.Abs(e.Latest.X - me.Position.X) + Math.Abs(e.Latest.Y - me.Position.Y) : 0).FirstOrDefault();
+    if (prey != null)
+    {
+        killed = prey.Spawn.Name;
+        client.SetTarget(prey.Id);
+        Chat("#kill");
+        shared = Run(() => partner.Experience?.Exp > partnerExp, 8);
+        if (client.Zone.Entities.FirstOrDefault(e => e.Spawn.IsPlayer && e.Spawn.Name == "Qpartner") is { } him)
+        {
+            client.SetTarget(him.Id);
+            Chat($"#level {partnerLevel}"); // Qpartner stays at his level
+            Run(() => partner.Experience?.Level == partnerLevel, 5);
+        }
+        client.SetTarget(null);
+    }
     Chat("/disband");
     Run(() => client.Group == null || client.Group.Members.Count == 0, 5);
-    return (invited && grouped && chat, $"invited {invited}, grouped {grouped}, group chat {chat}");
+    return (invited && grouped && chat && shared, $"invited {invited}, grouped {grouped}, group chat {chat}, experience shared {shared} ({killed})");
 });
 Step("trade an item", () =>
 {

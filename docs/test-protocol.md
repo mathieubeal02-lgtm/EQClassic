@@ -36,14 +36,15 @@ and plays these scenarios, each reported OK / FAIL with what it saw, in a Markdo
 | GM: #givemoney | platinum | the purse |
 | merchant: buy | U on a merchant, sell the packs, buy | the goods, sold items, money spent |
 | bank: deposit and withdraw | #zone qeynos, U on the banker, 1p in, then 1p out | the vault goes up by 1p, then back, and the purse gets it |
-| aggro: a gnoll attacks | #zone qeynos2, go next to Fippy Darkpaw, no target | he attacks by himself (then #kill) |
+| aggro: a gnoll attacks | #zone qeynos2 (#repopzone if Fippy is dead), go next to Fippy Darkpaw, no target | he attacks by himself (then #kill) |
+| buffs: levitate | #cast 261 on yourself | the buff list and the client say levitating |
 | buffs: spirit of wolf | #cast 278 on yourself | the buff list gives +movement, the client runs faster |
 | sit and regenerate | #damage 60 self, /sit | hit points come back within a tic |
 | bind and gate | #cast 35 (Bind Affinity) in qeynos2, #zone qeynos, #cast 36 (Gate) | back in qeynos2 |
 | zone change and back | #zone qeynos, back | both zones entered |
 | walk through a zone line | #goto next to North Qeynos' east line (zone_points 978), walk into it | the client lands in South Qeynos (qeynos) |
 | second player enters | bot2 / bot2, Qpartner (made if missing) | both players in one zone |
-| group: invite, follow, chat | /invite, /follow, /g | both see the group, the line reaches the other |
+| group: invite, follow, chat, experience | /invite, /follow, /g, #kill an NPC of level 7-12, #level Qpartner back | both grouped, the group chat arrives, Qpartner gets a share of the experience |
 | trade an item | /trade, offer, accept both | the other player gets the item |
 | translocate: asked, accepted | group Qpartner, #cast 1336 (Fay) or 1337 (Tox, when already in gfaydark) on them | Qpartner gets the offer, says yes, lands in the other zone |
 | GM: #flymode | #flymode on, then off | the client flies, then falls again |
