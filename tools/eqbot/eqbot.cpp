@@ -879,8 +879,10 @@ namespace
 			got = Collect(z, 10000, [](const std::vector<Packet*>& g) { return SummonedItemId(g) != 0; });
 			bool summoned = SummonedItemId(got) == weapon;
 			DeleteAll(got);
-			if (!prey || !summoned)
-				Step(false, "melee with a weapon", !prey ? "no small NPC (a_..., level 3 or less) in the zone" : "the weapon was not summoned");
+			if (!prey)
+				printf("[ -- ] %-22s %s\n", "melee with a weapon", "skipped: no small NPC (a_..., level 3 or less) in the zone");
+			else if (!summoned)
+				Step(false, "melee with a weapon", "the weapon was not summoned");
 			else
 			{
 				MoveItem(z, kCursor, 13);	// primary hand (what was there comes to the cursor)
