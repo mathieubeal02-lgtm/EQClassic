@@ -127,6 +127,7 @@ Client::Client(int32 in_ip, int16 in_port, int in_send_socket)
 	sneaking = false; 
 	hitWhileCasting = false;
 	isZoning = false;
+	zoningZone[0] = 0;
 	InWater = false;
 	berserk = false;
 	SetCraftingStation(0);
@@ -3673,6 +3674,7 @@ void Client::TeleportPC(char* zonename, float x, float y, float z, float heading
 	{
 		this->usingSoftCodedZoneLine = true;
 		this->isZoning = true;
+		strn0cpy(this->zoningZone, zonename, sizeof(this->zoningZone));
 		this->zoningX = (sint32)x;
 		this->zoningY = (sint32)y;
 		this->zoningZ = (sint32)z;
@@ -3735,6 +3737,7 @@ void Client::TranslocatePC(char* zonename, float x, float y, float z)
 	{
 		this->usingSoftCodedZoneLine = true;
 		this->isZoning = true;
+		strn0cpy(this->zoningZone, zonename, sizeof(this->zoningZone));
 		this->zoningX = (sint32)x;
 		this->zoningY = (sint32)y;
 		this->zoningZ = (sint32)z;
@@ -4208,6 +4211,7 @@ void Client::ScanForZoneLines()
 						this->tempHeading = zone->thisZonesZoneLines[i]->heading;
 						this->usingSoftCodedZoneLine = true; //default = true
 						this->isZoning = true; //default = true
+						strn0cpy(this->zoningZone, zone->thisZonesZoneLines[i]->target_zone, sizeof(this->zoningZone));
 						//this->isZoningZP = true;  //default = not here
 
 						if (zone->thisZonesZoneLines[i]->keepX == 1)

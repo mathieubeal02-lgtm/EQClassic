@@ -635,6 +635,7 @@ private:
 	sint32	zoningX;
 	sint32	zoningY;
 	sint32	zoningZ;
+	char	zoningZone[16];	// the zone zoningX/Y/Z are for: a later zone change to another zone ignores them
 
 	// Pinedepain // Start -- Instrument skill modifiers
 	uint8	singingInstrumentMod;

@@ -1250,6 +1250,15 @@ void Client::ProcessOP_ZoneChange(APPLAYER* pApp)
 	cout << "Player at x:" << GetX() << " y:" << GetY() << " z:" << GetZ() << endl;
 	ZonePoint* zone_point = zone->GetClosestZonePoint(GetY(), GetX(), GetZ(), zc->zone_name);
 
+	// Coordinates remembered for another zone (a teleport to Lavastorm, then the client zoning into
+	// Nagafen's Lair by its own zone line) are not for this request: they put the player outside the
+	// zone's geometry (seen: soldungb entered at Lavastorm's safe point, back out at once).
+	if(this->usingSoftCodedZoneLine && zoningZone[0] != 0 && strcasecmp(zoningZone, zc->zone_name) != 0)
+	{
+		EQC::Common::Log(EQCLog::Debug,CP_CLIENT,"Client::ProcessOP_ZoneChange: coordinates kept for %s, not for %s: ignored", zoningZone, zc->zone_name);
+		this->usingSoftCodedZoneLine = false;
+	}
+
 	//Yeahlight: First, check if our client is zoning via ZonePC
 	if(this->usingSoftCodedZoneLine)
 	{
