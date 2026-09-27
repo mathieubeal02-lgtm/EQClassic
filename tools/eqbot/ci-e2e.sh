@@ -99,4 +99,8 @@ echo "== eqbot"
 sleep 5
 echo "-- second session (the first one must have been logged out)"
 "$EQBOT" play 127.0.0.1 "$LS_USER" "$LS_PASS" "$CHAR"
+echo "-- in-zone scenarios (GM commands, items; no quest pack here, so no hail)"
+db eqclassic -e "UPDATE account SET status = 255 WHERE name = '$LS_USER';"
+sleep 5
+EQBOT_HAIL=- "$EQBOT" test 127.0.0.1 "$LS_USER" "$LS_PASS" "$CHAR"
 echo "== end-to-end OK"

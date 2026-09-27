@@ -9,13 +9,19 @@ cmake -S . -B build -DEQC_BUILD_SERVERS=OFF && cmake --build build --target eqbo
 build/bin/eqbot login  <login-host> <user> <password> [port=5999]
 build/bin/eqbot create <login-host> <user> <password> <character>
 build/bin/eqbot play   <login-host> <user> <password> <character>
+build/bin/eqbot test   <login-host> <user> <password> <character>   # GM account
 ```
+Without CMake, `tools/eqbot/build.sh` compiles it with g++ alone (needs libssl-dev and zlib1g-dev).
 
 | Command | What it checks |
 |---|---|
 | `login` | Credentials (DES-encrypted like the client), session id, banner, server list, world status, session key |
 | `create` | `login`, world character list, name approval, character creation. Does nothing if the character already exists. |
 | `play` | `login`, world, enter world, then the zone handshake: player profile, zone header, spawns, "Enterzone complete". Ends with a clean disconnect. |
+| `test` | `play`'s zone entry, then scenarios in the zone: the player profile decoded (a free general slot), the spawn list decoded, a GM command answering (`#loc`), `#si` putting an item on the cursor, putting it down and summoning again (the server used to keep a copy on the cursor), and a quest NPC answering a hail (`EQBOT_HAIL=<npc name>`, default Brohan_Ironforge of North Qeynos; `-` skips it). The character's account must be a GM (status 255). |
+
+`legacy-test.sh [host] [user] [password] [character]` runs `test` (defaults 127.0.0.1, bot, bot, Qbottwo),
+retrying while World still holds the previous session (Error 1018).
 
 The output has one `[ OK ]`/`[FAIL]` line per step, and the exit code is 0 only when every step passed.
 `EQBOT_VERBOSE=1` lists the zone packets and `EQBOT_RAW=1` dumps every datagram.

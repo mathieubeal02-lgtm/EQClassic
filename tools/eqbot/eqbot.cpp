@@ -15,6 +15,8 @@
 // EQBOT_VERBOSE=1 lists the zone packets, EQBOT_RAW=1 dumps every datagram received.
 // EQBOT_STAY=<seconds> keeps `play` in the zone and checks the height of moving mobs.
 #include <openssl/des.h>
+#include <stdint.h>
+#include <zlib.h>
 #include <sys/time.h>
 
 #include <cstdio>
@@ -401,19 +403,31 @@ namespace
 		Step(jumpy == 0, "mob heights", b);
 	}
 
-	// login -> world -> character select -> enter world -> zone handshake.
-	int Play(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname)
+	// What the zone handshake gave: the zone's name, the player profile and the spawn packets, as
+	// received (still deflated and encrypted).
+	struct ZoneState
+	{
+		std::string zone;
+		std::vector<unsigned char> profile;
+		std::vector<std::vector<unsigned char> > spawnPackets;
+	};
+
+	const int16 kZoneSpawns = 0x6121;	// NewSpawn_Struct[], deflated + encrypted
+
+	// login -> world -> character select -> enter world -> zone handshake. Leaves `z` open in the zone.
+	bool EnterZone(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname,
+	               EqSession& z, ZoneState& st)
 	{
 		EqSession w;
 		std::vector<std::string> names;
 		if (!EnterWorldServer(w, host, user, pass, &names))
-			return 1;
+			return false;
 		bool found = false;
 		for (size_t i = 0; i < names.size(); i++)
 			found = found || names[i] == charname;
 		Step(found, "character list", Join(names));
 		if (!found)
-			return 1;
+			return false;
 		std::vector<Packet*> others;
 		Packet* p;
 
@@ -431,7 +445,7 @@ namespace
 		{
 			Step(false, "enter world", unavail ? "zone unavailable" : "no zone server info");
 			delete p;
-			return 1;
+			return false;
 		}
 		std::string zip((const char*)p->pBuffer, strnlen((const char*)p->pBuffer, 75));
 		std::string zname((const char*)p->pBuffer + 75, strnlen((const char*)p->pBuffer + 75, 53));
@@ -442,7 +456,7 @@ namespace
 		delete p;
 
 		// ---- zone ----
-		EqSession z;
+		st.zone = zname;
 		z.Open(zip, zport);
 		float rate = 5.0f;
 		z.Send(kSetDataRate, &rate, sizeof(rate));
@@ -471,23 +485,344 @@ namespace
 			snprintf(gb, sizeof(gb), "player profile %d bytes after %ld ms, %d other packets", (int)p->size, profileMs, (int)got.size());
 		// A second profile means the zone resent its packets: our acks did not reach it.
 		Step(p != 0 && dupProfiles == 0, "zone entry", !p ? "no player profile" : dupProfiles ? "player profile resent by the zone" : gb);
+		if (p)
+			st.profile.assign(p->pBuffer, p->pBuffer + p->size);
 		delete p;
 		DeleteAll(got);
 
 		z.Send(kZoneRequest3, name30, sizeof(name30));
-		z.Poll(1000);
+		{
+			std::vector<Packet*> early = z.Poll(1000);
+			for (size_t i = 0; i < early.size(); i++)
+			{
+				if (getenv("EQBOT_VERBOSE"))
+					printf("       step3 -> 0x%04x %d bytes\n", (unsigned)(unsigned short)early[i]->opcode, (int)early[i]->size);
+				if (early[i]->opcode == kZoneSpawns)
+					st.spawnPackets.push_back(std::vector<unsigned char>(early[i]->pBuffer, early[i]->pBuffer + early[i]->size));
+			}
+			DeleteAll(early);
+		}
 		z.Send(kZoneRequest4, 0, 0);
 		p = z.WaitFor(kZoneDone, 20000, &others);
 		int spawns = (int)others.size();
+		for (size_t i = 0; i < others.size(); i++)
+			if (others[i]->opcode == kZoneSpawns)
+				st.spawnPackets.push_back(std::vector<unsigned char>(others[i]->pBuffer, others[i]->pBuffer + others[i]->size));
 		DeleteAll(others);
 		snprintf(gb, sizeof(gb), "zone header + %d spawn/door/object packets", spawns);
 		Step(p != 0, "zone data", p ? gb : "no answer");
 		delete p;
 		z.Send(kZoneDone, 0, 0);
-		z.Poll(2000);
+		// The spawn list may come after the handshake (a zone that just booted is slow): keep collecting
+		// until 1.5 s pass without a new spawn packet, 8 s at most.
+		long until = NowMs() + 8000, quietSince = NowMs();
+		size_t known = st.spawnPackets.size();
+		while (NowMs() < until && (st.spawnPackets.empty() || NowMs() - quietSince < 1500))
+		{
+			if (st.spawnPackets.size() != known)
+			{
+				known = st.spawnPackets.size();
+				quietSince = NowMs();
+			}
+			std::vector<Packet*> late = z.Poll(200);
+			for (size_t i = 0; i < late.size(); i++)
+			{
+				if (getenv("EQBOT_VERBOSE"))
+					printf("       late -> 0x%04x %d bytes\n", (unsigned)(unsigned short)late[i]->opcode, (int)late[i]->size);
+				if (late[i]->opcode == kZoneSpawns)
+					st.spawnPackets.push_back(std::vector<unsigned char>(late[i]->pBuffer, late[i]->pBuffer + late[i]->size));
+			}
+			DeleteAll(late);
+		}
 		Step(true, "in zone", charname + " in " + zname);
+		return true;
+	}
+
+	int Play(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname)
+	{
+		EqSession z;
+		ZoneState st;
+		if (!EnterZone(host, user, pass, charname, z, st))
+			return 1;
 		if (getenv("EQBOT_STAY"))
 			WatchMobs(z, atoi(getenv("EQBOT_STAY")));
+		z.Disconnect();
+		return failures ? 1 : 0;
+	}
+
+
+	// ---- test: in-zone scenarios ----
+
+	const int16 kChannelMessage = 0x0721;	// ChannelMessage_Struct: 70-byte header (language at 64, channel at 66), then the text
+	const int16 kSpecialMesg = 0x8021;		// SpecialMesg_Struct: int32 type, then the text
+	const int16 kSummonedItem = 0x7821;		// Item_Struct: item_nr at 130
+	const int16 kMoveItem = 0x2c21;			// MoveItem_Struct: from, to, number_in_stack (uint32 each)
+	const int16 kClientTarget = 0x6221;		// ClientTarget_Struct: int16 target, int16 unused
+	const int16 kClientUpdate = 0xf320;		// SpawnPositionUpdate_Struct (15 bytes)
+	const int SaySlot = 8;					// MessageChannel_SAY
+	const uint32_t kCursor = 0, kDestroy = 0xFFFFFFFF;
+
+	uint32_t Rotr(uint32_t v, int n) { return (v >> n) | (v << (32 - n)); }
+
+	// Undoes the servers' packet encryption (Common/Source/packet_functions.cpp): each word was
+	// rotated, offset and chained with the previous one, after swapping word 0 with the middle word.
+	void Decrypt(std::vector<unsigned char>& d, uint32_t crypt, uint32_t offset, int rot1, int rot2)
+	{
+		uint32_t* w = (uint32_t*)&d[0];
+		size_t words = d.size() / 4;
+		for (size_t i = 0; i < words; i++)
+		{
+			uint32_t t = Rotr(w[i] + crypt, rot2) - offset;
+			uint32_t orig = Rotr(t, rot1);
+			crypt = crypt + orig - offset;
+			w[i] = orig;
+		}
+		if (d.size() / 8 < words)
+		{
+			uint32_t swap = w[0];
+			w[0] = w[d.size() / 8];
+			w[d.size() / 8] = swap;
+		}
+	}
+
+	std::vector<unsigned char> Inflate(const std::vector<unsigned char>& in, size_t max)
+	{
+		std::vector<unsigned char> out(max);
+		uLongf len = max;
+		if (in.empty() || uncompress(&out[0], &len, &in[0], in.size()) != Z_OK)
+			return std::vector<unsigned char>();
+		out.resize(len);
+		return out;
+	}
+
+	// The player profile as the zone keeps it (EncryptProfilePacket + DeflatePacket).
+	std::vector<unsigned char> DecodeProfile(std::vector<unsigned char> d)
+	{
+		if (d.size() < 8)
+			return std::vector<unsigned char>();
+		Decrypt(d, 0x65e7, 0x37a9, 7, 15);
+		return Inflate(d, 20000);
+	}
+
+	struct SpawnInfo { int id; std::string name; int npc; int level; float x, y, z; };
+
+	// NewSpawn_Struct[] of the zone's spawn packets (EncryptZoneSpawnPacket + DeflatePacket):
+	// 168 bytes each, the Spawn_Struct after a 4-byte placeholder.
+	std::vector<SpawnInfo> DecodeSpawns(const std::vector<std::vector<unsigned char> >& packets)
+	{
+		std::vector<SpawnInfo> out;
+		for (size_t k = 0; k < packets.size(); k++)
+		{
+			std::vector<unsigned char> d = packets[k];
+			if (d.size() < 8)
+				continue;
+			Decrypt(d, 0, 0x65e7, 9, 13);
+			std::vector<unsigned char> raw = Inflate(d, 400000);
+			for (size_t o = 0; o + 168 <= raw.size(); o += 168)
+			{
+				const unsigned char* sp = &raw[o + 4];
+				SpawnInfo si;
+				si.id = sp[62] | (sp[63] << 8);
+				si.name = std::string((const char*)sp + 100, strnlen((const char*)sp + 100, 30));
+				si.npc = sp[73];
+				si.level = sp[76];
+				si.y = (short)(sp[51] | (sp[52] << 8));
+				si.x = (short)(sp[53] | (sp[54] << 8));
+				si.z = (short)(sp[55] | (sp[56] << 8));
+				out.push_back(si);
+			}
+		}
+		return out;
+	}
+
+	void Say(EqSession& z, const std::string& me, const std::string& text)
+	{
+		std::vector<unsigned char> b(70 + text.size() + 1, 0);
+		strncpy((char*)&b[32], me.c_str(), 22);
+		b[66] = SaySlot;	// chan_num (int16 at 66; language at 64 is 0, common tongue)
+		memcpy(&b[70], text.c_str(), text.size());
+		z.Send(kChannelMessage, &b[0], b.size());
+	}
+
+	void MoveItem(EqSession& z, uint32_t from, uint32_t to)
+	{
+		uint32_t mi[3] = { from, to, 0 };
+		z.Send(kMoveItem, mi, sizeof(mi));
+	}
+
+	// Texts of the server's messages (SpecialMesg) and says (ChannelMessage: "sender: text") among packets.
+	std::vector<std::string> Texts(const std::vector<Packet*>& got)
+	{
+		std::vector<std::string> out;
+		for (size_t i = 0; i < got.size(); i++)
+		{
+			const Packet* p = got[i];
+			if (p->opcode == kSpecialMesg && p->size > 4)
+				out.push_back(std::string((const char*)p->pBuffer + 4, strnlen((const char*)p->pBuffer + 4, p->size - 4)));
+			else if (p->opcode == kChannelMessage && p->size > 70)
+				out.push_back(std::string((const char*)p->pBuffer + 32, strnlen((const char*)p->pBuffer + 32, 23)) + ": "
+					+ std::string((const char*)p->pBuffer + 70, strnlen((const char*)p->pBuffer + 70, p->size - 70)));
+		}
+		return out;
+	}
+
+	// Packets for `ms` (or until `done` says so), all kept.
+	template <typename Done>
+	std::vector<Packet*> Collect(EqSession& z, int ms, Done done)
+	{
+		std::vector<Packet*> all;
+		long end = NowMs() + ms;
+		while (NowMs() < end)
+		{
+			std::vector<Packet*> got = z.Poll(200);
+			all.insert(all.end(), got.begin(), got.end());
+			if (done(all))
+				break;
+		}
+		return all;
+	}
+
+	bool HasText(const std::vector<Packet*>& got, const std::string& part, std::string* found = 0)
+	{
+		std::vector<std::string> t = Texts(got);
+		for (size_t i = 0; i < t.size(); i++)
+			if (t[i].find(part) != std::string::npos)
+			{
+				if (found) *found = t[i];
+				return true;
+			}
+		return false;
+	}
+
+	int SummonedItemId(const std::vector<Packet*>& got)
+	{
+		for (size_t i = 0; i < got.size(); i++)
+			if (got[i]->opcode == kSummonedItem && got[i]->size > 132)
+				return got[i]->pBuffer[130] | (got[i]->pBuffer[131] << 8);
+		return 0;
+	}
+
+	std::string LastTexts(const std::vector<Packet*>& got, size_t n = 2)
+	{
+		std::vector<std::string> t = Texts(got);
+		std::string out;
+		for (size_t i = t.size() > n ? t.size() - n : 0; i < t.size(); i++)
+			out += (out.empty() ? "" : " | ") + t[i];
+		return out.empty() ? "no message" : out;
+	}
+
+	// eqbot test: in-zone scenarios against the legacy servers, one [ OK ]/[FAIL] line each.
+	int Test(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname)
+	{
+		EqSession z;
+		ZoneState st;
+		if (!EnterZone(host, user, pass, charname, z, st))
+			return 1;
+		const uint16_t kMuffin = 13014;
+
+		// The profile: this character, and a free general slot (22-29) for the item tests.
+		std::vector<unsigned char> pp = DecodeProfile(st.profile);
+		size_t at = std::string(pp.begin(), pp.end()).find(charname);
+		int freeSlot = -1;
+		if (at != std::string::npos && at >= 4 && at - 4 + 168 + 60 <= pp.size())
+		{
+			const unsigned char* inv = &pp[at - 4 + 168];	// PlayerProfile_Struct: inventory[30] at 168 (name at 4)
+			for (int slot = 29; slot >= 22; slot--)
+				if ((inv[slot * 2] | (inv[slot * 2 + 1] << 8)) == 0xFFFF)
+					freeSlot = slot;
+		}
+		char b[160];
+		snprintf(b, sizeof(b), "%d bytes, %s, first free general slot %d", (int)pp.size(), at != std::string::npos ? "name found" : "name not found", freeSlot);
+		Step(at != std::string::npos && freeSlot >= 0, "profile", b);
+
+		// The spawns: this player among them, and NPCs.
+		std::vector<SpawnInfo> spawns = DecodeSpawns(st.spawnPackets);
+		int npcs = 0, meId = 0;
+		for (size_t i = 0; i < spawns.size(); i++)
+		{
+			if (spawns[i].npc == 1) npcs++;
+			if (spawns[i].name == charname) meId = spawns[i].id;
+			if (getenv("EQBOT_VERBOSE") && spawns[i].npc != 1)
+				printf("       spawn #%d '%s' npc %d level %d at %.0f, %.0f, %.0f\n", spawns[i].id, spawns[i].name.c_str(), spawns[i].npc, spawns[i].level, spawns[i].x, spawns[i].y, spawns[i].z);
+		}
+		// (The player's own spawn is not in the zone's list: the client builds it from the profile.)
+		snprintf(b, sizeof(b), "%d spawns, %d NPCs", (int)spawns.size(), npcs);
+		Step(npcs > 0, "spawn list", b);
+
+		// A GM command answers (# commands go through the say channel).
+		Say(z, charname, "#loc");
+		std::vector<Packet*> got = Collect(z, 10000, [](const std::vector<Packet*>& g) { return HasText(g, "Location"); });
+		std::string text;
+		bool located = HasText(got, "Location", &text);
+		Step(located, "GM command #loc", located ? text : LastTexts(got));
+		DeleteAll(got);
+
+		// #si puts an item on the cursor.
+		Say(z, charname, "#clearcursor");
+		DeleteAll(got = Collect(z, 1500, [](const std::vector<Packet*>&) { return false; }));
+		Say(z, charname, "#si 13014");
+		got = Collect(z, 10000, [](const std::vector<Packet*>& g) { return SummonedItemId(g) != 0; });
+		int item = SummonedItemId(got);
+		snprintf(b, sizeof(b), "item %d on the cursor", item);
+		Step(item == kMuffin, "summon an item", item ? b : LastTexts(got));
+		DeleteAll(got);
+
+		// Put down into a free slot, then #si again: the cursor must be free (fix-cursor-duplicate:
+		// the server used to keep a copy of what was put down, and refused to summon).
+		if (freeSlot >= 0)
+		{
+			MoveItem(z, kCursor, (uint32_t)freeSlot);
+			DeleteAll(got = Collect(z, 1500, [](const std::vector<Packet*>&) { return false; }));
+			Say(z, charname, "#si 13014");
+			got = Collect(z, 10000, [](const std::vector<Packet*>& g) { return SummonedItemId(g) != 0 || HasText(g, "cursor is not empty"); });
+			bool again = SummonedItemId(got) == kMuffin;
+			Step(again, "put down, summon again", again ? "the cursor was free again" : LastTexts(got));
+			DeleteAll(got);
+			// Tidy up: both muffins destroyed.
+			MoveItem(z, kCursor, kDestroy);
+			z.Poll(500);
+			MoveItem(z, (uint32_t)freeSlot, kCursor);
+			z.Poll(500);
+			MoveItem(z, kCursor, kDestroy);
+			DeleteAll(got = Collect(z, 1000, [](const std::vector<Packet*>&) { return false; }));
+		}
+
+		// A quest NPC answers a hail (the zone's Perl quests work).
+		const char* hailName = getenv("EQBOT_HAIL") ? getenv("EQBOT_HAIL") : "Brohan_Ironforge";
+		if (strcmp(hailName, "-") == 0)
+		{
+			printf("[ -- ] %-22s %s\n", "quest hail", "skipped (EQBOT_HAIL=-)");
+			z.Disconnect();
+			return failures ? 1 : 0;
+		}
+		const SpawnInfo* npc = 0;
+		for (size_t i = 0; i < spawns.size(); i++)
+			if (spawns[i].npc == 1 && spawns[i].name.compare(0, strlen(hailName), hailName) == 0)
+				npc = &spawns[i];
+		if (!npc)
+			Step(false, "quest hail", std::string(hailName) + " not in " + st.zone + " (EQBOT_HAIL=<npc name>)");
+		else
+		{
+			// Stand next to the NPC (the zone takes the client's word for its position), target it, hail.
+			unsigned char u[15];
+			memset(u, 0, sizeof(u));
+			u[0] = meId & 0xFF; u[1] = meId >> 8;
+			short y = (short)npc->y, x = (short)(npc->x + 3), zz = (short)npc->z;
+			memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
+			z.Send(kClientUpdate, u, sizeof(u));
+			uint16_t target[2] = { (uint16_t)npc->id, 0 };
+			z.Send(kClientTarget, target, sizeof(target));
+			z.Poll(1000);
+			std::string display = npc->name;
+			for (size_t i = 0; i < display.size(); i++) if (display[i] == '_') display[i] = ' ';
+			while (!display.empty() && isdigit((unsigned char)display[display.size() - 1])) display.erase(display.size() - 1);
+			Say(z, charname, "Hail, " + display);
+			got = Collect(z, 10000, [&](const std::vector<Packet*>& g) { return HasText(g, display + ":"); });
+			bool answered = HasText(got, display + ":", &text);
+			Step(answered, "quest hail", answered ? text.substr(0, 90) : LastTexts(got));
+			DeleteAll(got);
+		}
+
 		z.Disconnect();
 		return failures ? 1 : 0;
 	}
@@ -496,7 +831,8 @@ namespace
 	{
 		fprintf(stderr, "usage: eqbot login  <login-host> <user> <password> [port=5999]\n"
 		                "       eqbot create <login-host> <user> <password> <character>\n"
-		                "       eqbot play   <login-host> <user> <password> <character>\n");
+		                "       eqbot play   <login-host> <user> <password> <character>\n"
+		                "       eqbot test   <login-host> <user> <password> <character>\n");
 	}
 }
 
@@ -508,6 +844,8 @@ int main(int argc, char** argv)
 		return Create(argv[2], argv[3], argv[4], argv[5]);
 	if (argc >= 6 && std::string(argv[1]) == "play")
 		return Play(argv[2], argv[3], argv[4], argv[5]);
+	if (argc >= 6 && std::string(argv[1]) == "test")
+		return Test(argv[2], argv[3], argv[4], argv[5]);
 	Usage();
 	return 2;
 }
