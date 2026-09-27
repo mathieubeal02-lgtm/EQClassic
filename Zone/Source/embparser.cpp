@@ -57,7 +57,13 @@ const char *QuestEventSubroutines[_LargestEventID] = {
 };
 
 void PerlembParser::Init() {
-	perlParser = new PerlembParser();
+	// A zone process boots zone after zone: each boot used to make a new parser and a new perl
+	// interpreter next to the old one (never freed). With several interpreters in the process, calls
+	// went to the wrong one and every quest failed with "Undefined subroutine &main::eval_file"
+	// from the second or third zone on (seen in Halas). Keep the one parser; ReloadQuests()
+	// re-initialises its interpreter.
+	if (perlParser == 0)
+		perlParser = new PerlembParser();
 }
 
 

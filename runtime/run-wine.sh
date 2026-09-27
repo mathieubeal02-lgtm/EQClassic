@@ -2,6 +2,9 @@
 # Start/stop the EQClassic servers under Wine. Usage: ./run-wine.sh start|stop|status [zones]
 cd "$(dirname "$0")"
 export WINEPREFIX=$HOME/.wine-eqc WINEDEBUG=-all
+# The embedded Perl 5.12 (perl512.dll) needs its library (Symbol, strict, IO::Scalar...): ActivePerl's lib
+# and site/lib from Dependencies.zip, in perl/. Without it every quest failed ("Undefined subroutine &main::eval_file").
+export PERL5LIB="perl/lib;perl/site/lib"
 IP=$(ip -4 route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}')
 ZONES=${2:-5}
 # Zone UDP ports start at 7000: on Linux, ports below 1024 need root (the .bat files use 1000).

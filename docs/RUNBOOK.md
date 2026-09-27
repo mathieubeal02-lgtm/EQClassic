@@ -11,7 +11,10 @@ server's LAN/public IP where noted to let other machines connect.
 - **Or** download the prebuilt "EQClassic Server Files" (`OpenEQC Server.zip`,
   https://archive.org/details/open-eqc-server) — it is the same layout, built from the same era of code.
 
-Install **ActivePerl 5.12 x86** (`Perl/bin` in `PATH`, or copy `perl512.dll` next to `zone.exe`;
+Install **ActivePerl 5.12 x86** (`Perl/bin` in `PATH`, or copy `perl512.dll` next to `zone.exe`
+and its library: `Perl/lib` and `Perl/site/lib` of `Dependencies.zip` into `perl/`, with
+`PERL5LIB=perl/lib;perl/site/lib` as `runtime/run-wine.sh` sets it. Without the library the zone
+starts but every quest fails with "Undefined subroutine &main::eval_file";
 `cmake --install` already copies it). The community reports that quests may need `Perl514.dll`
 renamed to `Perl512.dll`; try the plain 5.12 install first.
 
@@ -153,6 +156,6 @@ Ports: login **5999/udp+tcp**, world **9000/tcp** (zones/console) + UDP client p
 | Zone loads, no NPCs | `Maps/Maps/<zone>.map` missing (names lowercase). |
 | NPCs never move | Roaming needs `Maps/Nodes|Paths/<zone>*.txt` and grid data in DB (`grid`, `grid_entries`). |
 | Login accepted, world list empty | `world.exe` not connected to login: `loginserver=`/`loginport=` in `LoginServer.ini`, or login started after world. |
-| Quests silent | `quests/<zone>/<npcid>.pl` path/case; `perl512.dll` present; zone log lines `Warning - plugin.pl`. |
+| Quests silent | `quests/<zone>/<npcid>.pl` path/case; `perl512.dll` present; the Perl library in `perl/` ("Undefined subroutine &main::eval_file" in the zone log); zone log lines `Warning - plugin.pl`. `tools/eqbot/legacy-test.sh` hails a quest NPC. |
 | MySQL `Authentication plugin 'caching_sha2_password' cannot be loaded` | Recreate the DB user with `mysql_native_password`. |
 | `ZoneLoopDebug.txt` appears | Debug hook `ZONE_FREEZE_DEBUG` in `Common/Include/config.h`; should be 0. |
