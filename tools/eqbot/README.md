@@ -18,7 +18,7 @@ Without CMake, `tools/eqbot/build.sh` compiles it with g++ alone (needs libssl-d
 | `login` | Credentials (DES-encrypted like the client), session id, banner, server list, world status, session key |
 | `create` | `login`, world character list, name approval, character creation. Does nothing if the character already exists. |
 | `play` | `login`, world, enter world, then the zone handshake: player profile, zone header, spawns, "Enterzone complete". Ends with a clean disconnect. |
-| `test` | `play`'s zone entry, then scenarios in the zone: the player profile decoded (a free general slot), the spawn list decoded, a GM command answering (`#loc`), `#si` putting an item on the cursor, putting it down and summoning again (the server used to keep a copy on the cursor), and a quest NPC answering a hail (`EQBOT_HAIL=<npc name>`, default Brohan_Ironforge of North Qeynos; `-` skips it). The character's account must be a GM (status 255). |
+| `test` | `play`'s zone entry, then scenarios in the zone: the player profile decoded (a free general slot), the spawn list decoded, a GM command answering (`#loc`), `#si` putting an item on the cursor, putting it down and summoning again (the server used to keep a copy on the cursor), melee with a weapon (`EQBOT_WEAPON`, default the Fiery Avenger 11050, in the primary hand: the hits must come as slashes, not punches; the bot follows the NPC and faces it), and a quest NPC answering a hail (`EQBOT_HAIL=<npc name>`, default Brohan_Ironforge of North Qeynos; `-` skips it). The character's account must be a GM (status 255). |
 
 `legacy-test.sh [host] [user] [password] [character]` runs `test` (defaults 127.0.0.1, bot, bot, Qbottwo),
 retrying while World still holds the previous session (Error 1018).
