@@ -566,7 +566,7 @@ namespace
 
 	// Undoes the servers' packet encryption (Common/Source/packet_functions.cpp): each word was
 	// rotated, offset and chained with the previous one, after swapping word 0 with the middle word.
-	void Decrypt(std::vector<unsigned char>& d, uint32_t crypt, uint32_t offset, int rot1, int rot2)
+	void Decrypt(std::vector<unsigned char>& d, uint32_t crypt, uint32_t offset, int rot1, int rot2, bool swapped = true)
 	{
 		uint32_t* w = (uint32_t*)&d[0];
 		size_t words = d.size() / 4;
@@ -577,7 +577,7 @@ namespace
 			crypt = crypt + orig - offset;
 			w[i] = orig;
 		}
-		if (d.size() / 8 < words)
+		if (swapped && d.size() / 8 < words)
 		{
 			uint32_t swap = w[0];
 			w[0] = w[d.size() / 8];
@@ -608,6 +608,51 @@ namespace
 
 	// NewSpawn_Struct[] of the zone's spawn packets (EncryptZoneSpawnPacket + DeflatePacket):
 	// 168 bytes each, the Spawn_Struct after a 4-byte placeholder.
+	SpawnInfo ParseSpawn(const unsigned char* sp)
+	{
+		SpawnInfo si;
+		si.id = sp[62] | (sp[63] << 8);
+		si.name = std::string((const char*)sp + 100, strnlen((const char*)sp + 100, 30));
+		si.npc = sp[73];
+		si.level = sp[76];
+		si.y = (short)(sp[51] | (sp[52] << 8));
+		si.x = (short)(sp[53] | (sp[54] << 8));
+		si.z = (short)(sp[55] | (sp[56] << 8));
+		return si;
+	}
+
+	std::vector<SpawnInfo> DecodeSpawns(const std::vector<std::vector<unsigned char> >& packets);
+
+	const int16 kNewSpawn = 0x4921;	// one NewSpawn_Struct (168 bytes), EncryptSpawnPacket: not deflated, no swap
+
+	// Spawns known in the zone: the list given on entry, then every NPC spawned later (a zone that just
+	// booted fills up after the player is in).
+	std::vector<SpawnInfo>* g_spawns = 0;
+
+	void AbsorbSpawns(const std::vector<Packet*>& got)
+	{
+		if (!g_spawns)
+			return;
+		for (size_t i = 0; i < got.size(); i++)
+		{
+			if (getenv("EQBOT_VERBOSE") && got[i]->opcode != 0xa120)
+				printf("       test <- 0x%04x %d bytes\n", (unsigned)(unsigned short)got[i]->opcode, (int)got[i]->size);
+			if (got[i]->opcode == kZoneSpawns)
+			{
+				// A later spawn list (a zone still loading sends its NPCs this way too).
+				std::vector<std::vector<unsigned char> > one(1, std::vector<unsigned char>(got[i]->pBuffer, got[i]->pBuffer + got[i]->size));
+				std::vector<SpawnInfo> more = DecodeSpawns(one);
+				g_spawns->insert(g_spawns->end(), more.begin(), more.end());
+				continue;
+			}
+			if (got[i]->opcode != kNewSpawn || got[i]->size < 168)
+				continue;
+			std::vector<unsigned char> d(got[i]->pBuffer, got[i]->pBuffer + got[i]->size);
+			Decrypt(d, 0, 0x65e7, 9, 13, false);
+			g_spawns->push_back(ParseSpawn(&d[4]));
+		}
+	}
+
 	std::vector<SpawnInfo> DecodeSpawns(const std::vector<std::vector<unsigned char> >& packets)
 	{
 		std::vector<SpawnInfo> out;
@@ -620,16 +665,7 @@ namespace
 			std::vector<unsigned char> raw = Inflate(d, 400000);
 			for (size_t o = 0; o + 168 <= raw.size(); o += 168)
 			{
-				const unsigned char* sp = &raw[o + 4];
-				SpawnInfo si;
-				si.id = sp[62] | (sp[63] << 8);
-				si.name = std::string((const char*)sp + 100, strnlen((const char*)sp + 100, 30));
-				si.npc = sp[73];
-				si.level = sp[76];
-				si.y = (short)(sp[51] | (sp[52] << 8));
-				si.x = (short)(sp[53] | (sp[54] << 8));
-				si.z = (short)(sp[55] | (sp[56] << 8));
-				out.push_back(si);
+				out.push_back(ParseSpawn(&raw[o + 4]));
 			}
 		}
 		return out;
@@ -675,6 +711,7 @@ namespace
 		while (NowMs() < end)
 		{
 			std::vector<Packet*> got = z.Poll(200);
+			AbsorbSpawns(got);
 			all.insert(all.end(), got.begin(), got.end());
 			if (done(all))
 				break;
@@ -737,6 +774,12 @@ namespace
 
 		// The spawns: this player among them, and NPCs.
 		std::vector<SpawnInfo> spawns = DecodeSpawns(st.spawnPackets);
+		g_spawns = &spawns;
+		// A zone that just booted spawns its NPCs after the player came in: wait for them.
+		std::vector<Packet*> waited = Collect(z, 15000, [&](const std::vector<Packet*>&) {
+			for (size_t i = 0; i < spawns.size(); i++) if (spawns[i].npc == 1) return true;
+			return false; });
+		DeleteAll(waited);
 		int npcs = 0, meId = 0;
 		for (size_t i = 0; i < spawns.size(); i++)
 		{
@@ -792,13 +835,22 @@ namespace
 		if (strcmp(hailName, "-") == 0)
 		{
 			printf("[ -- ] %-22s %s\n", "quest hail", "skipped (EQBOT_HAIL=-)");
+			g_spawns = 0;
 			z.Disconnect();
 			return failures ? 1 : 0;
 		}
-		const SpawnInfo* npc = 0;
-		for (size_t i = 0; i < spawns.size(); i++)
-			if (spawns[i].npc == 1 && spawns[i].name.compare(0, strlen(hailName), hailName) == 0)
-				npc = &spawns[i];
+		SpawnInfo found;
+		auto findNpc = [&]() {
+			for (size_t i = 0; i < spawns.size(); i++)
+				if (spawns[i].npc == 1 && spawns[i].name.compare(0, strlen(hailName), hailName) == 0)
+				{
+					found = spawns[i];
+					return true;
+				}
+			return false; };
+		if (!findNpc())
+			DeleteAll(got = Collect(z, 15000, [&](const std::vector<Packet*>&) { return findNpc(); }));
+		const SpawnInfo* npc = findNpc() ? &found : 0;
 		if (!npc)
 			Step(false, "quest hail", std::string(hailName) + " not in " + st.zone + " (EQBOT_HAIL=<npc name>)");
 		else
@@ -823,6 +875,7 @@ namespace
 			DeleteAll(got);
 		}
 
+		g_spawns = 0;
 		z.Disconnect();
 		return failures ? 1 : 0;
 	}
