@@ -73,8 +73,8 @@ public sealed partial class ZoneInstance
     /// <summary>#damage and #kill: damage from the GM, with its consequences (death, experience, loot rights).</summary>
     public void GmDamage(int gmId, int targetId, int damage)
     {
-        if (!_entities.TryGetValue(gmId, out var gm) || !_entities.TryGetValue(targetId, out var target) || target.IsCorpse || target == gm)
-            return;
+        if (!_entities.TryGetValue(gmId, out var gm) || !_entities.TryGetValue(targetId, out var target) || target.IsCorpse)
+            return; // the GM too (#kill self, #damage n self)
         target.Hp -= damage;
         AfterHarm(gm, target, damage);
     }

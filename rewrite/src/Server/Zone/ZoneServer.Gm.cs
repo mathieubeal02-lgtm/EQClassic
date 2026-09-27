@@ -106,16 +106,16 @@ public sealed partial class ZoneServer
         }),
         new("heal", GmStatus, "- heals your target (or you) completely", (peer, p, _) => p.Instance.GmHeal((Target(p) ?? Me(p))!.Id)),
         new("mana", GmStatus, "- refills your target's (or your) mana", (peer, p, _) => p.Instance.GmHeal((Target(p) ?? Me(p))!.Id, hp: false)),
-        new("damage", GmStatus, "<amount> - damages your target", (peer, p, a) =>
+        new("damage", GmStatus, "<amount> [self] - damages your target (or you, with self)", (peer, p, a) =>
         {
-            if (a.Length >= 2 && int.TryParse(a[1], out int d) && Target(p) is { } t)
+            if (a.Length >= 2 && int.TryParse(a[1], out int d) && (a.Length >= 3 && a[2] == "self" ? Me(p) : Target(p)) is { } t)
                 p.Instance.GmDamage(p.EntityId, t.Id, d);
             else
                 Tell(peer, "Usage: #damage <amount>, with a target.");
         }),
-        new("kill", GmStatus, "- kills your target", (peer, p, _) =>
+        new("kill", GmStatus, "[self] - kills your target (or you, with self)", (peer, p, a) =>
         {
-            if (Target(p) is { } t)
+            if ((a.Length >= 2 && a[1] == "self" ? Me(p) : Target(p)) is { } t)
                 p.Instance.GmDamage(p.EntityId, t.Id, t.Hp + 1);
             else
                 Tell(peer, "You need a target.");

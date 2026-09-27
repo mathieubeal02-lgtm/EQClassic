@@ -163,6 +163,21 @@ Step("quest: hail Brohan", () =>
     bool ok = Heard(l => l.StartsWith("Brohan Ironforge says"), 10);
     return (ok, ok ? Since().First(l => l.StartsWith("Brohan Ironforge says")) : Last());
 });
+Step("quest: hand-in", () =>
+{
+    // Moodoro Finharn sells the Testament of Vanear (17918) for two gold pieces handed over in a trade.
+    Chat("#givemoney 0 0 5");
+    if (!GoTo("Moodoro")) return (false, "Moodoro Finharn not in the zone");
+    Chat("/trade");
+    if (!Run(() => client.Trade != null, 8)) return (false, $"no trade window; {Last(2)}");
+    client.OfferCoins(0, 2, 0, 0);
+    Run(() => false, 1);
+    client.AcceptTrade();
+    bool book = Run(() => client.Inventory?.Slots.Any(s => s.ItemId == 17918) == true, 10);
+    bool said = Heard(l => l.StartsWith("Moodoro Finharn says, 'HA!!"), 5);
+    Chat("#clearinventory");
+    return (book && said, $"book {book}, said {said}; {Last(2)}");
+});
 Step("melee: kill a rodent", () =>
 {
     if (!GoTo("a_rodent")) return (false, "no rodent in the zone");
@@ -249,6 +264,35 @@ Step("spells: scribe, memorise, cast", () =>
         Run(() => false, 3);
     }
     return (false, outcome);
+});
+Step("death: corpse and recovery", () =>
+{
+    // Die carrying a muffin: it stays on the corpse; come back, loot the corpse, the muffin is back.
+    Chat("#clearinventory");
+    Chat("#summonitem 13014");
+    if (!Run(() => client.Inventory?.Slots.Any(s => s.ItemId == 13014) == true, 8)) return (false, "no muffin");
+    string deathZone = client.Zone!.Zone;
+    Chat("#kill self");
+    if (!Run(() => client.Inventory?.Slots.All(s => s.ItemId != 13014) == true, 10)) return (false, $"still carrying the muffin; {Last(2)}");
+    Run(() => client.State == GameState.InZone && client.Player != null, 30);
+    if (client.Zone?.Zone != deathZone)
+    {
+        Chat($"#zone {deathZone}");
+        if (!Run(() => InZone(deathZone) && client.Player != null, 30)) return (false, $"could not go back to {deathZone}");
+    }
+    ZoneView.EntityView? body = null;
+    Run(() => (body = client.Zone?.Entities.FirstOrDefault(e => e.Spawn.IsCorpse && e.Spawn.Name.StartsWith(character + "'s", StringComparison.OrdinalIgnoreCase))) != null, 10);
+    if (body is null) return (false, "no corpse of mine in the zone");
+    client.SetTarget(body.Id);
+    Chat("#goto");
+    Run(() => false, 1.5);
+    client.Loot();
+    if (!Run(() => client.LootingCorpse != null && client.LootItems.Count > 0, 8)) return (false, $"corpse not opened; {Last(2)}");
+    for (int i = client.LootItems.Count - 1; i >= 0; i--) client.TakeLoot(i);
+    bool back = Run(() => client.Inventory?.Slots.Any(s => s.ItemId == 13014) == true, 8);
+    client.EndLoot();
+    Run(() => client.LootingCorpse == null, 5);
+    return (back, back ? $"died in {deathZone}, the muffin came back from the corpse" : Last(3));
 });
 Step("GM: #summonitem, eat", () =>
 {
