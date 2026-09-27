@@ -215,10 +215,11 @@ Step("pet: kills, its owner loots", () =>
     if (!Run(() => client.Zone!.Entities.Any(e => !known.Contains(e.Id) && !e.Spawn.IsPlayer && Near(e)), 8))
         return (false, $"no pet; {Last(2)}");
     if (!GoTo("a_rodent") && !GoTo("a_rat")) return (false, "no rodent in the zone");
+    var oldCorpses = client.Zone!.Entities.Where(e => e.Spawn.IsCorpse).Select(e => e.Id).ToHashSet();
     client.ExecuteChat("/pet attack");
     if (!Heard(l => l.Contains("has been slain by"), 90)) return (false, $"the pet did not kill; {Last(3)}");
     ZoneView.EntityView? corpse = null;
-    Run(() => (corpse = client.Zone?.Entities.Where(e => e.Spawn.IsCorpse && e.Spawn.Name.StartsWith("a_r", StringComparison.OrdinalIgnoreCase))
+    Run(() => (corpse = client.Zone?.Entities.Where(e => e.Spawn.IsCorpse && !oldCorpses.Contains(e.Id) && e.Spawn.Name.StartsWith("a_r", StringComparison.OrdinalIgnoreCase))
         .OrderBy(e => client.Player is { } me ? Math.Abs(e.Latest.X - me.Position.X) + Math.Abs(e.Latest.Y - me.Position.Y) : 0).FirstOrDefault()) != null, 5);
     if (corpse is null) return (false, "no corpse appeared");
     client.SetTarget(corpse.Id);
@@ -382,6 +383,31 @@ Step("bank: deposit", () =>
     int after = client.Bank?.Platinum ?? -1;
     client.CloseBank();
     return (ok, $"{name}: vault {before}p -> {after}p");
+});
+Step("sit and regenerate", () =>
+{
+    client.SetTarget(null);
+    Chat("#damage 60 self");
+    if (!Run(() => client.Hp > 0 && client.Hp <= client.MaxHp - 60, 8)) return (false, $"not hurt: {client.Hp}/{client.MaxHp}");
+    int hurt = client.Hp;
+    Chat("/sit");
+    bool healed = Run(() => client.Hp > hurt, 15); // one 6 s tic, sitting doubles it
+    Chat("/stand");
+    Chat("#heal");
+    return (healed, $"hp {hurt} -> {client.Hp} sitting");
+});
+Step("bind and gate", () =>
+{
+    // Bind Affinity (35) here in North Qeynos, go to South Qeynos, Gate (36) back.
+    if (!InZone("qeynos2")) { Chat("#zone qeynos2"); Run(() => InZone("qeynos2") && client.Player != null, 30); }
+    client.SetTarget(null);
+    Chat("#cast 35");
+    if (!Heard(l => l.StartsWith("Bind Affinity lands"), 8)) return (false, $"no bind; {Last(2)}");
+    Chat("#zone qeynos");
+    if (!Run(() => InZone("qeynos") && client.Player != null, 30)) return (false, "could not reach qeynos");
+    Chat("#cast 36");
+    bool home = Run(() => InZone("qeynos2") && client.Player != null, 30);
+    return (home, home ? "gated back to the bind in qeynos2" : $"in {client.Zone?.Zone}; {Last(2)}");
 });
 Step("zone change and back", () =>
 {

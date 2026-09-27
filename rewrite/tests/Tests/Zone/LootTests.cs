@@ -83,6 +83,17 @@ public class LootTests
     }
 
     [Fact]
+    public void The_killer_keeps_the_right_after_zoning_out_and_back()
+    {
+        var (zone, player, corpse) = KillRat();
+        zone.RemovePlayer(player.Id);
+        var back = zone.AddPlayer("Qbot", 9, 0, 1, new Vec3(0, 0, 0)); // a new entity id
+        zone.DrainEvents();
+        zone.OpenLoot(back.Id, corpse);
+        Assert.Contains(zone.DrainEvents(), e => e is ZoneInstance.Told { Text: "You receive 1 silver from the corpse." });
+    }
+
+    [Fact]
     public void Others_wait_for_free_for_all_and_must_be_close()
     {
         var (zone, player, corpse) = KillRat();

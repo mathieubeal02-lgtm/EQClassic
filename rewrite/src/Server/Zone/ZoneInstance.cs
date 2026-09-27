@@ -192,7 +192,8 @@ public sealed partial class ZoneInstance
         public Coins Coins;
         public double DecayAt;
         public double FreeForAllAt;
-        public HashSet<int> Rights = new();
+        /// <summary>Who may loot before it is free for all: character names (a player who zones out and back keeps the right).</summary>
+        public HashSet<string> Rights = new(StringComparer.OrdinalIgnoreCase);
         public int? Looter;
         /// <summary>Player corpses: whose it is (only they loot it), its player_corpses id, class and deity for saving.</summary>
         public string? Owner;
@@ -666,7 +667,8 @@ public sealed partial class ZoneInstance
             FreeForAllAt = _time + FreeForAllSeconds,
         };
         if (looterId is int id)
-            corpse.Corpse.Rights.Add(id);
+            if (_entities.TryGetValue(id, out var looter))
+                corpse.Corpse.Rights.Add(looter.Name);
         corpse.Fighter = npc.Fighter;
         corpse.Hp = 0;
         corpse.Texture = npc.Npc?.Texture ?? npc.Texture; // an ice goblin's corpse stays blue
@@ -694,7 +696,7 @@ public sealed partial class ZoneInstance
             _events.Add(new Told(playerId, "You may not loot this corpse."));
             return;
         }
-        if (_time < corpse.FreeForAllAt && corpse.Rights.Count > 0 && !corpse.Rights.Contains(playerId))
+        if (_time < corpse.FreeForAllAt && corpse.Rights.Count > 0 && !corpse.Rights.Contains(player.Name))
         {
             _events.Add(new Told(playerId, "You may not loot this corpse at this time."));
             return;
