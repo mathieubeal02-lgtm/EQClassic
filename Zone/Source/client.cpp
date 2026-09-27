@@ -128,6 +128,7 @@ Client::Client(int32 in_ip, int16 in_port, int in_send_socket)
 	hitWhileCasting = false;
 	isZoning = false;
 	zoningZone[0] = 0;
+	zoneLinesArmed = false;
 	InWater = false;
 	berserk = false;
 	SetCraftingStation(0);
@@ -3795,6 +3796,25 @@ void Client::ZonePC(char* zonename, float x, float y, float z)
 void Client::ScanForZoneLines()
 {
 	bool debugFlag = true;
+
+	// A player who arrives inside a zone line's box (many zone_points send you right onto the way
+	// back: Lavastorm's entrance to Nagafen's Lair at 483, 915 and Nagafen's exit landing at 485, 916)
+	// was sent straight back, and back again, endlessly. Zone lines only work once the player has
+	// stood outside every one of them since zoning in: walking out and back in zones as expected.
+	if (!zoneLinesArmed)
+	{
+		for (int i = 0; i < zone->numberOfZoneLineNodes; i++)
+		{
+			const ZoneLineNode* line = zone->thisZonesZoneLines[i];
+			if (line->useNewZoning >= 1)
+				continue;
+			float zDiff = line->maxZDiff ? line->maxZDiff : 50000;
+			if (fabsf(GetX() - line->x) <= line->range && fabsf(GetY() - line->y) <= line->range
+				&& fabsf(GetZ() - line->z) <= zDiff && GetZ() + 10 >= line->z)
+				return;	// still where it arrived
+		}
+		zoneLinesArmed = true;
+	}
 
 
 	//Yeahlight: Check to see if player is in range of each zoneline node

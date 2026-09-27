@@ -636,6 +636,7 @@ private:
 	sint32	zoningY;
 	sint32	zoningZ;
 	char	zoningZone[16];	// the zone zoningX/Y/Z are for: a later zone change to another zone ignores them
+	bool	zoneLinesArmed;	// zone lines work once the player has stood outside all of them since zoning in
 
 	// Pinedepain // Start -- Instrument skill modifiers
 	uint8	singingInstrumentMod;
