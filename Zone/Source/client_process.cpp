@@ -1706,7 +1706,14 @@ void Client::ProcessOP_MoveItem(APPLAYER* pApp)
 			if (from_charges != 0)
 			{
 				*from_charges = (mi->number_in_stack == 0) ? chargesreplaced:*from_charges-mi->number_in_stack;
-				if (*from_charges == 0 || itemreplaced != 0xFFFF)
+				// The whole item moved (number_in_stack 0): the source now holds what was replaced, an item
+				// or nothing. The source used to be emptied only when its charges came back as 0, but an
+				// empty slot's charges are never reset: an item put down from the cursor into such a slot
+				// stayed on the cursor server side too (a clicky with unlimited charges, seen in Halas),
+				// and #si then refused to summon onto a cursor the client showed empty.
+				if (mi->number_in_stack == 0 && itemreplaced == 0xFFFF)
+					*from_charges = 0;
+				if (mi->number_in_stack == 0 || *from_charges == 0 || itemreplaced != 0xFFFF)
 					*from_slot = itemreplaced;
 			}
 		}
