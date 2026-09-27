@@ -6,7 +6,7 @@ export WINEPREFIX=$HOME/.wine-eqc WINEDEBUG=-all
 # and site/lib from Dependencies.zip, in perl/. Without it every quest failed ("Undefined subroutine &main::eval_file").
 export PERL5LIB="perl/lib;perl/site/lib"
 IP=$(ip -4 route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}')
-ZONES=${2:-5}
+ZONES=${2:-12}	# zone processes: one zone each; empty zones stay up 5 min (some 1 h), so 5 ran out (zone unavailable)
 # Zone UDP ports start at 7000: on Linux, ports below 1024 need root (the .bat files use 1000).
 case "$1" in
   start)
@@ -25,5 +25,5 @@ case "$1" in
     ps -eo pid,args | awk '$2 ~ /^[.]\/(login|world|zone)[.]exe$/ {print $1}' | xargs -r kill ;;
   status)
     ps -eo pid,args | awk '$2 ~ /^[.]\/(login|world|zone)[.]exe$/'
-    ss -lntu | awk 'NR==1 || /:(5999|9000|700[0-9]) /' ;;
+    ss -lntu | awk 'NR==1 || /:(5999|9000|70[0-9][0-9]) /' ;;
 esac
