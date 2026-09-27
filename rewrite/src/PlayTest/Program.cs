@@ -438,23 +438,21 @@ Step("bank: deposit and withdraw", () =>
 });
 Step("aggro: a gnoll attacks", () =>
 {
-    // Fippy Darkpaw, the gnoll who runs into North Qeynos, attacks a player next to him by himself.
+    // Fippy Darkpaw attacks a player next to him by himself. The zone's own Fippy is often busy with the
+    // guards: a fresh one (npc type 2001) is spawned next to the player instead.
     if (!InZone("qeynos2")) { Chat("#zone qeynos2"); Run(() => InZone("qeynos2") && client.Player != null, 30); }
-    if (!GoTo("Fippy"))
-    {
-        Chat("#repopzone"); // killed by an earlier run: bring the zone's spawns back
-        Run(() => client.Zone!.Entities.Any(e => !e.Spawn.IsCorpse && e.Spawn.Name.StartsWith("Fippy")), 10);
-        if (!GoTo("Fippy")) return (false, "Fippy Darkpaw not up, even after #repopzone");
-    }
     client.SetTarget(null);
+    var known = client.Zone!.Entities.Select(e => e.Id).ToHashSet();
+    Chat("#spawn 2001");
+    ZoneView.EntityView? fippy = null;
+    if (!Run(() => (fippy = client.Zone!.Entities.FirstOrDefault(e => !known.Contains(e.Id) && e.Spawn.Name.StartsWith("Fippy"))) != null, 8))
+        return (false, $"no Fippy spawned; {Last(2)}");
     bool attacked = Heard(l => l.StartsWith("Fippy Darkpaw hits YOU") || l.StartsWith("Fippy Darkpaw tries to hit YOU"), 20);
-    if (client.Zone!.Entities.FirstOrDefault(e => !e.Spawn.IsPlayer && !e.Spawn.IsCorpse && e.Spawn.Name.StartsWith("Fippy")) is { } fippy)
-    {
-        client.SetTarget(fippy.Id);
-        Chat("#kill");
-    }
+    client.SetTarget(fippy!.Id);
+    Chat("#kill");
     Chat("#heal");
-    return (attacked, attacked ? "Fippy Darkpaw attacked on his own" : Last(3));
+    client.SetTarget(null);
+    return (attacked, attacked ? "a fresh Fippy Darkpaw attacked on his own" : Last(3));
 });
 Step("buffs: spirit of wolf", () =>
 {
