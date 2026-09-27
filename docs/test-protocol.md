@@ -40,6 +40,7 @@ and plays these scenarios, each reported OK / FAIL with what it saw, in a Markdo
 | translocate: asked, accepted | group Qpartner, #cast 1336 (Fay) or 1337 (Tox, when already in gfaydark) on them | Qpartner gets the offer, says yes, lands in the other zone |
 | GM: #flymode | #flymode on, then off | the client flies, then falls again |
 | quest: proximity greeting | #zone erudnint, carry the note 18729, go to Lanken Rjarn | EVENT_SPAWN sets his box, EVENT_ENTER greets |
+| character creation: rules and starting items | bot2 builds Qcreate (troll shaman): 30 clicks on STR, then a request with 30 in STR, then the valid one | the builder stops at 25, the server refuses 30, accepts 25+5, the packs hold the starting items; Qcreate is deleted |
 
 Setup: a server with the database (`--db`), a GM account for the first player (`UPDATE account SET
 status = 255 WHERE id = <world account>`), and a second login account `bot2` (SHA-1 password). The

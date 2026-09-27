@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using EQClassic.ClientCore;
+using EQClassic.Shared.Characters;
 using EQClassic.Shared.Zone;
 using EQClassic.Shared.World;
 using MySqlConnector;
@@ -527,6 +528,48 @@ Step("quest: proximity greeting", () =>
     bool ok = Heard(l => l.Contains("I am Lanken Rjarn"), 10);
     Chat("#clearinventory");
     return (ok, ok ? "greeted on entering his box" : Last(2));
+});
+
+Step("character creation: rules and starting items", () =>
+{
+    // bot2 makes Qcreate, a troll shaman: at most 25 of the 30 points in one statistic (the builder
+    // stops there, the server refuses more), the starting items in the packs; then Qcreate is removed.
+    Scalar("DELETE FROM character_ WHERE name = 'Qcreate'");
+    using var maker = new GameClient(fingerprint == "-" ? null : fingerprint);
+    clients.Add(maker);
+    try
+    {
+        maker.Connect(host, port);
+        if (!Run(() => maker.State == GameState.Login, 10)) return (false, $"state {maker.State}");
+        maker.Login("bot2", "bot2");
+        if (!Run(() => maker.State == GameState.ServerSelect, 10)) return (false, $"login: {maker.LastError}");
+        maker.SelectWorld(maker.Worlds[0].Id);
+        if (!Run(() => maker.State == GameState.CharacterSelect, 10)) return (false, $"world: {maker.LastError}");
+        maker.RequestCreationOptions();
+        if (!Run(() => maker.CreationOptions?.Count > 0, 10)) return (false, "no creation options");
+        var builder = new CharacterBuilder(maker.CreationOptions!);
+        builder.SelectRace(9);
+        builder.SelectClass(10);
+        int str = builder.Stat(0);
+        for (int i = 0; i < 30; i++) builder.AddPoint(0);
+        bool capped = builder.Stat(0) == str + CreationRules.MaxPointsPerStat && builder.PointsLeft == 30 - CreationRules.MaxPointsPerStat;
+        while (builder.PointsLeft > 0) builder.AddPoint(1);
+        var good = builder.Request("Qcreate");
+        // 30 in STR, as a client without the rule would send: refused.
+        maker.CreateCharacter(good with { Stats = good.Stats with { Str = good.Stats.Str + 5, Sta = good.Stats.Sta - 5 } });
+        bool refused = Run(() => maker.LastError != null, 8) && !maker.Characters.Any(c => c.Name == "Qcreate");
+        maker.CreateCharacter(good);
+        bool made = Run(() => maker.Characters.Any(c => c.Name == "Qcreate"), 8);
+        // The first general slot (22) holds a starting item: profile offset 168 + 2 × 22.
+        var slot22 = Scalar("SELECT HEX(SUBSTRING(profile, 169 + 44, 2)) FROM character_ WHERE name = 'Qcreate'") as string;
+        bool items = slot22 is not null && slot22 != "FFFF" && slot22 != "0000";
+        return (capped && refused && made && items, $"25 cap {capped}, 30 refused {refused}, created {made}, starting item {items} ({slot22})");
+    }
+    finally
+    {
+        clients.Remove(maker);
+        Scalar("DELETE FROM character_ WHERE name = 'Qcreate'");
+    }
 });
 
 int failed = results.Count(r => !r.Ok);
