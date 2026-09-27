@@ -35,7 +35,9 @@ and plays these scenarios, each reported OK / FAIL with what it saw, in a Markdo
 | equipment change | a chest piece for the class, worn | slot 17 holds it (others get EntityLooks) |
 | GM: #givemoney | platinum | the purse |
 | merchant: buy | U on a merchant, sell the packs, buy | the goods, sold items, money spent |
-| bank: deposit | South Qeynos banker | one platinum more in the vault |
+| bank: deposit and withdraw | #zone qeynos, U on the banker, 1p in, then 1p out | the vault goes up by 1p, then back, and the purse gets it |
+| aggro: a gnoll attacks | #zone qeynos2, go next to Fippy Darkpaw, no target | he attacks by himself (then #kill) |
+| buffs: spirit of wolf | #cast 278 on yourself | the buff list gives +movement, the client runs faster |
 | sit and regenerate | #damage 60 self, /sit | hit points come back within a tic |
 | bind and gate | #cast 35 (Bind Affinity) in qeynos2, #zone qeynos, #cast 36 (Gate) | back in qeynos2 |
 | zone change and back | #zone qeynos, back | both zones entered |

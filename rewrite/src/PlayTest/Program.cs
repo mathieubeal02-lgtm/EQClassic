@@ -417,7 +417,7 @@ Step("merchant: buy", () =>
     client.CloseMerchant();
     return (paid && sold > 0, $"{name}: sold {sold}, bought {good}; {Last(2)}");
 });
-Step("bank: deposit", () =>
+Step("bank: deposit and withdraw", () =>
 {
     Chat("#zone qeynos"); // the bank is in South Qeynos
     if (!Run(() => InZone("qeynos"), 30)) return (false, "could not reach qeynos");
@@ -429,8 +429,34 @@ Step("bank: deposit", () =>
     client.BankMoney(1, 0, 0, 0, 0, 0, 0, 0);
     bool ok = Run(() => client.Bank?.Platinum == before + 1, 8);
     int after = client.Bank?.Platinum ?? -1;
+    // And out again: the vault goes back, the purse gets it.
+    int purse = client.Inventory?.Platinum ?? 0;
+    client.BankMoney(0, 0, 0, 0, 1, 0, 0, 0);
+    bool withdrawn = Run(() => client.Bank?.Platinum == before && client.Inventory?.Platinum == purse + 1, 8);
     client.CloseBank();
-    return (ok, $"{name}: vault {before}p -> {after}p");
+    return (ok && withdrawn, $"{name}: vault {before}p -> {after}p -> {client.Bank?.Platinum ?? before}p, withdrawn {withdrawn}");
+});
+Step("aggro: a gnoll attacks", () =>
+{
+    // Fippy Darkpaw, the gnoll who runs into North Qeynos, attacks a player next to him by himself.
+    if (!InZone("qeynos2")) { Chat("#zone qeynos2"); Run(() => InZone("qeynos2") && client.Player != null, 30); }
+    if (!GoTo("Fippy")) return (false, "Fippy Darkpaw not up");
+    client.SetTarget(null);
+    bool attacked = Heard(l => l.StartsWith("Fippy Darkpaw hits YOU") || l.StartsWith("Fippy Darkpaw tries to hit YOU"), 20);
+    if (client.Zone!.Entities.FirstOrDefault(e => !e.Spawn.IsPlayer && !e.Spawn.IsCorpse && e.Spawn.Name.StartsWith("Fippy")) is { } fippy)
+    {
+        client.SetTarget(fippy.Id);
+        Chat("#kill");
+    }
+    Chat("#heal");
+    return (attacked, attacked ? "Fippy Darkpaw attacked on his own" : Last(3));
+});
+Step("buffs: spirit of wolf", () =>
+{
+    client.SetTarget(null);
+    Chat("#cast 278");
+    bool fast = Run(() => client.Buffs?.MovementSpeed > 0 && client.Player?.SpeedFactor > 1f, 8);
+    return (fast, $"movement +{client.Buffs?.MovementSpeed}%, speed x{client.Player?.SpeedFactor:0.00}");
 });
 Step("sit and regenerate", () =>
 {
