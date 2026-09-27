@@ -294,6 +294,25 @@ Step("death: corpse and recovery", () =>
     Run(() => client.LootingCorpse == null, 5);
     return (back, back ? $"died in {deathZone}, the muffin came back from the corpse" : Last(3));
 });
+Step("bags: put in and take out", () =>
+{
+    Chat("#clearinventory");
+    Chat("#summonitem 17005"); // Backpack
+    Chat("#summonitem 13014"); // Muffin
+    if (!Run(() => client.Inventory?.Slots.Any(s => s.ItemId == 17005) == true && client.Inventory.Slots.Any(s => s.ItemId == 13014), 8))
+        return (false, "no backpack or muffin");
+    var slots = client.Inventory!.Slots.ToList();
+    int bag = slots.FindIndex(22, s => s.ItemId == 17005), muffin = slots.FindIndex(22, s => s.ItemId == 13014);
+    int cell = PlayerInventory.BagSlotBase + (bag - PlayerInventory.FirstGeneral) * PlayerInventory.BagCells;
+    client.MoveItem(muffin, cell);
+    bool inBag = Run(() => client.Inventory?.BagCellsOrEmpty.ElementAtOrDefault(cell - PlayerInventory.BagSlotBase)?.ItemId == 13014
+        && client.Inventory.Slots[muffin].ItemId == 0, 8);
+    client.MoveItem(cell, muffin);
+    bool outOfBag = Run(() => client.Inventory?.Slots[muffin].ItemId == 13014, 8);
+    Chat("#clearinventory");
+    Run(() => client.Inventory?.Slots.Skip(PlayerInventory.FirstGeneral).All(s => s.ItemId == 0) == true, 8);
+    return (inBag && outOfBag, $"into the backpack {inBag}, back out {outOfBag}; {Last(1)}");
+});
 Step("GM: #summonitem, eat", () =>
 {
     Chat("#summonitem 13014 2");
