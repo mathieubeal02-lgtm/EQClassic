@@ -103,6 +103,9 @@ Visual Studio's debug CRT DLLs (`MSVCP140D.dll`…), which exist on no normal ma
 `run-wine.sh start [zones]` / `stop` / `status` starts login, world and N dynamic zones with logs in
 `logs/`. The servers' own logs (`logs/eqc_debug_*.log`) are more complete than stdout, which is buffered.
 Zones that print `Entering sleep mode` are healthy: they wait for world to assign them a zone.
+Each dynamic zone process hosts one zone, and an empty zone stays up for its `zone.shutdowndelay`
+(5 min for most, up to 1 h): with too few processes (5 used to be the default) players get "zone
+unavailable" after visiting a few zones. `run-wine.sh` starts 12 (about 50 MB each under Wine).
 Zone UDP ports start at 7000 under Wine: on Linux, ports below 1024 need root, and a zone that cannot
 bind its port logs `NetConnection::Init failed` (the client then gets "That zone is unavailable").
 First successful end-to-end session (2026-09-25): Trilogy client on Windows → login → world →
