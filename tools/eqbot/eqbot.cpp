@@ -621,6 +621,8 @@ namespace
 		return si;
 	}
 
+	std::vector<SpawnInfo> DecodeSpawns(const std::vector<std::vector<unsigned char> >& packets);
+
 	const int16 kNewSpawn = 0x4921;	// one NewSpawn_Struct (168 bytes), EncryptSpawnPacket: not deflated, no swap
 
 	// Spawns known in the zone: the list given on entry, then every NPC spawned later (a zone that just
@@ -633,6 +635,16 @@ namespace
 			return;
 		for (size_t i = 0; i < got.size(); i++)
 		{
+			if (getenv("EQBOT_VERBOSE") && got[i]->opcode != 0xa120)
+				printf("       test <- 0x%04x %d bytes\n", (unsigned)(unsigned short)got[i]->opcode, (int)got[i]->size);
+			if (got[i]->opcode == kZoneSpawns)
+			{
+				// A later spawn list (a zone still loading sends its NPCs this way too).
+				std::vector<std::vector<unsigned char> > one(1, std::vector<unsigned char>(got[i]->pBuffer, got[i]->pBuffer + got[i]->size));
+				std::vector<SpawnInfo> more = DecodeSpawns(one);
+				g_spawns->insert(g_spawns->end(), more.begin(), more.end());
+				continue;
+			}
 			if (got[i]->opcode != kNewSpawn || got[i]->size < 168)
 				continue;
 			std::vector<unsigned char> d(got[i]->pBuffer, got[i]->pBuffer + got[i]->size);
