@@ -19,6 +19,7 @@
 #include <zlib.h>
 #include <sys/time.h>
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -559,10 +560,40 @@ namespace
 	const int16 kMoveItem = 0x2c21;			// MoveItem_Struct: from, to, number_in_stack (uint32 each)
 	const int16 kClientTarget = 0x6221;		// ClientTarget_Struct: int16 target, int16 unused
 	const int16 kClientUpdate = 0xf320;		// SpawnPositionUpdate_Struct (15 bytes)
+	const int16 kAutoAttack = 0x5121;		// uint32: 1 on, 0 off
+	const int16 kDeath = 0x4a20;			// Death_Struct: spawn id, killer id, ..., attack skill at 14
+	const int16 kAction = 0x5820;			// Action_Struct: a hit (target, source, type = attack skill, damage)
 	const int SaySlot = 8;					// MessageChannel_SAY
 	const uint32_t kCursor = 0, kDestroy = 0xFFFFFFFF;
 
 	uint32_t Rotr(uint32_t v, int n) { return (v >> n) | (v << (32 - n)); }
+
+	// The heading byte (0-255) that faces a target, by the zone's own test (Mob::CanNotSeeTarget:
+	// x inverted, heading turned by 90 degrees): the one with the smallest angle to it.
+	uint8_t HeadingTowards(float x, float y, float tx, float ty)
+	{
+		uint8_t best = 0;
+		float bestAngle = 1e9f;
+		for (int h = 0; h < 256; h++)
+		{
+			float heading = (float)(int8_t)h * 360.0f / 256.0f;
+			heading = heading < 270 ? heading + 90 : heading - 270;
+			heading = heading * 3.1415f / 180.0f;
+			float px = -x, py = y;
+			float vx = 10.0f * cosf(heading), vy = 10.0f * sinf(heading);
+			float mx = -tx - px, my = ty - py;
+			float len = sqrtf(mx * mx + my * my);
+			if (len < 0.01f)
+				return 0;
+			float angle = acosf((vx * mx + vy * my) / (10.0f * len));
+			if (angle < bestAngle)
+			{
+				bestAngle = angle;
+				best = (uint8_t)h;
+			}
+		}
+		return best;
+	}
 
 	// Undoes the servers' packet encryption (Common/Source/packet_functions.cpp): each word was
 	// rotated, offset and chained with the previous one, after swapping word 0 with the middle word.
@@ -828,6 +859,150 @@ namespace
 			z.Poll(500);
 			MoveItem(z, kCursor, kDestroy);
 			DeleteAll(got = Collect(z, 1000, [](const std::vector<Packet*>&) { return false; }));
+		}
+
+		// Melee with a weapon: its hits must come as slashes, not punches (a paladin's Fiery Avenger read
+		// "You punch"). The weapon (EQBOT_WEAPON, default 11050 Fiery Avenger, 2H slashing) goes to the
+		// primary hand (slot 13); the bot stands next to a low level NPC and auto-attacks it.
+		{
+			int weapon = getenv("EQBOT_WEAPON") ? atoi(getenv("EQBOT_WEAPON")) : 11050;
+			const SpawnInfo* prey = 0;
+			for (size_t i = 0; i < spawns.size(); i++)
+				if (spawns[i].npc == 1 && spawns[i].level <= 3 && spawns[i].name.compare(0, 2, "a_") == 0)
+				{
+					prey = &spawns[i];
+					break;
+				}
+			Say(z, charname, "#clearcursor");
+			DeleteAll(got = Collect(z, 1500, [](const std::vector<Packet*>&) { return false; }));
+			Say(z, charname, "#si " + std::to_string(weapon));
+			got = Collect(z, 10000, [](const std::vector<Packet*>& g) { return SummonedItemId(g) != 0; });
+			bool summoned = SummonedItemId(got) == weapon;
+			DeleteAll(got);
+			if (!prey)
+				printf("[ -- ] %-22s %s\n", "melee with a weapon", "skipped: no small NPC (a_..., level 3 or less) in the zone");
+			else if (!summoned)
+				Step(false, "melee with a weapon", "the weapon was not summoned");
+			else
+			{
+				MoveItem(z, kCursor, 13);	// primary hand (what was there comes to the cursor)
+				// Where the NPC is now (it may walk): the latest of its position updates (MobUpdate:
+				// int32 count, then 15-byte SpawnPositionUpdate_Struct: id, y at 5, x at 7, z x10 at 9).
+				float px = prey->x, py = prey->y, pz = prey->z;
+				got = Collect(z, 3000, [](const std::vector<Packet*>&) { return false; });
+				for (size_t i = 0; i < got.size(); i++)
+				{
+					const Packet* p = got[i];
+					if (p->opcode != kMobUpdate || p->size < 4)
+						continue;
+					int n = p->pBuffer[0] | (p->pBuffer[1] << 8);
+					for (int k = 0; k < n && 4 + (k + 1) * 15 <= (int)p->size; k++)
+					{
+						const unsigned char* m = p->pBuffer + 4 + k * 15;
+						if ((m[0] | (m[1] << 8)) != prey->id)
+							continue;
+						py = (short)(m[5] | (m[6] << 8));
+						px = (short)(m[7] | (m[8] << 8));
+						pz = (short)(m[9] | (m[10] << 8)) / 10.0f;
+					}
+				}
+				DeleteAll(got);
+				unsigned char u[15];
+				memset(u, 0, sizeof(u));
+				short y = (short)py, x = (short)(px + 2), zz = (short)(pz + 4);	// eye height rather than the feet: line of sight
+				memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
+				u[3] = HeadingTowards(x, y, px, py);	// the zone only lets a player hit what it faces
+				z.Send(kClientUpdate, u, sizeof(u));
+				uint16_t target[2] = { (uint16_t)prey->id, 0 };
+				z.Send(kClientTarget, target, sizeof(target));
+				z.Poll(500);
+				if (getenv("EQBOT_VERBOSE"))
+				{
+					Say(z, charname, "#loc");	// with a target: the target's place, as the zone has it
+					std::vector<Packet*> l = Collect(z, 3000, [](const std::vector<Packet*>& g) { return HasText(g, "Location"); });
+					printf("       placed at %d, %d, %d (x, y, z as sent); zone says %s\n", x, y, zz, LastTexts(l, 1).c_str());
+					DeleteAll(l);
+					uint16_t none[2] = { 0, 0 };
+					z.Send(kClientTarget, none, sizeof(none));
+					Say(z, charname, "#loc");
+					l = Collect(z, 3000, [](const std::vector<Packet*>& g) { return HasText(g, "Location"); });
+					printf("       and the zone has us at %s\n", LastTexts(l, 1).c_str());
+					DeleteAll(l);
+					z.Send(kClientTarget, target, sizeof(target));
+					z.Poll(300);
+				}
+				uint32_t on = 1, off = 0;
+				z.Send(kAutoAttack, &on, sizeof(on));
+				// OP_Action: target (int32), source (int32), type (the attack skill: 0x01 slash, 0x04 punch...), damage at 12.
+				// The NPC may walk or fly: the bot keeps standing next to it (its position updates).
+				std::map<int, int> types;
+				got.clear();
+				long until = NowMs() + 15000;
+				int hits = 0;
+				while (NowMs() < until && hits < 4)
+				{
+					std::vector<Packet*> fresh = z.Poll(300);
+					bool moved = false;
+					for (size_t i = 0; i < fresh.size(); i++)
+					{
+						const Packet* p = fresh[i];
+						if (p->opcode == kAction && p->size >= 16 && (p->pBuffer[0] | (p->pBuffer[1] << 8)) == prey->id)
+							hits++;
+						if (p->opcode == kDeath && p->size >= 18 && (p->pBuffer[0] | (p->pBuffer[1] << 8)) == prey->id)
+							hits = 99;	// the last blow: Death_Struct carries its attack skill too
+						if (p->opcode != kMobUpdate || p->size < 4)
+							continue;
+						int n = p->pBuffer[0] | (p->pBuffer[1] << 8);
+						for (int k = 0; k < n && 4 + (k + 1) * 15 <= (int)p->size; k++)
+						{
+							const unsigned char* m = p->pBuffer + 4 + k * 15;
+							if ((m[0] | (m[1] << 8)) != prey->id)
+								continue;
+							py = (short)(m[5] | (m[6] << 8));
+							px = (short)(m[7] | (m[8] << 8));
+							pz = (short)(m[9] | (m[10] << 8)) / 10.0f;
+							moved = true;
+						}
+					}
+					if (moved)
+					{
+						short ny = (short)py, nx = (short)(px + 2), nz = (short)(pz + 4);
+						memcpy(u + 5, &ny, 2); memcpy(u + 7, &nx, 2); memcpy(u + 9, &nz, 2);
+						u[3] = HeadingTowards(nx, ny, px, py);
+						z.Send(kClientUpdate, u, sizeof(u));
+					}
+					if (getenv("EQBOT_VERBOSE"))
+						for (size_t i = 0; i < fresh.size(); i++)
+							if (fresh[i]->opcode != kMobUpdate)
+								printf("       fight <- 0x%04x %d bytes  %s\n", (unsigned)(unsigned short)fresh[i]->opcode, (int)fresh[i]->size, HexDump(fresh[i]->pBuffer, fresh[i]->size, 20).c_str());
+					got.insert(got.end(), fresh.begin(), fresh.end());
+				}
+				for (size_t i = 0; i < got.size(); i++)
+				{
+					if (got[i]->opcode == kAction && got[i]->size >= 16 && (got[i]->pBuffer[0] | (got[i]->pBuffer[1] << 8)) == prey->id)
+						types[got[i]->pBuffer[8]]++;
+					if (got[i]->opcode == kDeath && got[i]->size >= 18 && (got[i]->pBuffer[0] | (got[i]->pBuffer[1] << 8)) == prey->id)
+						types[got[i]->pBuffer[14]]++;
+				}
+				std::string said = LastTexts(got, 3);
+				DeleteAll(got);
+				z.Send(kAutoAttack, &off, sizeof(off));
+				std::string seen;
+				for (std::map<int, int>::iterator it = types.begin(); it != types.end(); ++it)
+				{
+					char t[40];
+					snprintf(t, sizeof(t), "%s0x%02x x%d", seen.empty() ? "" : ", ", it->first, it->second);
+					seen += t;
+				}
+				bool slashes = !types.empty() && types.count(0x04) == 0 && types.count(0x01) > 0;
+				Step(slashes, "melee with a weapon", (types.empty() ? std::string("no hit on ") + prey->name + "; " + said : "attack types " + seen + " on " + prey->name + " (0x01 slash, 0x04 punch)"));
+				// Tidy up: the NPC dies, the weapon is destroyed.
+				Say(z, charname, "#kill");
+				MoveItem(z, 13, kCursor);
+				z.Poll(500);
+				MoveItem(z, kCursor, kDestroy);
+				DeleteAll(got = Collect(z, 1500, [](const std::vector<Packet*>&) { return false; }));
+			}
 		}
 
 		// A quest NPC answers a hail (the zone's Perl quests work).
