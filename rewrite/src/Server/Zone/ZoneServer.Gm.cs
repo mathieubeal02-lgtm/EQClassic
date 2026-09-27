@@ -157,6 +157,8 @@ public sealed partial class ZoneServer
             int level = a.Length >= 2 && int.TryParse(a[1], out int l) ? l : Me(p)?.Level ?? 1;
             Tell(peer, $"{p.Instance.GmScribeSpells(p.EntityId, level)} spell(s) scribed.");
         }),
+        new("unscribespells", GmStatus, "[spell id] - that spell, or every spell, out of your book", (peer, p, a) =>
+            Tell(peer, $"{p.Instance.GmUnscribeSpells(p.EntityId, a.Length >= 2 && int.TryParse(a[1], out int id) ? id : null)} spell(s) unscribed.")),
         new("npcstats", GmStatus, "- about your target NPC", (peer, p, _) => Tell(peer, Target(p) is { } t ? p.Instance.GmNpcStats(t.Id) : "Target an NPC.")),
     ];
 

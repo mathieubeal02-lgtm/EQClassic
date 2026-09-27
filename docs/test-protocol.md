@@ -22,11 +22,12 @@ and plays these scenarios, each reported OK / FAIL with what it saw, in a Markdo
 | quest: hail Brohan | #goto, hail | Brohan Ironforge's Perl quest answer |
 | quest: hand-in | #givemoney, give Moodoro Finharn 2 gold in a trade | he answers and hands over the Testament of Vanear (17918) |
 | quest: keyword dialog | say "What testament of Vanear?" to Moodoro | he answers the keyword |
-| experience and a level | #addexp 100, then #addexp 3000000 | "You gain experience!!", then a level gained |
+| experience and a level | no target, #addexp 100, #addexp 3000000, #level back | "You gain experience!!", a level gained, then the old level again |
 | door: open and close | #goto next to North Qeynos' DOOR2, U, U again | the door opens, then closes |
 | melee: kill a rodent | auto attack | "You have slain a rodent!" |
 | loot the corpse | loot window, take all | the window opens and closes |
 | pet: kills, its owner loots | #cast 164 (Companion Spirit), /pet attack a rodent, loot its corpse | the pet kills, the owner may loot |
+| spells: scribe a scroll | #unscribespells 267, #summonitem 15267 (Spell: Inner Fire), scribe it | Inner Fire back in the book, the scroll used up |
 | spells: scribe, memorise, cast | #scribespells 10, memorise Inner Fire, cast on self (up to 3 tries) | mana spent, no interruption nor fizzle, the buff shows |
 | death: corpse and recovery | carry a muffin, #kill self, come back, loot your corpse | the muffin leaves with the corpse and comes back from it |
 | bags: put in and take out | #summonitem a Backpack and a muffin, move the muffin into the first cell, then back | the bag cell holds it, then the general slot again |

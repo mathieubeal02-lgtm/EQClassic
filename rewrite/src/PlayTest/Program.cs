@@ -190,14 +190,15 @@ Step("quest: keyword dialog", () =>
 });
 Step("experience and a level", () =>
 {
+    client.SetTarget(null); // #level acts on the target: not on Moodoro
     int level = client.Experience?.Level ?? 0;
     Chat("#addexp 100");
     bool gain = Heard(l => l == "You gain experience!!", 8);
     Chat("#addexp 3000000"); // enough for level 11 (1.2 million or so for a troll at 10)
     bool up = Heard(l => l.StartsWith("You have gained a level!"), 8) && Run(() => client.Experience?.Level > level, 8);
     Chat($"#level {level}");
-    Run(() => client.Experience?.Level == level, 8);
-    return (gain && up, $"gain {gain}, level up {up}; {Since().LastOrDefault(l => l.Contains("level"))}");
+    bool back = Run(() => client.Experience?.Level == level, 8);
+    return (gain && up && back, $"gain {gain}, level up {up}, back to {client.Experience?.Level} (mana {client.MaxMana}); {Since().LastOrDefault(l => l.Contains("level"))}");
 });
 Step("door: open and close", () =>
 {
@@ -265,6 +266,20 @@ Step("pet: kills, its owner loots", () =>
     Chat("/pet get lost");
     return (opened, $"opened {opened}; {Last(3)}");
 });
+Step("spells: scribe a scroll", () =>
+{
+    // Inner Fire (267) out of the book, its scroll (15267) summoned and scribed: back in the book, scroll used up.
+    Chat("#unscribespells 267");
+    if (!Heard(l => l.EndsWith("spell(s) unscribed."), 8)) return (false, Last(2));
+    Run(() => client.SpellBook?.Spells.All(sp => sp.SpellId != 267) == true, 5);
+    Chat("#summonitem 15267");
+    if (!Run(() => client.Inventory?.Slots.Any(sl => sl.ItemId == 15267) == true, 8)) return (false, "no scroll");
+    int slot = client.Inventory!.Slots.ToList().FindIndex(sl => sl.ItemId == 15267);
+    client.Scribe(slot);
+    bool inBook = Run(() => client.SpellBook?.Spells.Any(sp => sp.SpellId == 267) == true, 8);
+    bool usedUp = Run(() => client.Inventory?.Slots.All(sl => sl.ItemId != 15267) == true, 5);
+    return (inBook && usedUp, $"in the book {inBook}, scroll used up {usedUp}; {Last(1)}");
+});
 Step("spells: scribe, memorise, cast", () =>
 {
     Chat("#scribespells 10");
@@ -293,7 +308,7 @@ Step("spells: scribe, memorise, cast", () =>
         bool failed = said.Any(l => l.Contains("interrupted") || l.Contains("fizzle"));
         bool spent = client.Mana <= before - spell.Mana + 5;
         bool buffed = client.Buffs?.Buffs.Any(b => b.SpellId == spell.SpellId) == true;
-        outcome = $"{spell.Name} (try {attempt}): mana {before} -> {client.Mana}{(buffed ? ", buff on" : "")}";
+        outcome = $"{spell.Name} (try {attempt}, level {client.Experience?.Level}): mana {before} -> {client.Mana}/{client.MaxMana}{(buffed ? ", buff on" : "")}";
         if (!failed && spent && (buffed || spell.Name != "Inner Fire"))
             return (true, outcome);
         outcome += "; " + string.Join(" | ", said.Where(l => l.Contains("interrupted") || l.Contains("fizzle")));

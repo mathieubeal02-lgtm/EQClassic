@@ -198,6 +198,27 @@ public sealed partial class ZoneInstance
         return added;
     }
 
+    /// <summary>#unscribespells [spell id]: that spell, or every spell, out of the book (and off the gems).</summary>
+    public int GmUnscribeSpells(int playerId, int? spellId)
+    {
+        if (!_entities.TryGetValue(playerId, out var player) || !player.IsPlayer)
+            return 0;
+        var book = player.Book.ToArray();
+        int removed = 0;
+        for (int page = 0; page < book.Length; page++)
+            if (book[page] >= 0 && (spellId is null || book[page] == spellId))
+            {
+                book[page] = -1;
+                removed++;
+            }
+        for (int gem = 0; gem < player.Gems.Length; gem++)
+            if (player.Gems[gem] >= 0 && !book.Contains(player.Gems[gem]))
+                player.Gems[gem] = -1;
+        player.Book = book;
+        _events.Add(new GemsChanged(playerId));
+        return removed;
+    }
+
     /// <summary>#npcstats.</summary>
     public string GmNpcStats(int targetId)
     {
