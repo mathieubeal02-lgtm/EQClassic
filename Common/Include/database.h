@@ -103,6 +103,8 @@ public:
 	bool	LoadDoorData(LinkedList<Door_Struct*>* door_list, char* zonename);
 	bool	LoadObjects(vector<Object_Struct*>* object_list, char* zonename);
 	int32	getZoneShutDownDelay(char* short_name);
+	// Zones whose short name starts like `part` or whose long name contains it: "soldungb (Nagafen's Lair), ...".
+	std::string	FindZoneNames(const char* part, int max_zones = 6);
 	bool    UpdateCorpseSave(int32 dbid, float x, float y, float z);
 	int32   GetSpawn2ID(int32 spawngroupid); // jimm0thy - added for npc stats info command
 	float   getTargetZoneCenter(char* source_zone, char* target_zone, int16 tozoneid);

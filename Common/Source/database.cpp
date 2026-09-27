@@ -1477,6 +1477,31 @@ float Database::getTargetZoneMin(char* source_zone, char* target_zone, int16 toz
 }
 
 
+// For a zone name typed wrong (#zone solb): the zones whose short name starts like it (its trailing
+// consonants dropped: "solb" -> "sol") or whose long name contains it, as "short (Long), ...".
+std::string Database::FindZoneNames(const char* part, int max_zones)
+{
+	std::string typed = part ? part : "";
+	std::string stem = typed;
+	while (stem.size() > 2 && !strchr("aeiouyAEIOUY", stem[stem.size() - 1]))
+		stem.erase(stem.size() - 1);
+	char errbuf[MYSQL_ERRMSG_SIZE];
+	char* query = 0;
+	MYSQL_RES* result;
+	MYSQL_ROW row;
+	std::string found;
+	if (RunQuery(query, MakeAnyLenString(&query,
+		"SELECT short_name, long_name FROM zone WHERE short_name LIKE '%s%%' OR long_name LIKE '%%%s%%' ORDER BY short_name LIMIT %i",
+		SQLEscape(stem).c_str(), SQLEscape(typed).c_str(), max_zones), errbuf, &result))
+	{
+		while ((row = mysql_fetch_row(result)))
+			found += std::string(found.empty() ? "" : ", ") + row[0] + " (" + (row[1] ? row[1] : "") + ")";
+		mysql_free_result(result);
+	}
+	safe_delete_array(query);
+	return found;
+}
+
 // jimm0thy - Zone Shutdown delay per Database
 int32 Database::getZoneShutDownDelay(char* short_name)
 {

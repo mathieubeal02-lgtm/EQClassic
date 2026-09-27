@@ -819,8 +819,13 @@ void command_zone(Client *c, const Seperator *sep)
 			}
 			else
 			{
-				c->Message(RED, "That zone is not currently available. Sending you to a safespot within your current zone.", sep->arg[1]);
-				c->MovePC(0, zone->GetSafeX(), zone->GetSafeY(), zone->GetSafeZ() * 10, false, false);
+				// A name that is no zone's short name (#zone solb): say so and suggest, instead of the old
+				// "not currently available" and a trip to this zone's safe spot, which read like a server fault.
+				std::string close = Database::Instance()->FindZoneNames(sep->arg[1]);
+				if (close.empty())
+					c->Message(RED, "There is no zone '%s': #zone takes a zone's short name (soldungb, qrg...).", sep->arg[1]);
+				else
+					c->Message(RED, "There is no zone '%s'. #zone takes the short name: %s", sep->arg[1], close.c_str());
 			}
 		}
 }
