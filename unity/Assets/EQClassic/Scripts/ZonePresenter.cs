@@ -51,6 +51,7 @@ namespace EQClassic.Unity
         private readonly CameraRig _rig = new CameraRig(Scale);
         private readonly SkyPresenter _sky = new SkyPresenter();
         private readonly WeatherPresenter _weather = new WeatherPresenter();
+        private readonly HorizonHaze _haze = new HorizonHaze();
         private ZoneAudio _audio;
         private bool _autorun;
         private float _eyeHeight = 2.5f; // Unity units above the feet; measured from the player's model
@@ -194,6 +195,7 @@ namespace EQClassic.Unity
             _sky.Update(_camera, client, deltaTime);
             DarkenFogAtNight(client);
             _weather.Update(_camera, client.Weather, Sheltered(client.Player));
+            _haze.Update(_camera, _zoneFog != null);
 
             if (_objects.TryGetValue(player.EntityId, out var me) && _playerLight == null)
                 _playerLight = AddPlayerLight(me);

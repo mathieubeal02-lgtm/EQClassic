@@ -8,7 +8,7 @@ namespace EQClassic.Unity
     /// <summary>
     /// The sky and the day: LanternUnityTools' sky prefab (tools/unity/import-zones.sh --sky), a small
     /// dome that follows the camera and is drawn first without writing depth (its shader's Background
-    /// queue, no fog), so the zone draws over it whatever its clip distance; turned with Norrath's
+    /// queue, no fog; the sun and moons moved there too), so the zone draws over it whatever its clip distance; turned with Norrath's
     /// clock; and the day/night ambient light of the Lantern shaders (_DayNightColor).
     /// </summary>
     public sealed class SkyPresenter
@@ -38,6 +38,23 @@ namespace EQClassic.Unity
             main.nearClipPlane = 0.05f; // the dome is about a unit wide: the default 0.3 near plane cuts it away
             _sky.SetActiveCameraTransform(main.transform, true);
             _sky.SetEnabledSky(info.Sky + 1); // Lantern's group 0 is "no sky"
+            DrawBehindTheZone(_sky.gameObject);
+        }
+
+        /// <summary>The queue of the sun, moons and planets: after the dome (1000), before the clouds (1200).</summary>
+        public const int BodiesQueue = 1100;
+
+        /// <summary>
+        /// The sun, moons and planets come with transparent materials (queue 3000): drawn after the zone,
+        /// and a unit from the camera, they showed in front of hills and walls. Everything of the sky is
+        /// drawn before the zone instead, which then covers it.
+        /// </summary>
+        private static void DrawBehindTheZone(GameObject sky)
+        {
+            foreach (var renderer in sky.GetComponentsInChildren<Renderer>(true))
+                foreach (var material in renderer.materials)
+                    if (material != null && material.renderQueue >= 2000)
+                        material.renderQueue = BodiesQueue;
         }
 
         /// <summary>Every frame: the sky follows the camera and turns with the clock; ambient light by the hour.</summary>

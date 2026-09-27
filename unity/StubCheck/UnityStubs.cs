@@ -44,15 +44,35 @@ namespace UnityEngine
 
     public class SkinnedMeshRenderer : Renderer { }
 
+    public sealed class Mesh : Object
+    {
+        public Vector3[] vertices { get; set; }
+        public Color[] colors { get; set; }
+        public int[] triangles { get; set; }
+        public Bounds bounds { get; set; }
+    }
+
+    public sealed class MeshFilter : Component
+    {
+        public Mesh mesh { get; set; }
+    }
+
+    public sealed class MeshRenderer : Renderer
+    {
+        public Material material { get; set; }
+    }
+
     public class Renderer : Component
     {
         public bool enabled { get; set; }
         public Material[] sharedMaterials { get; set; }
+        public Material[] materials { get; set; }
         public Bounds bounds => default;
     }
 
     public struct Bounds
     {
+        public Bounds(Vector3 center, Vector3 size) { }
         public Vector3 size => default;
         public Vector3 center => default;
         public Vector3 min => default;
@@ -83,6 +103,7 @@ namespace UnityEngine
     {
         public float x, y, z;
         public Vector3(float x, float y, float z) { this.x = x; this.y = y; this.z = z; }
+        public static Vector3 zero => default;
         public static Vector3 one => new Vector3(1, 1, 1);
         public float magnitude => 0f;
         public static Vector3 operator +(Vector3 a, Vector3 b) => a;
@@ -156,6 +177,7 @@ namespace UnityEngine
     {
         public Material(Shader shader) { }
         public Color color { get; set; }
+        public int renderQueue { get; set; }
         public Texture mainTexture { get; set; }
     }
 
@@ -346,6 +368,9 @@ namespace UnityEngine
 
     public static class Mathf
     {
+        public const float PI = 3.14159274f;
+        public static float Cos(float f) => 0f;
+        public static float Sin(float f) => 0f;
         public static float MoveTowards(float current, float target, float maxDelta) => target;
         public static float Clamp(float value, float min, float max) => value;
         public static float Max(float a, float b) => a;
