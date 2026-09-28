@@ -128,7 +128,8 @@ namespace EQC
 					{
 						iterator.GetData()->EnterWorld(false);
 					}
-					else if (iterator.GetData()->WaitingForBootup() == (bool)zs->GetID())
+					// the server booting this client's zone came up with another zone
+					else if (iterator.GetData()->GetWaitingForBootupID() == zs->GetID())
 					{
 						iterator.GetData()->SendZoneUnavail();
 					}

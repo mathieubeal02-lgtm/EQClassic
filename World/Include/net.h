@@ -48,6 +48,11 @@ namespace EQC
 				char* GetWorldPassword()	{ return worldpassword; }
 				char* GetWorldAddress()		{ return worldaddress; }
 				bool  GetWorldStatus()		{ return world_locked; }
+				// autobootzones=true: World starts a zone process when none is free (autobootzones_firstport,
+				// autobootzones_max)
+				bool  GetAutoBootZones()	{ return autobootzones; }
+				int16 GetAutoBootFirstPort()	{ return autobootzones_firstport; }
+				int   GetAutoBootMax()		{ return autobootzones_max; }
 
 				bool world_locked;
 
@@ -60,6 +65,9 @@ namespace EQC
 				char	worldaccount[31];
 				char	worldpassword[31];
 				char	worldaddress[255];				
+				bool	autobootzones;
+				int16	autobootzones_firstport;
+				int		autobootzones_max;
 			};
 
 		}

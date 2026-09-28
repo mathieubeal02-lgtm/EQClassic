@@ -21,6 +21,8 @@
 #include "GuildNetwork.h"
 #include "net.h"
 #include "database.h"
+#include <string>
+#include <vector>
 
 namespace EQC
 {
@@ -57,10 +59,17 @@ namespace EQC
 				int32	GetNextID()		{ return NextID++; }
 
 				int32	TriggerBootup(char* zonename);
+				// TriggerBootup's answer when no zone process was free and World started one: the zone
+				// boots as soon as the new process connects (see Process)
+				static const int32 BOOTUP_LAUNCHED = 0xFFFFFFFF;
 				static void SOPZoneBootup(char* adminname, int32 ZoneServerID, char* zonename);
 				Mutex	MListLock;
 			private:
 				int32 NextID;
+				bool	LaunchZoneProcess();
+				std::vector<std::string> pendingBoots;	// zones waiting for a process World started
+				int		launchedZones;
+				int16	nextLaunchPort;
 				LinkedList<ZoneServer*> list;
 				LinkedList<ClientListEntry*> clientlist;
 			};

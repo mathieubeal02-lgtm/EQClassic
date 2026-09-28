@@ -59,6 +59,8 @@ namespace EQC
 			ZSList::ZSList() 
 			{
 				NextID = 1;
+				launchedZones = 0;
+				nextLaunchPort = 0;
 			}
 
 			// Destructor
@@ -98,6 +100,61 @@ namespace EQC
 					//if(ZONE_FREEZE_DEBUG && rand()%ZONE_FREEZE_DEBUG == 1)
 					//	EQC_FREEZE_DEBUG(__LINE__, __FILE__);
 				}
+
+				// A zone process World started has connected: boot the zone a player was waiting for.
+				while (!pendingBoots.empty())
+				{
+					ZoneServer* idle = 0;
+					for (iterator.Reset(); iterator.MoreElements(); iterator.Advance())
+					{
+						if (iterator.GetData()->GetZoneName()[0] == 0 && !iterator.GetData()->IsBootingUp())
+						{
+							idle = iterator.GetData();
+							break;
+						}
+					}
+					if (!idle)
+						break;
+					char zonename[32];
+					strncpy(zonename, pendingBoots.front().c_str(), sizeof(zonename) - 1);
+					zonename[sizeof(zonename) - 1] = 0;
+					pendingBoots.erase(pendingBoots.begin());
+					cout << "Autoboot: booting " << zonename << " in the zone process World started" << endl;
+					idle->TriggerBootup(zonename);
+				}
+			}
+
+			// Starts one more zone process (autobootzones=true in LoginServer.ini), on the next port from
+			// autobootzones_firstport, advertising World's address to the clients like the start scripts do.
+			bool ZSList::LaunchZoneProcess()
+			{
+				if (!net.GetAutoBootZones() || launchedZones >= net.GetAutoBootMax())
+					return false;
+				if (nextLaunchPort == 0)
+					nextLaunchPort = net.GetAutoBootFirstPort();
+				int16 port = nextLaunchPort++;
+				char cmd[512];
+				snprintf(cmd, sizeof(cmd), "zone.exe . %s %i 127.0.0.1", net.GetWorldAddress(), (int)port);
+			#ifdef WIN32
+				STARTUPINFOA si;
+				PROCESS_INFORMATION pi;
+				memset(&si, 0, sizeof(si));
+				si.cb = sizeof(si);
+				memset(&pi, 0, sizeof(pi));
+				if (!CreateProcessA(NULL, cmd, NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi))
+				{
+					cout << "Autoboot: could not start '" << cmd << "' (error " << GetLastError() << ")" << endl;
+					return false;
+				}
+				CloseHandle(pi.hThread);
+				CloseHandle(pi.hProcess);
+			#else
+				cout << "Autoboot: not supported on this platform, '" << cmd << "' not started" << endl;
+				return false;
+			#endif
+				launchedZones++;
+				cout << "Autoboot: started '" << cmd << "' (" << launchedZones << "/" << net.GetAutoBootMax() << ")" << endl;
+				return true;
 			}
 
 			// Receive Data from the Zone Server
@@ -702,7 +759,7 @@ namespace EQC
 						EQC_FREEZE_DEBUG(__LINE__, __FILE__);
 				}
 
-				if (x == 0) 
+				if (x == 0 && !net.GetAutoBootZones()) 
 				{
 					return 0;
 				}
@@ -724,7 +781,16 @@ namespace EQC
 				}
 				if (y == 0) 
 				{
-					safe_delete(tmp);
+					safe_delete_array(tmp);
+					// no free zone process: start one (once per zone) and boot the zone when it connects
+					for (size_t i = 0; i < pendingBoots.size(); i++)
+						if (strcasecmp(pendingBoots[i].c_str(), zonename) == 0)
+							return BOOTUP_LAUNCHED;
+					if (zonename && zonename[0] && LaunchZoneProcess())
+					{
+						pendingBoots.push_back(zonename);
+						return BOOTUP_LAUNCHED;
+					}
 					return 0;
 				}
 
@@ -732,7 +798,7 @@ namespace EQC
 				tmp[z]->TriggerBootup(zonename);
 				int32 ret = tmp[z]->GetID();
 
-				safe_delete(tmp);
+				safe_delete_array(tmp);
 				return ret;
 			}
 		}

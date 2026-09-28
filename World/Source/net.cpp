@@ -62,6 +62,9 @@ namespace EQC
 				memset(worldaccount, 0, sizeof(worldaccount));
 				memset(worldpassword, 0, sizeof(worldpassword));
 				memset(worldaddress, 0, sizeof(worldaddress));
+				autobootzones = false;
+				autobootzones_firstport = 7100;
+				autobootzones_max = 20;
 				LoginServerInfo = ReadLoginINI();
 			}
 
@@ -234,6 +237,20 @@ namespace EQC
 						if (!strncasecmp (type, "worldaddress", 12))
 						{
 							strncpy (worldaddress, buf, 250);
+						}
+						if (!strncasecmp(type, "autobootzones_firstport", 23))
+						{
+							if (atoi(buf) > 1024 && atoi(buf) < 0xFFFF)
+								autobootzones_firstport = atoi(buf);
+						}
+						else if (!strncasecmp(type, "autobootzones_max", 17))
+						{
+							if (atoi(buf) >= 0)
+								autobootzones_max = atoi(buf);
+						}
+						else if (!strncasecmp(type, "autobootzones", 13))
+						{
+							autobootzones = strcasecmp(buf, "true") == 0 || (buf[0] == '1' && buf[1] == 0);
 						}
 						if (!strncasecmp(type, "loginport", 9)) 
 						{
