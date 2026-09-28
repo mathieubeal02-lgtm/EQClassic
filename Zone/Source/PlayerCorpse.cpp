@@ -711,6 +711,15 @@ void Corpse::LootItem(Client* client, APPLAYER* app) {
 			}
 		}
 		if (lootitem->type == 1) {//Tazadar : We can loot and we are using left click (AUTOLOOT)
+			// No room in the packs and something on the cursor: AutoPutItemInInventory would fall back on
+			// the cursor, where the item waits in a queue that a zone change loses. It stays on the corpse.
+			// (A stack that could still be topped up in the packs is refused too; rare, and nothing is lost.)
+			if (client->GetPlayerProfilePtr()->inventory[0] != 0xFFFF && client->FindBestEquipmentSlot(item) > 50
+				&& client->FindFreeInventorySlot(0, item->type == 0x01, false) == 0xFFFF) {
+				client->Message(RED, "You have no room for this item, and your cursor is not empty.");
+				client->QueuePacket(app);
+				return;
+			}
 			int32 slotnum=client->AutoPutItemInInventory(item, item_data->charges,-1);//Tazadar : We loot the bag or the item
 			if(slotnum!=-1){
 				if(IsPlayerCorpse() && item->type==0x01){// Tazadar : If its a bag we do not forget items in it.
@@ -746,6 +755,14 @@ void Corpse::LootItem(Client* client, APPLAYER* app) {
 
 		}
 		else {//Tazadar : We can loot and we are using right click (item on cursor)
+			// With the cursor taken, SummonItem queued the item server side (Client::summonedItems, never
+			// saved) and it was gone from the corpse: a zone change lost it (a Nagafen kill left one
+			// item). The item stays on the corpse instead.
+			if (client->GetPlayerProfilePtr()->inventory[0] != 0xFFFF) {
+				client->Message(RED, "Your cursor is not empty: put that item away before looting another.");
+				client->QueuePacket(app);
+				return;
+			}
 			client->SummonItem(item_data->item_nr, item_data->charges);
 			if(IsPlayerCorpse() && item->type==0x01){
 				//cout <<"looking for bag items"<< endl;
