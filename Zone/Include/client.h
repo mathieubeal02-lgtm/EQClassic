@@ -2,6 +2,7 @@
 #define CLIENT_H
 
 #include <string>
+#include <vector>
 #include "timer.h"
 #include "eq_opcodes.h"
 #include "eq_packet_structs.h"
@@ -611,7 +612,9 @@ private:
 	int32	pLastUpdateWZ;
 
 	void	SendInventoryItems();
-	void	SendInventoryItems2();
+	void	SendInventoryItemsBulk();
+	void	CollectInventoryItems(std::vector<Item_Struct>& items);
+	static int	InventoryMode();
 
 	bool	CanThisClassDoubleAttack(void);
 	bool	CanThisClassDuelWield(void);

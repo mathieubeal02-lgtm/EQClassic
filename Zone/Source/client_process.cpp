@@ -806,377 +806,115 @@ void Client::SetAttackTimer()
 	}
 }
 
-void Client::SendInventoryItems() 
+// The items of the player's inventory, bags, cursor bag, bank and bank bags, as they go to the client:
+// a copy of each item with its slot and charges (the shared item data is not touched). No rent items
+// are removed first when the player was away for more than 30 minutes. A stack stored without charges
+// gets one: the client deletes such a stack ("BAD CHARGES ON STACKABLE") while we would keep it.
+void Client::CollectInventoryItems(std::vector<Item_Struct>& items)
 {
-	int i;
-	Item_Struct* item = 0;
-	Item_Struct* outitem = 0;
-	for (i = 0; i < 30; i++) 
+	bool norentExpired = (time(0) - pp.logtime) > 1800;
+	struct Area { int16* ids; ItemProperties_Struct* props; int count; int16 firstSlot; };
+	Area areas[] = {
+		{ (int16*)pp.inventory, pp.invItemProprieties, 30, 0 },
+		{ (int16*)pp.cursorbaginventory, pp.cursorItemProprieties, 10, 330 },
+		{ (int16*)pp.containerinv, pp.bagItemProprieties, 80, 250 },
+		{ (int16*)pp.bank_inv, pp.bankinvitemproperties, 8, 2000 },
+		{ (int16*)pp.bank_cont_inv, pp.bankbagitemproperties, 80, 2030 },
+	};
+	items.clear();
+	for (int a = 0; a < 5; a++)
 	{
-		item = Database::Instance()->GetItem(pp.inventory[i]);
-
-		if(item && item->norent==0){ //If we have a no rent item and loged of for more than 30 mins we remove item
-			if((time(0)-pp.logtime)>1800){
-				pp.inventory[i]=0xFFFF;
-				if(item->type==0x01){//If its a bag we delete all the items in it
-					if(i!=0){//if its not the cursor bag
-						for(int j=0;j<10;j++){
-							pp.containerinv[(22-i)*10+j]=0xFFFF;
-						}
-					}
-					else{//it is the cursor bag
-						for(int j=0;j<10;j++){
-							pp.cursorbaginventory[j]=0xFFFF;
-						}
-					}
+		for (int i = 0; i < areas[a].count; i++)
+		{
+			uint16 id = (uint16)areas[a].ids[i];
+			Item_Struct* item = Database::Instance()->GetItem(id);
+			if (!item)
+				continue;
+			if (item->norent == 0 && norentExpired)
+			{
+				areas[a].ids[i] = (int16)0xFFFF;
+				// a bag goes with its contents
+				if (item->type == 0x01)
+				{
+					if (a == 0 && i == 0)
+						for (int j = 0; j < 10; j++) pp.cursorbaginventory[j] = 0xFFFF;
+					else if (a == 0 && i >= 22 && i <= 29)
+						for (int j = 0; j < 10; j++) pp.containerinv[(i - 22) * 10 + j] = 0xFFFF;
+					else if (a == 3)
+						for (int j = 0; j < 10; j++) pp.bank_cont_inv[i * 10 + j] = 0xFFFF;
 				}
-				item=NULL;
+				continue;
 			}
-		}
-
-		if (item) 
-		{
-			//cout << "Sending inventory slot:" << i << " Item:" << item->name <<endl;
-
-			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
-				//cout << "number in stack is " << (int) pp.invItemProprieties[i].charges << "of Item:" << item->name <<endl;
-				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
-				if(pp.invItemProprieties[i].charges < 1)
-					pp.invItemProprieties[i].charges = 1;
-				item->common.charges=pp.invItemProprieties[i].charges;
+			Item_Struct copy;
+			memcpy(&copy, item, sizeof(Item_Struct));
+			if (copy.common.stackable == 1)
+			{
+				if (areas[a].props[i].charges < 1)
+					areas[a].props[i].charges = 1;
+				copy.common.charges = areas[a].props[i].charges;
 			}
-			APPLAYER* app = new APPLAYER(OP_ItemTradeIn, sizeof(Item_Struct));
-			memcpy(app->pBuffer, item, sizeof(Item_Struct));
-			outitem = (Item_Struct*) app->pBuffer;
-			outitem->equipSlot = i;
-			QueuePacket(app);
-			safe_delete(app);//delete app;
-		}
-	}
-
-	// Cursor bag slots are 330->339 (10 slots)
-	for (i=0;i<10; i++) {
-		item = Database::Instance()->GetItem(pp.cursorbaginventory[i]);
-
-		if(item && item->norent==0){ //If we have a no rent item and loged of for more than 30 mins we remove item
-			if((time(0)-pp.logtime)>1800){
-				pp.cursorbaginventory[i]=0xFFFF;
-				item=NULL;
-			}
-		}
-
-		if (item) {
-
-
-			//cout << "Sending inventory slot:" << i << " Item:" << item->name <<endl;
-
-			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
-				//cout << "number in stack is " << (int) pp.invItemProprieties[i].charges << "of Item:" << item->name <<endl;
-				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
-				if(pp.cursorItemProprieties[i].charges < 1)
-					pp.cursorItemProprieties[i].charges = 1;
-				item->common.charges=pp.cursorItemProprieties[i].charges;
-			}
-			APPLAYER* app = new APPLAYER(OP_ItemTradeIn, sizeof(Item_Struct));
-			memcpy(app->pBuffer, item, sizeof(Item_Struct));
-			outitem = (Item_Struct*) app->pBuffer;
-			outitem->equipSlot = 330+i;
-			QueuePacket(app);
-			safe_delete(app);//delete app;
-		}
-	}
-
-	// Coder_01's container code
-	for (i=0; i < 80; i++) 
-	{
-		item = Database::Instance()->GetItem(pp.containerinv[i]);
-		if(item && item->norent==0){ //If we have a no rent item and loged of for more than 30 mins we remove item
-			if((time(0)-pp.logtime)>1800){
-				pp.containerinv[i]=0xFFFF;
-				item=NULL;
-			}
-		}
-		if (item) 
-		{
-			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
-				//cout << "number in stack in the bag " << (int) pp.bagItemProprieties[i].charges << "of Item:" << item->name <<endl;
-				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
-				if(pp.bagItemProprieties[i].charges < 1)
-					pp.bagItemProprieties[i].charges = 1;
-				item->common.charges=pp.bagItemProprieties[i].charges;
-			}
-
-			APPLAYER* app = new APPLAYER(OP_ItemTradeIn, sizeof(Item_Struct));
-
-			memcpy(app->pBuffer, item, sizeof(Item_Struct));
-			outitem = (Item_Struct*) app->pBuffer;
-			outitem->equipSlot = 250 + i;
-			QueuePacket(app);
-			safe_delete(app);//delete app;
-		}
-	}
-
-	// Quagmire - Bank code, these should be the proper pp locs too
-	for (i=0; i < 8; i++) 
-	{
-		item = Database::Instance()->GetItem(pp.bank_inv[i]);
-		if(item && item->norent==0){ //If we have a no rent item and loged of for more than 30 mins we remove item
-			if((time(0)-pp.logtime)>1800){
-				pp.bank_inv[i]=0xFFFF;
-				if(item->type==0x01){//If its a bag we delete all the items in it
-					for(int j=0;j<10;j++){
-						pp.bank_cont_inv[i*10+j]=0xFFFF;
-					}
-				}
-				item=NULL;
-			}
-		}
-		if (item) 
-		{
-
-			if(item->common.stackable==1){//Tazadar load the number in each stack for bag (not container)
-				//cout << "number in stack is " << (int) pp.bankinvitemproperties[i].charges << "of Bank Item:" << item->name <<endl;
-				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
-				if(pp.bankinvitemproperties[i].charges < 1)
-					pp.bankinvitemproperties[i].charges = 1;
-				item->common.charges=pp.bankinvitemproperties[i].charges;
-			}
-
-			APPLAYER* app = new APPLAYER(OP_ItemTradeIn, sizeof(Item_Struct));
-
-			memcpy(app->pBuffer, item, sizeof(Item_Struct));
-			outitem = (Item_Struct*) app->pBuffer;
-			outitem->equipSlot = 2000 + i;
-			QueuePacket(app);
-			safe_delete(app);//delete app;
-
-		}
-	}
-
-	for (i=0; i < 80; i++) 
-	{
-		item = Database::Instance()->GetItem(pp.bank_cont_inv[i]);
-		if(item && item->norent==0){ //If we have a no rent item and loged of for more than 30 mins we remove item
-			if((time(0)-pp.logtime)>1800){
-				pp.bank_cont_inv[i]=0xFFFF;
-				item=NULL;
-			}
-		}
-		if (item) 
-		{
-			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
-				//cout << "number in stack is " << (int) pp.bankbagitemproperties[i].charges << "of Bank Item:" << item->name <<endl;
-				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
-				if(pp.bankbagitemproperties[i].charges < 1)
-					pp.bankbagitemproperties[i].charges = 1;
-				item->common.charges=pp.bankbagitemproperties[i].charges;
-			}
-			APPLAYER* app = new APPLAYER(OP_ItemTradeIn, sizeof(Item_Struct));
-
-			memcpy(app->pBuffer, item, sizeof(Item_Struct));
-			outitem = (Item_Struct*) app->pBuffer;
-			outitem->equipSlot = 2030 + i;
-			QueuePacket(app);
-			safe_delete(app);//delete app;
+			copy.equipSlot = areas[a].firstSlot + i;
+			items.push_back(copy);
 		}
 	}
 }
 
-
-void Client::SendInventoryItems2() 
+// How the inventory goes to the client at zone-in (EQC_INVENTORY_MODE, read once per process):
+//   0 (default)  one OP_ItemTradeIn (0x3120) per item after the client's 0x5d20, as always
+//   1            one OP_CPlayerItem (0x6421, EQMacEmu's Mac OP_ItemPacket 0x6441) per item, same time
+//   2            one OP_CPlayerItems (0xf621, Mac OP_CharInventory 0xf641) with every item, deflated, same time
+//   3            the same bulk packet with the player profile, before the weather (EQMacEmu's order)
+// The client answers a zone-in with four OP_ClientError as soon as the player owns an item; these
+// modes are there to find which way it takes them (Harakiri: "the complete inventory is now sent at
+// a later login stage", "sent as one compressed packet").
+int Client::InventoryMode()
 {
-	int i;
-	Item_Struct* item = 0;
-	Item_Struct* outitem = 0;
-
-	BulkedItem_Struct tmpitems[250];
-	int8 numberofitems = 0;
-
-	for (i = 0; i < 30; i++) 
+	static int mode = -1;
+	if (mode < 0)
 	{
-		item = Database::Instance()->GetItem(pp.inventory[i]);
-
-		if(item && item->norent==0){ //If we have a no rent item and loged of for more than 30 mins we remove item
-			if((time(0)-pp.logtime)>1800){
-				pp.inventory[i]=0xFFFF;
-				if(item->type==0x01){//If its a bag we delete all the items in it
-					if(i!=0){//if its not the cursor bag
-						for(int j=0;j<10;j++){
-							pp.containerinv[(22-i)*10+j]=0xFFFF;
-						}
-					}
-					else{//it is the cursor bag
-						for(int j=0;j<10;j++){
-							pp.cursorbaginventory[j]=0xFFFF;
-						}
-					}
-				}
-				item=NULL;
-			}
-		}
-
-		if (item) 
-		{
-			//cout << "Sending inventory slot:" << i << " Item:" << item->name <<endl;
-
-			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
-				//cout << "number in stack is " << (int) pp.invItemProprieties[i].charges << "of Item:" << item->name <<endl;
-				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
-				if(pp.invItemProprieties[i].charges < 1)
-					pp.invItemProprieties[i].charges = 1;
-				item->common.charges=pp.invItemProprieties[i].charges;
-			}
-			if(item->type==0x01)
-				tmpitems[numberofitems].opcode = 0x6621;
-			else if(item->type==0x02)
-				tmpitems[numberofitems].opcode = 0x6521;
-			else
-				tmpitems[numberofitems].opcode = 0x6421;
-			item->equipSlot = i;
-			memcpy(&tmpitems[numberofitems].item, item, sizeof(Item_Struct));
-			numberofitems++;
-		}
+		const char* env = getenv("EQC_INVENTORY_MODE");
+		mode = env ? atoi(env) : 0;
+		if (mode < 0 || mode > 3)
+			mode = 0;
 	}
+	return mode;
+}
 
-	// Cursor bag slots are 330->339 (10 slots)
-	for (i=0;i<10; i++) {
-		item = Database::Instance()->GetItem(pp.cursorbaginventory[i]);
-
-		if(item && item->norent==0){ //If we have a no rent item and loged of for more than 30 mins we remove item
-			if((time(0)-pp.logtime)>1800){
-				pp.cursorbaginventory[i]=0xFFFF;
-				item=NULL;
-			}
-		}
-
-		if (item) {
-
-
-			//cout << "Sending inventory slot:" << i << " Item:" << item->name <<endl;
-
-			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
-				//cout << "number in stack is " << (int) pp.invItemProprieties[i].charges << "of Item:" << item->name <<endl;
-				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
-				if(pp.cursorItemProprieties[i].charges < 1)
-					pp.cursorItemProprieties[i].charges = 1;
-				item->common.charges=pp.cursorItemProprieties[i].charges;
-			}
-
-			if(item->type==0x02)
-				tmpitems[numberofitems].opcode = 0x6521;
-			else
-				tmpitems[numberofitems].opcode = 0x6421;
-
-			item->equipSlot = 330+i;
-			memcpy(&tmpitems[numberofitems].item, item, sizeof(Item_Struct));
-			numberofitems++;
-		}
-	}
-
-	// Coder_01's container code
-	for (i=0; i < 80; i++) 
+void Client::SendInventoryItems()
+{
+	std::vector<Item_Struct> items;
+	CollectInventoryItems(items);
+	int16 opcode = InventoryMode() == 1 ? OP_CPlayerItem : OP_ItemTradeIn;
+	for (size_t i = 0; i < items.size(); i++)
 	{
-		item = Database::Instance()->GetItem(pp.containerinv[i]);
-		if(item && item->norent==0){ //If we have a no rent item and loged of for more than 30 mins we remove item
-			if((time(0)-pp.logtime)>1800){
-				pp.containerinv[i]=0xFFFF;
-				item=NULL;
-			}
-		}
-		if (item) 
-		{
-			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
-				//cout << "number in stack in the bag " << (int) pp.bagItemProprieties[i].charges << "of Item:" << item->name <<endl;
-				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
-				if(pp.bagItemProprieties[i].charges < 1)
-					pp.bagItemProprieties[i].charges = 1;
-				item->common.charges=pp.bagItemProprieties[i].charges;
-			}
-			if(item->type==0x02)
-				tmpitems[numberofitems].opcode = 0x6521;
-			else
-				tmpitems[numberofitems].opcode = 0x6421;
-
-			item->equipSlot = 250 + i;
-			memcpy(&tmpitems[numberofitems].item, item, sizeof(Item_Struct));
-			numberofitems++;
-		}
+		APPLAYER* app = new APPLAYER(opcode, sizeof(Item_Struct));
+		memcpy(app->pBuffer, &items[i], sizeof(Item_Struct));
+		QueuePacket(app);
+		safe_delete(app);
 	}
+}
 
-	// Quagmire - Bank code, these should be the proper pp locs too
-	for (i=0; i < 8; i++) 
+// OP_CPlayerItems: uint16 count, then deflated { int16 opcode, Item_Struct } per item. The opcode
+// inside is written in wire order (the one of the packet header, see EQPacket), so OP_CPlayerItem
+// 0x6421 is stored as 0x2164: EQMacEmu stores 16740 (0x4164) for Mac's 0x6441.
+void Client::SendInventoryItemsBulk()
+{
+	std::vector<Item_Struct> items;
+	CollectInventoryItems(items);
+	std::vector<BulkedItem_Struct> bulk(items.size());
+	for (size_t i = 0; i < items.size(); i++)
 	{
-		item = Database::Instance()->GetItem(pp.bank_inv[i]);
-		if(item && item->norent==0){ //If we have a no rent item and loged of for more than 30 mins we remove item
-			if((time(0)-pp.logtime)>1800){
-				pp.bank_inv[i]=0xFFFF;
-				if(item->type==0x01){//If its a bag we delete all the items in it
-					for(int j=0;j<10;j++){
-						pp.bank_cont_inv[i*10+j]=0xFFFF;
-					}
-				}
-				item=NULL;
-			}
-		}
-		if (item) 
-		{
-			if(item->type==0x01)
-				tmpitems[numberofitems].opcode = 0x6621;
-			else if(item->type==0x02)
-				tmpitems[numberofitems].opcode = 0x6521;
-			else
-				tmpitems[numberofitems].opcode = 0x6421;
-
-			if(item->common.stackable==1){//Tazadar load the number in each stack for bag (not container)
-				//cout << "number in stack is " << (int) pp.bankinvitemproperties[i].charges << "of Bank Item:" << item->name <<endl;
-				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
-				if(pp.bankinvitemproperties[i].charges < 1)
-					pp.bankinvitemproperties[i].charges = 1;
-				item->common.charges=pp.bankinvitemproperties[i].charges;
-			}
-
-			item->equipSlot = 2000 + i;
-			memcpy(&tmpitems[numberofitems].item, item, sizeof(Item_Struct));
-			numberofitems++;
-
-		}
+		int16 op = items[i].type == 0x01 ? 0x6621 : items[i].type == 0x02 ? 0x6521 : 0x6421;
+		bulk[i].opcode = (int16)(((op & 0xFF) << 8) | ((op >> 8) & 0xFF));
+		memcpy(&bulk[i].item, &items[i], sizeof(Item_Struct));
 	}
-
-	for (i=0; i < 80; i++) 
-	{
-		item = Database::Instance()->GetItem(pp.bank_cont_inv[i]);
-		if(item && item->norent==0){ //If we have a no rent item and loged of for more than 30 mins we remove item
-			if((time(0)-pp.logtime)>1800){
-				pp.bank_cont_inv[i]=0xFFFF;
-				item=NULL;
-			}
-		}
-		if (item) 
-		{
-			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
-				//cout << "number in stack is " << (int) pp.bankbagitemproperties[i].charges << "of Bank Item:" << item->name <<endl;
-				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
-				if(pp.bankbagitemproperties[i].charges < 1)
-					pp.bankbagitemproperties[i].charges = 1;
-				item->common.charges=pp.bankbagitemproperties[i].charges;
-			}
-			if(item->type==0x02)
-				tmpitems[numberofitems].opcode = 0x6521;
-			else
-				tmpitems[numberofitems].opcode = 0x6421;
-			item->equipSlot = 2030 + i;
-			memcpy(&tmpitems[numberofitems].item, item, sizeof(Item_Struct));
-			numberofitems++;
-		}
-	}
-	APPLAYER* app = new APPLAYER(0xf621, sizeof(int16)+numberofitems*sizeof(BulkedItem_Struct));
-
-	int16* packetNum = (int16*) app->pBuffer;
-	packetNum[0] = numberofitems ;
-
-	memcpy(app->pBuffer+sizeof(int16),tmpitems,numberofitems*sizeof(BulkedItem_Struct));
-
-	DumpPacket(app);
+	int rawSize = items.size() * sizeof(BulkedItem_Struct);
+	int maxSize = rawSize + rawSize / 10 + 64;
+	APPLAYER* app = new APPLAYER(OP_CPlayerItems, sizeof(int16) + maxSize);
+	*(int16*)app->pBuffer = (int16)items.size();
+	int deflated = items.empty() ? 0 : DeflatePacket((unsigned char*)&bulk[0], rawSize, app->pBuffer + sizeof(int16), maxSize);
+	app->size = sizeof(int16) + deflated;
+	EQC::Common::Log(EQCLog::Debug, CP_CLIENT, "Inventory: %i items in one packet (%i bytes, %i deflated)", (int)items.size(), rawSize, deflated);
 	QueuePacket(app);
 	safe_delete(app);
 }
@@ -6342,6 +6080,10 @@ void Client::Process_ClientConnection2(APPLAYER *app)
 	QueuePacket(outapp);
 	safe_delete(outapp);//delete outapp;
 
+	// EQMacEmu sends the inventory here, after the profile and before the weather
+	if (InventoryMode() == 3)
+		SendInventoryItemsBulk();
+
 	outapp = new APPLAYER(OP_Weather, 8);
 	if (zone->zone_weather == 1)
 	{
@@ -6381,7 +6123,10 @@ void Client::Process_ClientConnection3(APPLAYER *app)
 	{
 		EQC::Common::PrintF(CP_CLIENT, "Login packet 3\n"); // Here the client sends tha character name again.. 
 		// not sure why, nothing else in this packet
-		SendInventoryItems();
+		if (InventoryMode() == 2)
+			SendInventoryItemsBulk();
+		else if (InventoryMode() != 3)
+			SendInventoryItems();
 
 		weapon1 = Database::Instance()->GetItem(pp.inventory[13]);
 		weapon2 = Database::Instance()->GetItem(pp.inventory[14]);
