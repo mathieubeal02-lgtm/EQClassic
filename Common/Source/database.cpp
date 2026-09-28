@@ -570,7 +570,7 @@ void Database::GetCharSelectInfo(int32 account_id, CharacterSelect_Struct* cs,Ch
 			}
 			else {
 				cout << "Got a bogus character (" << row[0] << "), deleting it." << endl;
-				DeleteCharacter(row[0]);
+				DeleteCharacter(account_id, row[0]);
 			}
 		}
 		mysql_free_result(result);
