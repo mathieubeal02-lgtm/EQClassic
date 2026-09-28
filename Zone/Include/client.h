@@ -48,6 +48,7 @@ using namespace std;
 class Client : public Mob
 {
 public:
+	int		DiffInventory(Client* to);	// #diffinv: our inventory against the one the client uploaded last
 	Client(int32 ip, int16 port, int send_socket);
     ~Client();
 
@@ -616,7 +617,6 @@ private:
 
 	void	SendInventoryItems();
 	void	SendInventoryItemsBulk();
-	int		DiffInventory(Client* to);
 	void	CollectInventoryItems(std::vector<Item_Struct>& items);
 	static int	InventoryMode();
 
