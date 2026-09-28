@@ -108,7 +108,7 @@
 /*============= General =============*/
 #define	OP_ReadBook			0xce20		// Comment: 
 #define OP_MultiLineMsg		0x1420		// Comment: 
-#define OP_CPlayerItems		0xf621		// Comment: 
+#define OP_CPlayerItems		0xf621		// Comment: the whole inventory at zone-in: uint16 count, then deflated { int16 opcode (wire order), Item_Struct } (EQMacEmu Mac OP_CharInventory 0xf641)
 #define OP_CPlayerItem		0x6421		// Comment: 
 #define OP_Illusion			0x9120		// Comment:
 #define OP_LFG				0xf021		// Comment: 
