@@ -840,6 +840,9 @@ void Client::SendInventoryItems()
 
 			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
 				//cout << "number in stack is " << (int) pp.invItemProprieties[i].charges << "of Item:" << item->name <<endl;
+				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
+				if(pp.invItemProprieties[i].charges < 1)
+					pp.invItemProprieties[i].charges = 1;
 				item->common.charges=pp.invItemProprieties[i].charges;
 			}
 			APPLAYER* app = new APPLAYER(OP_ItemTradeIn, sizeof(Item_Struct));
@@ -869,6 +872,9 @@ void Client::SendInventoryItems()
 
 			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
 				//cout << "number in stack is " << (int) pp.invItemProprieties[i].charges << "of Item:" << item->name <<endl;
+				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
+				if(pp.cursorItemProprieties[i].charges < 1)
+					pp.cursorItemProprieties[i].charges = 1;
 				item->common.charges=pp.cursorItemProprieties[i].charges;
 			}
 			APPLAYER* app = new APPLAYER(OP_ItemTradeIn, sizeof(Item_Struct));
@@ -894,6 +900,9 @@ void Client::SendInventoryItems()
 		{
 			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
 				//cout << "number in stack in the bag " << (int) pp.bagItemProprieties[i].charges << "of Item:" << item->name <<endl;
+				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
+				if(pp.bagItemProprieties[i].charges < 1)
+					pp.bagItemProprieties[i].charges = 1;
 				item->common.charges=pp.bagItemProprieties[i].charges;
 			}
 
@@ -927,6 +936,9 @@ void Client::SendInventoryItems()
 
 			if(item->common.stackable==1){//Tazadar load the number in each stack for bag (not container)
 				//cout << "number in stack is " << (int) pp.bankinvitemproperties[i].charges << "of Bank Item:" << item->name <<endl;
+				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
+				if(pp.bankinvitemproperties[i].charges < 1)
+					pp.bankinvitemproperties[i].charges = 1;
 				item->common.charges=pp.bankinvitemproperties[i].charges;
 			}
 
@@ -954,6 +966,9 @@ void Client::SendInventoryItems()
 		{
 			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
 				//cout << "number in stack is " << (int) pp.bankbagitemproperties[i].charges << "of Bank Item:" << item->name <<endl;
+				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
+				if(pp.bankbagitemproperties[i].charges < 1)
+					pp.bankbagitemproperties[i].charges = 1;
 				item->common.charges=pp.bankbagitemproperties[i].charges;
 			}
 			APPLAYER* app = new APPLAYER(OP_ItemTradeIn, sizeof(Item_Struct));
@@ -1006,6 +1021,9 @@ void Client::SendInventoryItems2()
 
 			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
 				//cout << "number in stack is " << (int) pp.invItemProprieties[i].charges << "of Item:" << item->name <<endl;
+				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
+				if(pp.invItemProprieties[i].charges < 1)
+					pp.invItemProprieties[i].charges = 1;
 				item->common.charges=pp.invItemProprieties[i].charges;
 			}
 			if(item->type==0x01)
@@ -1038,6 +1056,9 @@ void Client::SendInventoryItems2()
 
 			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
 				//cout << "number in stack is " << (int) pp.invItemProprieties[i].charges << "of Item:" << item->name <<endl;
+				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
+				if(pp.cursorItemProprieties[i].charges < 1)
+					pp.cursorItemProprieties[i].charges = 1;
 				item->common.charges=pp.cursorItemProprieties[i].charges;
 			}
 
@@ -1066,6 +1087,9 @@ void Client::SendInventoryItems2()
 		{
 			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
 				//cout << "number in stack in the bag " << (int) pp.bagItemProprieties[i].charges << "of Item:" << item->name <<endl;
+				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
+				if(pp.bagItemProprieties[i].charges < 1)
+					pp.bagItemProprieties[i].charges = 1;
 				item->common.charges=pp.bagItemProprieties[i].charges;
 			}
 			if(item->type==0x02)
@@ -1105,6 +1129,9 @@ void Client::SendInventoryItems2()
 
 			if(item->common.stackable==1){//Tazadar load the number in each stack for bag (not container)
 				//cout << "number in stack is " << (int) pp.bankinvitemproperties[i].charges << "of Bank Item:" << item->name <<endl;
+				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
+				if(pp.bankinvitemproperties[i].charges < 1)
+					pp.bankinvitemproperties[i].charges = 1;
 				item->common.charges=pp.bankinvitemproperties[i].charges;
 			}
 
@@ -1128,6 +1155,9 @@ void Client::SendInventoryItems2()
 		{
 			if(item->common.stackable==1){//Tazadar load the number in each stack for inventory (not container)
 				//cout << "number in stack is " << (int) pp.bankbagitemproperties[i].charges << "of Bank Item:" << item->name <<endl;
+				// the client deletes a stack sent without charges ("BAD CHARGES ON STACKABLE") while we keep it
+				if(pp.bankbagitemproperties[i].charges < 1)
+					pp.bankbagitemproperties[i].charges = 1;
 				item->common.charges=pp.bankbagitemproperties[i].charges;
 			}
 			if(item->type==0x02)
