@@ -649,6 +649,21 @@ struct Beg_Struct
 ** Length: 70 Bytes-2 = 68 bytes 
 ** OpCode: a320
 */
+// OP_SendZonePoints: one entry per zone point number of the zone's client files; the client looks its
+// zone lines and teleport pads up here. 999999 in a coordinate keeps the player's own.
+struct ZonePoint_Entry
+{
+/*000*/	int32	number;
+/*004*/	float	y;
+/*008*/	float	x;
+/*012*/	float	z;
+/*016*/	float	heading;
+/*020*/	int16	zoneid;
+/*022*/	int16	unused;
+};
+
+// OP_SendZonePoints packet: int32 count, then count ZonePoint_Entry, then one empty entry.
+
 struct ZoneChange_Struct
 {
 	char char_name[PC_MAX_NAME_LENGTH+2];     // Comment: Character Name

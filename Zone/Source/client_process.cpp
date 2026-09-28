@@ -6422,6 +6422,7 @@ void Client::Process_ClientConnection4(APPLAYER *app)
 		// evaluate if this is a good spot or not, but it should work for now. - neo
 		this->Handle_Connect5GDoors();
 		this->Handle_Connect5Objects();
+		this->SendZonePoints();
 
 		client_state = CLIENT_CONNECTING5;
 	}

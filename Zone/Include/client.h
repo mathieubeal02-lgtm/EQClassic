@@ -393,6 +393,7 @@ private:
 	void Handle_Connect5Guild();
 	void Handle_Connect5GDoors();
 	void Handle_Connect5Objects();
+	void SendZonePoints();
 	void ProcessOP_Death(APPLAYER *app);
 	void DeletePetitionsFromClient();
 	void Process_DisarmTraps(APPLAYER *app);
