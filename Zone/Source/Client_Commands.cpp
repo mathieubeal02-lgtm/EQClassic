@@ -171,6 +171,7 @@ int command_init(void) {
 
 		command_add("loc","Shows you your current location.",EQC_Alpha_Tester,command_loc) ||		
 		command_add("npcstats","- Show stats about target NPC",GM_MANAGEMENT_ACESSS,command_npcstats) ||
+		command_add("probespawn","[id] - Sends a position update for a spawn id nobody has, next to you (finds the client's answer to an unknown spawn)",GM_MANAGEMENT_ACESSS,command_probespawn) ||
 
 		command_add("findspell","[searchstring] - Search for a spell",EQC_Alpha_Tester,command_findspell) ||
 		command_add("spfind",NULL,EQC_Alpha_Tester,command_findspell) ||
@@ -828,6 +829,35 @@ void command_zone(Client *c, const Seperator *sep)
 					c->Message(RED, "There is no zone '%s'. #zone takes the short name: %s", sep->arg[1], close.c_str());
 			}
 		}
+}
+
+// Harakiri's rev. 771: a client that gets a position update for a spawn id it does not know sends the id
+// back (his OP_UnknownSpawn), and the zone can send that spawn again (the NPCs invisible in a zone that
+// was still loading). We do not know that opcode: this sends such an update so that the client's answer
+// shows in the zone's log as "[Client] Unknown opcode".
+void command_probespawn(Client *c, const Seperator *sep)
+{
+	int16 id = sep->IsNumber(1) ? (int16)atoi(sep->arg[1]) : 0;
+	if (id == 0)
+		for (id = 3000; id < 0xFFF0 && entity_list.GetID(id) != 0; id++)
+			;
+	if (entity_list.GetID(id) != 0)
+	{
+		c->Message(RED, "Spawn id %i is in use.", id);
+		return;
+	}
+	APPLAYER* app = new APPLAYER(OP_MobUpdate, sizeof(SpawnPositionUpdates_Struct) + sizeof(SpawnPositionUpdate_Struct));
+	SpawnPositionUpdates_Struct* spu = (SpawnPositionUpdates_Struct*)app->pBuffer;
+	spu->num_updates = 1;
+	memset(&spu->spawn_update[0], 0, sizeof(SpawnPositionUpdate_Struct));
+	spu->spawn_update[0].spawn_id = id;
+	spu->spawn_update[0].x_pos = (sint16)c->GetX();
+	spu->spawn_update[0].y_pos = (sint16)c->GetY();
+	spu->spawn_update[0].z_pos = (sint16)(c->GetZ() * 10);
+	c->QueuePacket(app);
+	safe_delete(app);
+	EQC::Common::Log(EQCLog::Debug, CP_CLIENT, "probespawn: position update for unknown spawn id %i sent to %s", id, c->GetName());
+	c->Message(BLACK, "Sent a position update for spawn id %i, which does not exist. The client's answer, if any, is in the zone log as an unknown opcode.", id);
 }
 
 void command_loc(Client *c, const Seperator *sep) 
