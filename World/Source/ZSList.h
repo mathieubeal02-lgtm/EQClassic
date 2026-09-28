@@ -23,6 +23,7 @@
 #include "database.h"
 #include <string>
 #include <vector>
+#include <ctime>
 
 namespace EQC
 {
@@ -68,6 +69,9 @@ namespace EQC
 				int32 NextID;
 				bool	LaunchZoneProcess();
 				std::vector<std::string> pendingBoots;	// zones waiting for a process World started
+				std::vector<time_t> pendingSince;
+				std::vector<bool> pendingSent;			// bootup sent, waiting for the zone to come up
+				ZoneServer* FindByNameNoLock(const char* zonename);
 				int		launchedZones;
 				int16	nextLaunchPort;
 				LinkedList<ZoneServer*> list;

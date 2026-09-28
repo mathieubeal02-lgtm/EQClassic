@@ -102,12 +102,28 @@ namespace EQC
 				}
 
 				// A zone process World started has connected: boot the zone a player was waiting for.
-				while (!pendingBoots.empty())
+				// Only once it has sent its address (SetConnectInfo): a bootup sent before is ignored.
+				// The zone stays in pendingBoots until it is up, so that a player asking again for it
+				// does not start another process.
+				for (size_t i = 0; i < pendingBoots.size(); )
 				{
+					if (FindByNameNoLock(pendingBoots[i].c_str()) || time(0) - pendingSince[i] > 120)
+					{
+						pendingBoots.erase(pendingBoots.begin() + i);
+						pendingSince.erase(pendingSince.begin() + i);
+						pendingSent.erase(pendingSent.begin() + i);
+					}
+					else
+						i++;
+				}
+				for (size_t i = 0; i < pendingBoots.size(); i++)
+				{
+					if (pendingSent[i])
+						continue;
 					ZoneServer* idle = 0;
 					for (iterator.Reset(); iterator.MoreElements(); iterator.Advance())
 					{
-						if (iterator.GetData()->GetZoneName()[0] == 0 && !iterator.GetData()->IsBootingUp())
+						if (iterator.GetData()->GetZoneName()[0] == 0 && !iterator.GetData()->IsBootingUp() && iterator.GetData()->GetCPort() != 0)
 						{
 							idle = iterator.GetData();
 							break;
@@ -116,9 +132,9 @@ namespace EQC
 					if (!idle)
 						break;
 					char zonename[32];
-					strncpy(zonename, pendingBoots.front().c_str(), sizeof(zonename) - 1);
+					strncpy(zonename, pendingBoots[i].c_str(), sizeof(zonename) - 1);
 					zonename[sizeof(zonename) - 1] = 0;
-					pendingBoots.erase(pendingBoots.begin());
+					pendingSent[i] = true;
 					cout << "Autoboot: booting " << zonename << " in the zone process World started" << endl;
 					idle->TriggerBootup(zonename);
 				}
@@ -255,6 +271,16 @@ namespace EQC
 					if(ZONE_FREEZE_DEBUG && rand()%ZONE_FREEZE_DEBUG == 1)
 						EQC_FREEZE_DEBUG(__LINE__, __FILE__);
 				}
+				return 0;
+			}
+
+			// FindByName for callers already holding MListLock
+			ZoneServer* ZSList::FindByNameNoLock(const char* zonename)
+			{
+				LinkedListIterator<ZoneServer*> iterator(list);
+				for (iterator.Reset(); iterator.MoreElements(); iterator.Advance())
+					if (strcasecmp(iterator.GetData()->GetZoneName(), zonename) == 0)
+						return iterator.GetData();
 				return 0;
 			}
 
@@ -789,6 +815,8 @@ namespace EQC
 					if (zonename && zonename[0] && LaunchZoneProcess())
 					{
 						pendingBoots.push_back(zonename);
+						pendingSince.push_back(time(0));
+						pendingSent.push_back(false);
 						return BOOTUP_LAUNCHED;
 					}
 					return 0;
