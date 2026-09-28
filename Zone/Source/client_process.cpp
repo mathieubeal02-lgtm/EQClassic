@@ -4288,6 +4288,9 @@ void Client::ProcessOP_Save(APPLAYER* pApp)
 	{ 							
 		EQC::Common::PrintF(CP_CLIENT, "Got a player save request (OP_Save)\n");
 		this->Save();
+		memcpy(&clientPP, pApp->pBuffer, sizeof(PlayerProfile_Struct));
+		clientPPTime = time(0);
+		DiffInventory(0);
 		//PlayerProfile_Struct* in_pp = (PlayerProfile_Struct*) pApp->pBuffer;
 		//x_pos = in_pp->x;
 		//y_pos = in_pp->y;
@@ -5964,7 +5967,7 @@ void Client::Process_ClientConnection2(APPLAYER *app)
 	gender = pp.gender;
 	base_gender = pp.gender;
 	level = pp.level;
-	deity = DEITY_AGNOSTIC;
+	deity = (pp.deity >= 201 && pp.deity <= 216) || pp.deity == DEITY_AGNOSTIC ? pp.deity : DEITY_AGNOSTIC;
 
 	for(int i=0; i< 24; i++)  
 		pp.unknown3888[i] = 0;  	
@@ -5993,7 +5996,8 @@ void Client::Process_ClientConnection2(APPLAYER *app)
 	//pp.spellSlotRefresh[7] = 10000;
 
 	// Harakiri discpline always available
-	pp.discplineAvailable = 1;
+	// Kunark and Velious (1 | 2); EQC_EXPANSIONS overrides it
+	pp.expansions = getenv("EQC_EXPANSIONS") ? (int8)atoi(getenv("EQC_EXPANSIONS")) : 3;
 
 	// Harakiri SK and Paladin, ms left for deathtouch/LOH
 	pp.abilityCooldown = 0;

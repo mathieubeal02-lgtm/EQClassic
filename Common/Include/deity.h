@@ -9,7 +9,7 @@
 #ifndef DEITY_H
 #define DEITY_H
 
-#define DEITY_AGNOSTIC		140
+#define DEITY_AGNOSTIC		396		// the client's id (140 is the key of the agnostic faction modifier)
 #define DEITY_BRELL			202
 #define DEITY_BERTOX		201	
 #define DEITY_CAZIC			203

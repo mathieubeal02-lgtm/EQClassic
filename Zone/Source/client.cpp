@@ -107,6 +107,8 @@ Client::Client(int32 in_ip, int16 in_port, int in_send_socket)
 
 	// Set State to Connecting1
 	client_state = CLIENT_CONNECTING1;
+	clientPPTime = 0;
+	memset(&clientPP, 0, sizeof(clientPP));
 
 	// Create Timeout Timer
 	timeout_timer = new Timer(CLIENT_TIMEOUT);
@@ -5100,4 +5102,54 @@ void Client::SendItemMissing(int32 itemID, int8 itemType) {
 	}
 
 	return;
+}
+
+// Compares the inventory the client uploaded last (OP_Save) with the server's: item ids of every area,
+// and the charges of stacks. Differences go to `to` when given (#diffinv), always to the log. A
+// difference means the client shows something we do not have or the other way round (the cursor
+// "busy" but empty after a stack was sent without charges, for example). Returns their number.
+int Client::DiffInventory(Client* to)
+{
+	if (clientPPTime == 0)
+	{
+		if (to)
+			to->Message(BLACK, "%s has not uploaded its profile yet (the client does it every minute or two).", GetName());
+		return 0;
+	}
+	struct Area { const char* name; uint16* server; uint16* client; ItemProperties_Struct* serverProps; ItemProperties_Struct* clientProps; int count; int firstSlot; };
+	Area areas[] = {
+		{ "inventory", (uint16*)pp.inventory, (uint16*)clientPP.inventory, pp.invItemProprieties, clientPP.invItemProprieties, 30, 0 },
+		{ "cursor bag", (uint16*)pp.cursorbaginventory, (uint16*)clientPP.cursorbaginventory, pp.cursorItemProprieties, clientPP.cursorItemProprieties, 10, 330 },
+		{ "bags", (uint16*)pp.containerinv, (uint16*)clientPP.containerinv, pp.bagItemProprieties, clientPP.bagItemProprieties, 80, 250 },
+		{ "bank", (uint16*)pp.bank_inv, (uint16*)clientPP.bank_inv, pp.bankinvitemproperties, clientPP.bankinvitemproperties, 8, 2000 },
+		{ "bank bags", (uint16*)pp.bank_cont_inv, (uint16*)clientPP.bank_cont_inv, pp.bankbagitemproperties, clientPP.bankbagitemproperties, 80, 2030 },
+	};
+	int differences = 0;
+	for (int a = 0; a < 5; a++)
+	{
+		for (int i = 0; i < areas[a].count; i++)
+		{
+			uint16 s = areas[a].server[i], c = areas[a].client[i];
+			if (s == 0) s = 0xFFFF;
+			if (c == 0) c = 0xFFFF;
+			Item_Struct* item = s != 0xFFFF ? Database::Instance()->GetItem(s) : 0;
+			bool stack = item && item->common.stackable == 1;
+			int sc = areas[a].serverProps[i].charges, cc = areas[a].clientProps[i].charges;
+			if (s == c && (!stack || sc == cc))
+				continue;
+			differences++;
+			Item_Struct* citem = c != 0xFFFF ? Database::Instance()->GetItem(c) : 0;
+			char line[200];
+			snprintf(line, sizeof(line), "%s slot %i: server %s (%i, %i charges), client %s (%i, %i charges)",
+				areas[a].name, areas[a].firstSlot + i,
+				item ? item->name : "empty", s == 0xFFFF ? 0 : s, sc,
+				citem ? citem->name : "empty", c == 0xFFFF ? 0 : c, cc);
+			EQC::Common::Log(EQCLog::Debug, CP_CLIENT, "Inventory differs for %s: %s", GetName(), line);
+			if (to && differences <= 20)
+				to->Message(RED, "%s", line);
+		}
+	}
+	if (to)
+		to->Message(BLACK, "%s: %i difference(s) with the profile the client uploaded %i s ago.", GetName(), differences, (int)(time(0) - clientPPTime));
+	return differences;
 }

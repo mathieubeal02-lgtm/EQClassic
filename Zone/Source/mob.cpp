@@ -39,7 +39,7 @@ Mob::Mob(char*   in_name,
          int8    in_gender,
          int8    in_race,
          int8    in_class,
-         int8    in_deity,
+         int16   in_deity,
          int8    in_level,
 		 TBodyType
 				in_body_type,

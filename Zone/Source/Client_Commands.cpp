@@ -171,6 +171,7 @@ int command_init(void) {
 
 		command_add("loc","Shows you your current location.",EQC_Alpha_Tester,command_loc) ||		
 		command_add("npcstats","- Show stats about target NPC",GM_MANAGEMENT_ACESSS,command_npcstats) ||
+		command_add("diffinv","- Compares the inventory the client uploaded last (OP_Save) with the server's",GM_MANAGEMENT_ACESSS,command_diffinv) ||
 		command_add("probespawn","[id] - Sends a position update for a spawn id nobody has, next to you (finds the client's answer to an unknown spawn)",GM_MANAGEMENT_ACESSS,command_probespawn) ||
 
 		command_add("findspell","[searchstring] - Search for a spell",EQC_Alpha_Tester,command_findspell) ||
@@ -835,6 +836,14 @@ void command_zone(Client *c, const Seperator *sep)
 // back (his OP_UnknownSpawn), and the zone can send that spawn again (the NPCs invisible in a zone that
 // was still loading). We do not know that opcode: this sends such an update so that the client's answer
 // shows in the zone's log as "[Client] Unknown opcode".
+// Harakiri's #diffinv (his rev. 748) asked the client for a dump of its inventory; we do not know that
+// opcode, but the client uploads its whole profile (OP_Save) every minute or two and at camp.
+void command_diffinv(Client *c, const Seperator *sep)
+{
+	Client* who = (c->GetTarget() && c->GetTarget()->IsClient()) ? c->GetTarget()->CastToClient() : c;
+	who->DiffInventory(c);
+}
+
 void command_probespawn(Client *c, const Seperator *sep)
 {
 	int16 id = sep->IsNumber(1) ? (int16)atoi(sep->arg[1]) : 0;

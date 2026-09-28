@@ -152,7 +152,7 @@ public:
 	    int8    in_gender,
 	    int8    in_race,
 	    int8    in_class,
-	    int8    in_deity,
+	    int16   in_deity,
 	    int8    in_level,
 		TBodyType
 				in_body_type,
@@ -214,7 +214,7 @@ public:
 	int8			GetGender()			{ return gender; }
 	virtual int16	GetBaseRace()		{ return base_race; }
 	virtual	int8	GetBaseGender()		{ return base_gender; }
-	int8			GetDeity()			{ return deity; }
+	int16			GetDeity()			{ return deity; }
 	int8			GetTexture()		{ return texture; }
 	int8			GetHelmTexture()	{ return helmtexture; }
 	int8			GetClass()			{ return class_; }
@@ -533,7 +533,7 @@ protected:
 	int16	base_race;
 	int8    class_;
 	TBodyType	body_type;		// Cofruben 16/08/08.
-	int8    deity;
+	int16   deity;
 	int8    level;
 	int32   npctype_id; // rembrant, Dec. 20, 2001
 	int16   skills[74]; // socket 12-29-01 //Yeahlight: This needs to be int16 to accomidate NPCs

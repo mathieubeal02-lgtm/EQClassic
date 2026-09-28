@@ -236,7 +236,7 @@ FACTION_VALUE Client::GetFactionLevel(int32 char_id, int32 npc_id, int32 p_race,
 //| Notes: Sets the characters faction standing with the
 //|        specified NPC.
 //o--------------------------------------------------------------
-void Client::SetFactionLevel(int32 char_id, int32 npc_id, int8 char_class, int8 char_race, int8 char_deity)
+void Client::SetFactionLevel(int32 char_id, int32 npc_id, int8 char_class, int8 char_race, int16 char_deity)
 {
 	sint32 faction_id[MAX_NPC_FACTIONS]={ 0,0,0,0,0,0,0,0,0,0 };
 	sint32 npc_value[MAX_NPC_FACTIONS]={ 0,0,0,0,0,0,0,0,0,0 };
@@ -296,7 +296,7 @@ void Client::SetFactionLevel(int32 char_id, int32 npc_id, int8 char_class, int8 
 	return;
 }
 
-void Client::SetFactionLevel2(int32 char_id, sint32 faction_id, int8 char_class, int8 char_race, int8 char_deity, sint32 value)
+void Client::SetFactionLevel2(int32 char_id, sint32 faction_id, int8 char_class, int8 char_race, int16 char_deity, sint32 value)
 {
 //	sint32 tmpValue;
 	sint32 current_value;
@@ -389,7 +389,7 @@ bool Database::GetFactionData(FactionMods* fm, sint32 class_mod, sint32 race_mod
 		case 130: modr_tmp = 18;break;
 		case 161: modr_tmp = 19;break;
 	}
-	if (deity_mod == 140 ) 
+	if (deity_mod == 140 || deity_mod == DEITY_AGNOSTIC) 
 		modd_tmp = 0;
 	else
 		modd_tmp = deity_mod - 200;
