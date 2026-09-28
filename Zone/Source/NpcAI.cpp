@@ -53,7 +53,7 @@ bool EntityList::AddHateToCloseMobs(NPC* sender, float dist, int social)
 						//Yeahlight: PC is connected and is not charmed (NPCs never jump on a charmed PC)
 						if(currentmob->CastToClient()->Connected() && currentmob->CastToClient()->GetOwnerID() == 0)
 						{
-							FACTION_VALUE lbc = (FACTION_VALUE)currentmob->CastToClient()->GetFactionLevel(currentmob->GetID(),sender->GetNPCTypeID(), currentmob->GetRace(), currentmob->GetClass(), DEITY_AGNOSTIC, sender->GetPrimaryFactionID(), sender);
+							FACTION_VALUE lbc = (FACTION_VALUE)currentmob->CastToClient()->GetFactionLevel(currentmob->GetID(),sender->GetNPCTypeID(), currentmob->GetRace(), currentmob->GetClass(), currentmob->GetDeity(), sender->GetPrimaryFactionID(), sender);
 							// Client is not KOS for this MoB - ignore
 							if(!(lbc == FACTION_THREATENLY || lbc == FACTION_SCOWLS))
 							{
@@ -328,7 +328,7 @@ bool EntityList::AddHateToCloseMobs(NPC* sender, float dist, int social)
 								else if(currentmob->DistNoRoot(sender) <= DEFAULT_NPC_SOCIAL_RANGE && currentnpc->GetHateTop() && currentnpc->GetHateTop()->IsClient())
 								{
 									//Yeahlight: Do I care (considered amiably or better) about the victim?
-									if(currentnpc->GetHateTop()->CastToClient()->GetFactionLevel(currentnpc->GetHateTop()->GetID(),sender->GetNPCTypeID(), currentnpc->GetHateTop()->GetRace(), currentnpc->GetHateTop()->GetClass(), DEITY_AGNOSTIC, sender->GetPrimaryFactionID(),sender) <= FACTION_AMIABLE)
+									if(currentnpc->GetHateTop()->CastToClient()->GetFactionLevel(currentnpc->GetHateTop()->GetID(),sender->GetNPCTypeID(), currentnpc->GetHateTop()->GetRace(), currentnpc->GetHateTop()->GetClass(), currentnpc->GetHateTop()->GetDeity(), sender->GetPrimaryFactionID(),sender) <= FACTION_AMIABLE)
 									{
 										//Yeahlight: Check LOS
 										if(sender->CheckCoordLosNoZLeaps(sender->GetX(), sender->GetY(), sender->GetZ(), currentmob->GetX(), currentmob->GetY(), currentmob->GetZ()))

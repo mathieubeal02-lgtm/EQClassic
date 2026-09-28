@@ -372,7 +372,7 @@ void PerlembParser::EventCommon(QuestEventID event, int32 objid, const char * da
 
 			// Need to figure out why one of these casts would fail..
 			if (client && npc) {
-				fac = client->GetFactionLevel(client->GetID(), npcmob->GetID(), client->GetRace(), client->GetClass(), DEITY_AGNOSTIC, npc->GetPrimaryFactionID(), npcmob);
+				fac = client->GetFactionLevel(client->GetID(), npcmob->GetID(), client->GetRace(), client->GetClass(), client->GetDeity(), npc->GetPrimaryFactionID(), npcmob);
 			}
 			else if (!client) {
 				EQC::Common::Log(EQCLog::Debug,CP_QUESTS,  "WARNING: cast failure on mob->CastToClient()");

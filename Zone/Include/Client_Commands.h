@@ -61,6 +61,7 @@ void command_zone(Client *c, const Seperator *sep);
 // show current loc, including z
 void command_loc(Client *c, const Seperator *sep);
 void command_probespawn(Client *c, const Seperator *sep);
+void command_diffinv(Client *c, const Seperator *sep);
 // show targeted npc status
 void command_npcstats(Client *c, const Seperator *sep);
 // search for a spell

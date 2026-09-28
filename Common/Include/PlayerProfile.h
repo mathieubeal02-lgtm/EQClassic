@@ -52,7 +52,7 @@ struct PlayerProfile_Struct
 /*0004*/ char   name[PC_MAX_NAME_LENGTH];					// Comment: First Name of Character
 /*0034*/ char   Surname[PC_SURNAME_MAX_LENGTH];				// Comment: Last Name of Character
 /*0054*/ int8   gender;						// Comment: (Confirmed by Sp0tter).
-/*0055*/ int8   deity;						// Comment: Bertoxxoulus=0x10, (Confirmed by Sp0tter). Needs full deity list fixed in header. 
+/*0055*/ int8   pp_unknown55;				// Comment: long taken for the deity, but 0 on the characters World creates; the deity is at 4156
 /*0056*/ int16  race;						// Comment: Race of Character
 /*0058*/ int8   class_;						// Comment: Class of Character
 /*0059*/ int8   pp_unknown3;				// Comment: Cofruben: should be uknownn?
@@ -114,7 +114,7 @@ struct PlayerProfile_Struct
 /*2749*/ int8	unknown2749[15];			// Comment:
 /*2764*/ int8	gm;							// Comment: 
 /*2765*/ int8	unknown2765[23]; 			// Comment: 
-/*2788*/ int8   discplineAvailable;			// Comment: Harakiri needs to be 1 or the client wont sent opcode
+/*2788*/ int8   expansions;					// Comment: expansion bits, 1 Kunark 2 Velious (EQMacEmu's Mac profile: expansions, 44 bytes after autosplit as here). Harakiri: needs 1 for /disc; set right, the client allows its highest resolution and keeps the new UI for inspect and merchants
 /*2789*/ int8	unknown2789[23];
 /*2812*/ int32	hungerlevel;				// Comment: Harakiri: the clients max level is actually 6000 for rightclick check, however to hardcap is 32k ("You could not possibly eat any more, you would explode!"), interesting to know is - MONK class has a longer period to autoconsume food in the client (92000 vs 46000) Min(not hungry): 32000+ Max(very hungry): 0 (Confirmed by Wizzel)
 /*2816*/ int32	thirstlevel;				// Comment: Harakiri: the clients max level is actually 6000 for rightclick check, however to hardcap is 32k ("You could not possibly drink any more, you would explode!") Min(not thirsty): 32000+ Max(very thirsty): 0 (Confirmed by Wizzel)
@@ -132,7 +132,7 @@ struct PlayerProfile_Struct
 /*3960*/ int8   unknown3960[20];			// Comment: 
 /*3980*/ int16	bank_inv[8];				// Comment: id of items in bank (Confirmed by Tazadar)
 /*3996*/ int16	bank_cont_inv[80];			// Comment: id of items in bank containers  (Confirmed by Tazadar)
-/*4156*/ int8	unknown4156[2];				// Comment: 
+/*4156*/ int16	deity;						// Comment: deity id (201-216, 396 agnostic), the one the client shows (Harakiri's rev. 790 moved it here; EQMacEmu's Mac profile also has it right after bank_cont_inv)
 /*4158*/ int16	guildid;					// Comment: 
 /*4160*/ int32  time2;						// Comment:
 /*4164*/ int8	unknown4164[6];			    // Comment:

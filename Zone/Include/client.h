@@ -162,8 +162,8 @@ public:
 	sint32	CalculateAttackDamage(Mob* defender, Item_Struct* attacking_weapon, int8 skill, int hand, int8 attacker_level, int8 defender_level);
 	sint32	GetCriticalHit(Mob* defender, int8 skill, sint32 damage);
 	
-	void	SetFactionLevel(int32 char_id, int32 npc_id, int8 char_class, int8 char_race, int8 char_deity);
-	void    SetFactionLevel2(int32 char_id, sint32 faction_id, int8 char_class, int8 char_race, int8 char_deity, sint32 value);
+	void	SetFactionLevel(int32 char_id, int32 npc_id, int8 char_class, int8 char_race, int16 char_deity);
+	void    SetFactionLevel2(int32 char_id, sint32 faction_id, int8 char_class, int8 char_race, int16 char_deity, sint32 value);
 
 	int8	GetSkill(int skillid);
 	virtual void SetSkill(int skillid, int8 value);
@@ -445,6 +445,9 @@ private:
 	bool				group_invite_pending;
 	bool				medding;
 	PlayerProfile_Struct pp;
+	// the profile the client uploaded last (OP_Save), to compare its inventory with ours (#diffinv)
+	PlayerProfile_Struct clientPP;
+	time_t	clientPPTime;
 	
 	std::vector<SummonedItemWaiting_Struct> summonedItems;
 
@@ -613,6 +616,7 @@ private:
 
 	void	SendInventoryItems();
 	void	SendInventoryItemsBulk();
+	int		DiffInventory(Client* to);
 	void	CollectInventoryItems(std::vector<Item_Struct>& items);
 	static int	InventoryMode();
 
