@@ -139,7 +139,7 @@ public:
 	bool	ReserveName(int32 account_id, char* name);
 	bool	CreateCharacter(int32 account_id, char* name, int16 gender, int16 race, int16 class_, int8 str, int8 sta, int8 cha, int8 dex, int8 int_, int8 agi, int8 wis, int8 face);
 	bool	CreateCharacter(int32 account_id, PlayerProfile_Struct* pp);
-	bool	DeleteCharacter(char* name);
+	bool	DeleteCharacter(int32 account_id, const char* name);
 	bool    SetStartingItems(PlayerProfile_Struct *cc, int8 si_race, int8 si_class, char* si_name);
 	bool	SetStartingLocations(PlayerProfile_Struct *cc, int8 sl_race, int8 sl_class, char* sl_name);
 
