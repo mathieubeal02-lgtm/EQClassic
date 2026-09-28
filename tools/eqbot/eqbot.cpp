@@ -825,7 +825,9 @@ namespace
 
 		// A GM command answers (# commands go through the say channel).
 		Say(z, charname, "#loc");
-		std::vector<Packet*> got = Collect(z, 10000, [](const std::vector<Packet*>& g) { return HasText(g, "Location"); });
+		// A zone that just booted first sends the ~100 NPCs of its bulk phase: at the client's data
+		// rate the answer can take well over 10 s to come through.
+		std::vector<Packet*> got = Collect(z, 30000, [](const std::vector<Packet*>& g) { return HasText(g, "Location"); });
 		std::string text;
 		bool located = HasText(got, "Location", &text);
 		Step(located, "GM command #loc", located ? text : LastTexts(got));
