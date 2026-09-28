@@ -1507,6 +1507,39 @@ std::string Database::FindZoneNames(const char* part, int max_zones)
 	return found;
 }
 
+// Zone points by the number the client's zone files give them (table zone_points_client, sql patch 008).
+// False when the table is missing: nothing is sent and the zone keeps its server-side zone lines only.
+bool Database::GetClientZonePoints(const char* short_name, std::vector<ZonePoint_Entry>& points)
+{
+	char errbuf[MYSQL_ERRMSG_SIZE];
+	char* query = 0;
+	MYSQL_RES* result;
+	MYSQL_ROW row;
+	points.clear();
+	if (!RunQuery(query, MakeAnyLenString(&query,
+		"SELECT number, target_x, target_y, target_z, target_heading, target_zone_id FROM zone_points_client WHERE zone='%s' ORDER BY number",
+		SQLEscape(short_name).c_str()), errbuf, &result))
+	{
+		safe_delete_array(query);
+		return false;
+	}
+	safe_delete_array(query);
+	while ((row = mysql_fetch_row(result)))
+	{
+		ZonePoint_Entry e;
+		memset(&e, 0, sizeof(e));
+		e.number = atoi(row[0]);
+		e.x = (float)atof(row[1]);
+		e.y = (float)atof(row[2]);
+		e.z = (float)atof(row[3]);
+		e.heading = (float)atof(row[4]);
+		e.zoneid = (int16)atoi(row[5]);
+		points.push_back(e);
+	}
+	mysql_free_result(result);
+	return true;
+}
+
 // jimm0thy - Zone Shutdown delay per Database
 int32 Database::getZoneShutDownDelay(char* short_name)
 {

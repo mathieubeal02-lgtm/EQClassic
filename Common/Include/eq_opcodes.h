@@ -205,6 +205,7 @@
 #define OP_QuestCompletedMoney 0x8020	// Comment: Yeahlight: Music played when a quest is completed; Harakiri: Its actually the quest completed opcode, if you fill the struct with 1 you get money from NPC with ID 1
 #define OP_SpawnProjectile	0x4520		// Comment: Yeahlight: Spawns a projectile
 #define OP_ZoneUnavailable 0xa220		// Comment: Harakiri red message "That zone is currently down, moving you to safe point within your current zone."
+#define OP_SendZonePoints	0xb420		// Comment: zone point list (ZonePoints_Struct): targets of the zone lines and teleport pads the client finds in its own zone files, by number (EQMacEmu Mac opcode 0x40b4, same numbering as the other Trilogy/Mac pairs)
 #define OP_NPCIsBusy		0xd620		// Comment: Harakiri prints message Phineas_Taylor00 tells you, 'I'm busy right now.' if Phin is entity ID 1 in your zone
 #define OP_SenseTrap		0xf421		// Comment: Harakiri player will turn in the direction where a trap is located
 #define OP_CorpseDragPermission		0x1421  // Comment: Harakiri yellow message X has permission to drag corpse

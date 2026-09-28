@@ -3131,6 +3131,23 @@ void Client::Handle_Connect5Objects()
 	}
 }
 
+// Harakiri found this list (his rev. 719): the client zones by itself through the zone lines and teleport
+// pads of its zone files, looking their destinations up here by number.
+void Client::SendZonePoints()
+{
+	std::vector<ZonePoint_Entry> points;
+	if (!Database::Instance()->GetClientZonePoints(zone->GetShortName(), points) || points.empty())
+		return;
+	int32 size = sizeof(int32) + (points.size() + 1) * sizeof(ZonePoint_Entry);
+	APPLAYER* outapp = new APPLAYER(OP_SendZonePoints, size);
+	memset(outapp->pBuffer, 0, size);
+	*(int32*)outapp->pBuffer = points.size();
+	memcpy(outapp->pBuffer + sizeof(int32), &points[0], points.size() * sizeof(ZonePoint_Entry));
+	QueuePacket(outapp);
+	safe_delete(outapp);
+	EQC::Common::Log(EQCLog::Debug, CP_CLIENT, "Sent %i zone points of %s", (int)points.size(), zone->GetShortName());
+}
+
 void Client::Handle_Connect5Guild()
 {
 	// Guild ID is in sze now, rank still using this tho

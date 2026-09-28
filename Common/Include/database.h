@@ -16,6 +16,7 @@
 #include <mysql.h>
 #include <queue>
 #include <string>
+#include <vector>
 
 #include "DatabaseHandler.h"
 #include "types.h"
@@ -105,6 +106,7 @@ public:
 	int32	getZoneShutDownDelay(char* short_name);
 	// Zones whose short name starts like `part` or whose long name contains it: "soldungb (Nagafen's Lair), ...".
 	std::string	FindZoneNames(const char* part, int max_zones = 6);
+	bool	GetClientZonePoints(const char* short_name, std::vector<ZonePoint_Entry>& points);
 	bool    UpdateCorpseSave(int32 dbid, float x, float y, float z);
 	int32   GetSpawn2ID(int32 spawngroupid); // jimm0thy - added for npc stats info command
 	float   getTargetZoneCenter(char* source_zone, char* target_zone, int16 tozoneid);
