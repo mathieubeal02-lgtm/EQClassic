@@ -860,22 +860,24 @@ void Client::CollectInventoryItems(std::vector<Item_Struct>& items)
 }
 
 // How the inventory goes to the client at zone-in (EQC_INVENTORY_MODE, read once per process):
-//   0 (default)  one OP_ItemTradeIn (0x3120) per item after the client's 0x5d20, as always
-//   1            one OP_CPlayerItem (0x6421, EQMacEmu's Mac OP_ItemPacket 0x6441) per item, same time
-//   2            one OP_CPlayerItems (0xf621, Mac OP_CharInventory 0xf641) with every item, deflated, same time
-//   3            the same bulk packet with the player profile, before the weather (EQMacEmu's order)
-// The client answers a zone-in with four OP_ClientError as soon as the player owns an item; these
-// modes are there to find which way it takes them (Harakiri: "the complete inventory is now sent at
-// a later login stage", "sent as one compressed packet").
+//   3 (default)  one OP_CPlayerItems (0xf621, EQMacEmu's Mac OP_CharInventory 0xf641) with every item,
+//                deflated, right after the player profile, before the weather (EQMacEmu's order)
+//   0            one OP_ItemTradeIn (0x3120, Mac's OP_MerchantItemPacket) per item after the client's
+//                0x5d20: the old way. The client answered every zone-in with four OP_ClientError
+//                (codes 0x3C 0x46 0x50 0x5A) as soon as the player owned an item
+//   1            one OP_CPlayerItem (0x6421, Mac OP_ItemPacket) per item after 0x5d20: no error, but the
+//                cursor item is not shown
+//   2            the bulk packet after 0x5d20: no error, cursor item not shown either
+// Tested with the real client (2026-09-28): only 3 has no error and shows cursor, packs and bags.
 int Client::InventoryMode()
 {
 	static int mode = -1;
 	if (mode < 0)
 	{
 		const char* env = getenv("EQC_INVENTORY_MODE");
-		mode = env ? atoi(env) : 0;
+		mode = env ? atoi(env) : 3;
 		if (mode < 0 || mode > 3)
-			mode = 0;
+			mode = 3;
 	}
 	return mode;
 }
