@@ -1644,11 +1644,15 @@ bool Client::SummonItem(int16 item_id, sint8 charges) {
 		} else {
 			pp.invItemProprieties[0].charges = item->common.charges;			
 		}
+		// a stack needs at least one charge, else the client deletes it and the cursor stays busy here
+		if(item->common.stackable == 1 && pp.invItemProprieties[0].charges < 1)
+			pp.invItemProprieties[0].charges = 1;
 
 		APPLAYER* outapp = new APPLAYER(OP_SummonedItem, sizeof(SummonedItem_Struct));
 		memcpy(outapp->pBuffer, item, sizeof(Item_Struct));
 		Item_Struct* item2 = (Item_Struct*) outapp->pBuffer;
 		item2->equipSlot = 0;
+		item2->common.charges = pp.invItemProprieties[0].charges;
 		
 		QueuePacket(outapp);
 		safe_delete(outapp);
@@ -1685,11 +1689,15 @@ bool Client::SummonItemNonBlob(int16 item_id, sint8 charges) {
 		} else {
 			pp.invItemProprieties[0].charges = item->common.charges;			
 		}
+		// a stack needs at least one charge, else the client deletes it and the cursor stays busy here
+		if(item->common.stackable == 1 && pp.invItemProprieties[0].charges < 1)
+			pp.invItemProprieties[0].charges = 1;
 					
 		APPLAYER* outapp = new APPLAYER(OP_SummonedItem, sizeof(SummonedItem_Struct));
 		memcpy(outapp->pBuffer, item, sizeof(Item_Struct));
 		Item_Struct* item2 = (Item_Struct*) outapp->pBuffer;
-		item2->equipSlot = 0;						
+		item2->equipSlot = 0;
+		item2->common.charges = pp.invItemProprieties[0].charges;						
 
 		QueuePacket(outapp);
 		safe_delete(outapp);
@@ -2245,6 +2253,9 @@ bool Client::PutItemInInventory(int16 slotid, Item_Struct* item) {
 
 bool Client::PutItemInInventory(int16 slotid, Item_Struct* item, sint8 charges) {
 	if (!item) return false;
+	// a stack needs at least one charge, else the client deletes it while we keep it
+	if (item->common.stackable == 1 && charges < 1)
+		charges = 1;
 	if (slotid <= 29){
 		pp.inventory[slotid] = item->item_nr;
 		pp.invItemProprieties[slotid].charges = charges;
