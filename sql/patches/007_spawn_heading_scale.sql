@@ -1,0 +1,11 @@
+-- 007: spawn headings on the 0-256 scale the Trilogy client uses.
+--
+-- The zone sends spawn2.heading to the client as one byte ((int8) heading, Mob::FillSpawnStruct):
+-- 0-255, a quarter turn every 64. Most rows are on that scale, but 3,185 of the 24,280 non-zero ones
+-- (imported from an EQEmu-style source) are on the 0-512 one: 384, three quarters of a turn, went
+-- out as 128, half a turn, so those NPCs (62 % of Everfrost's, 8 % of South Qeynos') stood facing the
+-- wrong way. Compared with the Quarm (EQMacEmu) database on the same spawn points (same zone, same
+-- x/y within 1 unit): up to 255 both agree; above, Quarm's value is half of ours.
+--
+-- Rows above 256 are halved. Idempotent: afterwards none is above 256.
+UPDATE spawn2 SET heading = heading / 2 WHERE heading > 256;

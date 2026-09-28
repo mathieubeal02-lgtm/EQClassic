@@ -8,7 +8,7 @@ login, world and zone.
 | `schema.sql` | Structure only (81 `CREATE TABLE`), extracted from the dump below. Convenient for reading and diffing. |
 | `eqclassic_db/` | Git submodule → https://github.com/erfg12/eqclassic_db (one `.sql` per table, ~114 MB, structure + data, MariaDB 10.0 dump). `git submodule update --init` to fetch. |
 | `extract_schema.py` | Regenerates `schema.sql` from the submodule. |
-| `patches/*.sql` | Apply **after** the dump, in order: `001` missing `boat_passengers`, `002` item blob encoding repair, `003` corrupted sample character, `004` NPC combat stats from Quarm (needed by the melee model, see below). |
+| `patches/*.sql` | Apply **after** the dump, in order: `001` missing `boat_passengers`, `002` item blob encoding repair, `003` corrupted sample character, `004` NPC combat stats from Quarm (needed by the melee model, see below), `005`-`006` era fixes, `007` spawn headings on the client's 0-256 scale (3,185 rows were on EQEmu's 0-512 one: those NPCs faced the wrong way). |
 | `../LS/Login/loginserver.sql` | Original login schema; the dump above already contains the `login_*` tables. |
 
 ## Import
