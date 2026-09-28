@@ -64,6 +64,21 @@ public sealed record NpcCombatStats(int Class, int Hp, int MinDamage, int MaxDam
 }
 
 /// <summary>A spawn2 row: a place, its spawn group's candidates (spawnentry, chance) and its waypoint grid.</summary>
+/// <summary>
+/// spawn2.heading as the zone uses it: the client's byte (0-256 a turn; rows above 256 are on EQEmu's
+/// 0-512 scale, see sql/patches/007), turned into this server's degrees. The legacy zone faces a
+/// target at +X with 270 and one at -X with 90 (NPC::FaceTarget), where this server's Atan2 gives
+/// +90 and -90: the two turn opposite ways.
+/// </summary>
+public static class SpawnHeading
+{
+    public static float ToDegrees(float raw)
+    {
+        float byteHeading = raw > 256f ? raw / 2f : raw;
+        return ((360f - byteHeading * 360f / 256f) % 360f + 360f) % 360f;
+    }
+}
+
 public sealed record SpawnPoint(int Id, Vec3 Position, float Heading, int GridId, IReadOnlyList<(NpcTemplate Npc, int Chance)> Candidates,
     int RespawnSeconds = 640, int Variance = 0);
 
@@ -211,7 +226,7 @@ public sealed class MySqlZoneDataSource : IZoneDataSource
             {
                 int id = r.GetInt32(0);
                 if (!spawns.TryGetValue(id, out var spawn))
-                    spawns[id] = spawn = (new Vec3(r.GetFloat(1), r.GetFloat(2), r.GetFloat(3)), r.GetFloat(4), r.GetInt32(5),
+                    spawns[id] = spawn = (new Vec3(r.GetFloat(1), r.GetFloat(2), r.GetFloat(3)), SpawnHeading.ToDegrees(r.GetFloat(4)), r.GetInt32(5),
                         Convert.ToInt32(r.GetValue(7)), Convert.ToInt32(r.GetValue(8)), new List<(NpcTemplate, int)>());
                 spawn.Candidates.Add((ReadTemplate(r, 9), Convert.ToInt32(r.GetValue(6))));
             }
