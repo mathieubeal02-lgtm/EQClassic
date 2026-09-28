@@ -69,6 +69,12 @@ namespace EQC
 				return pwaitingforbootup; 
 			}
 
+			// the zone server booting our zone (ZSList::BOOTUP_LAUNCHED: a process World is starting)
+			int32 GetWaitingForBootupID()
+			{
+				return pwaitingforbootup;
+			}
+
 			int32 GetClientID()
 			{
 				return account_id;

@@ -79,6 +79,9 @@ In `C:\eqc`:
   locked=false
   worldaddress=127.0.0.1     ; IP clients use to reach world.exe → LAN/public IP for remote players
   loginport=5999
+  autobootzones=false        ; true: world.exe starts a zone process when none is free
+  autobootzones_firstport=7100
+  autobootzones_max=20
 
   [LoginConfig]
   ServerMode=Standalone
@@ -88,6 +91,10 @@ In `C:\eqc`:
   assigns on demand. `Boot5zones.bat` starts five (ports 1000–1004). For remote players put
   the server's real IP in the *zone ip* argument. `BootAll.bat` starts every zone statically
   (ports 30000+), which needs a lot of RAM — use it only if dynamic zones misbehave.
+  With `autobootzones=true`, world.exe itself starts `zone.exe . <worldaddress> <port> 127.0.0.1`
+  (ports from `autobootzones_firstport`) when a player asks for a zone and every zone process is
+  busy, instead of answering "zone unavailable"; the player waits up to 90 s for it to boot.
+  `worldaddress` is then also the address the zones give the clients.
 - Client data the server needs (not in git):
   - `Maps/Maps/*.map` → EQEmu Map Pack 1.0 (`Maps.tar.gz`, see `docs/BUILD.md`). Without them
     **no NPC spawns**.

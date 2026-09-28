@@ -341,6 +341,11 @@ namespace EQC
 						this->SendZoneUnavail();
 
 					}
+					else if (this->pwaitingforbootup == ZSList::BOOTUP_LAUNCHED)
+					{
+						// a new zone process has to start under Wine and load its zone first
+						this->autobootup_timeout->Start(90000, false);
+					}
 
 					return; // bail out of passing this client to zone
 				}

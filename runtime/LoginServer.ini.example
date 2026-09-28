@@ -16,6 +16,11 @@ password=
 locked=false
 worldaddress=127.0.0.1
 loginport=5999
+### --- autobootzones=true: when no zone process is free, world.exe starts one more
+### --- ("zone.exe . <worldaddress> <port> 127.0.0.1", ports from autobootzones_firstport, at most autobootzones_max).
+autobootzones=false
+autobootzones_firstport=7100
+autobootzones_max=20
 
 [LoginConfig]
 ServerMode=Standalone
