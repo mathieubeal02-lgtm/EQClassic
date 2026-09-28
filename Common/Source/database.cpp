@@ -570,7 +570,7 @@ void Database::GetCharSelectInfo(int32 account_id, CharacterSelect_Struct* cs,Ch
 			}
 			else {
 				cout << "Got a bogus character (" << row[0] << "), deleting it." << endl;
-				DeleteCharacter(row[0]);
+				DeleteCharacter(account_id, row[0]);
 			}
 		}
 		mysql_free_result(result);
@@ -616,10 +616,15 @@ bool Database::ReserveName(int32 account_id, char* name)
 	False will also be returned if there is a database error.
 	Tazadar: Added corpse deletion!
 */
-bool Database::DeleteCharacter(char* name)
+// Deletes the character only if it belongs to account_id: the name comes from the client, which
+// could otherwise delete (and wipe the corpses of) anyone's character.
+bool Database::DeleteCharacter(int32 account_id, const char* name)
 {
 	char errbuf[MYSQL_ERRMSG_SIZE];
     char *query = 0;
+
+	if (account_id == 0 || GetAccountIDByChar((char*)name) != account_id)
+		return false;
 
 	if (!RunQuery(query, MakeAnyLenString(&query, "DELETE from player_corpses WHERE charname='%s'", SQLEscape(name).c_str()), errbuf)) {
 		cerr << "Error in DeleteCharacter query '" << query << "' " << errbuf << endl;
@@ -629,7 +634,7 @@ bool Database::DeleteCharacter(char* name)
 	}
 
 
-	if (!RunQuery(query, MakeAnyLenString(&query, "DELETE from character_ WHERE name='%s'", SQLEscape(name).c_str()), errbuf)) {
+	if (!RunQuery(query, MakeAnyLenString(&query, "DELETE from character_ WHERE name='%s' AND account_id=%i", SQLEscape(name).c_str(), account_id), errbuf)) {
 		cerr << "Error in DeleteCharacter query '" << query << "' " << errbuf << endl;
 		if (query != 0)
 			safe_delete_array(query);

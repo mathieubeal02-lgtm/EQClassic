@@ -486,8 +486,17 @@ namespace EQC
 		// deletes a char at the users request
 		bool Client::ProcessOP_DeleteCharacter(APPLAYER* inpacket)
 		{
-			// delete the char from the database
-			bool ret = Database::Instance()->DeleteCharacter((char*)inpacket->pBuffer);
+			if (this->account_id == 0 || inpacket->size == 0)
+				return false;
+
+			// the packet is the character name; it is not trusted to be terminated
+			char name[64] = {0};
+			memcpy(name, inpacket->pBuffer, inpacket->size < sizeof(name) - 1 ? inpacket->size : sizeof(name) - 1);
+
+			// delete the char from the database, only if it is one of this account's
+			bool ret = Database::Instance()->DeleteCharacter(this->account_id, name);
+			if (!ret)
+				cerr << "Refused to delete character '" << name << "' for account " << this->account_id << endl;
 
 			if(ret)
 			{
