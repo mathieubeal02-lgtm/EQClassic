@@ -33,3 +33,10 @@ shaman, with its name zeroed. The world server sets the starting items and zone 
 `e2e`). It runs MariaDB in Docker, imports the dump and patches, then runs the Release servers
 under Wine. The bot then logs in, creates a character and plays twice. The second session catches
 the zone failing to log the first one out, which shows up as "Error 1018: active character".
+
+## Merchant check
+
+`eqbot test` also buys from a merchant (step `merchant buy`): the closest merchant NPC, or the one whose
+name starts with `EQBOT_SHOP_NPC`, sells `EQBOT_SHOP` (default 5; `-` skips) of its cheapest stack.
+`merchant-test.sh` drives it twice against the legacy servers and reads the database: one copper short
+of the price must be refused with the money left as it was, the exact price must buy the whole stack.

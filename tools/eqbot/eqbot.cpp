@@ -647,7 +647,7 @@ namespace
 		return Inflate(d, 20000);
 	}
 
-	struct SpawnInfo { int id; std::string name; int npc; int level; float x, y, z; };
+	struct SpawnInfo { int id; std::string name; int npc; int level; int cls; float x, y, z; };
 
 	// NewSpawn_Struct[] of the zone's spawn packets (EncryptZoneSpawnPacket + DeflatePacket):
 	// 168 bytes each, the Spawn_Struct after a 4-byte placeholder.
@@ -658,6 +658,7 @@ namespace
 		si.name = std::string((const char*)sp + 100, strnlen((const char*)sp + 100, 30));
 		si.npc = sp[73];
 		si.level = sp[76];
+		si.cls = sp[74];
 		si.y = (short)(sp[51] | (sp[52] << 8));
 		si.x = (short)(sp[53] | (sp[54] << 8));
 		si.z = (short)(sp[55] | (sp[56] << 8));
@@ -1080,6 +1081,118 @@ namespace
 				z.Poll(500);
 				MoveItem(z, kCursor, kDestroy);
 				DeleteAll(got = Collect(z, 1500, [](const std::vector<Packet*>&) { return false; }));
+			}
+		}
+
+		// A merchant sells: open the closest one, buy EQBOT_SHOP (default 5, \"-\" skips) of its cheapest
+		// stack. The money it costs is checked from outside (merchant-test.sh reads the database).
+		const char* shopEnv = getenv("EQBOT_SHOP");
+		if (shopEnv && strcmp(shopEnv, "-") == 0)
+			printf("[ -- ] %-22s %s\n", "merchant buy", "skipped (EQBOT_SHOP=-)");
+		else
+		{
+			int qty = shopEnv ? atoi(shopEnv) : 5;
+			float meX = 0, meY = 0;
+			if (pp.size() >= 2416) { memcpy(&meY, &pp[2408], 4); memcpy(&meX, &pp[2412], 4); }
+			const SpawnInfo* merchant = 0;
+			float best = 1e30f;
+			for (size_t i = 0; i < spawns.size(); i++)
+			{
+				if (spawns[i].npc != 1 || (spawns[i].cls != 41 && spawns[i].cls != 32))	// Sony's 41; our MERCHANT is 32
+					continue;
+				// EQBOT_SHOP_NPC=<name prefix> picks one merchant whatever the distance
+				if (getenv("EQBOT_SHOP_NPC") && spawns[i].name.compare(0, strlen(getenv("EQBOT_SHOP_NPC")), getenv("EQBOT_SHOP_NPC")) != 0)
+					continue;
+				float d = (spawns[i].x - meX) * (spawns[i].x - meX) + (spawns[i].y - meY) * (spawns[i].y - meY);
+				if (d < best) { best = d; merchant = &spawns[i]; }
+			}
+			if (!merchant)
+			{
+				std::set<int> classes;
+				for (size_t i = 0; i < spawns.size(); i++) if (spawns[i].npc == 1) classes.insert(spawns[i].cls);
+				std::string cl;
+				for (std::set<int>::iterator c = classes.begin(); c != classes.end(); ++c) cl += std::to_string(*c) + " ";
+				printf("[ -- ] %-22s %s\n", "merchant buy", ("skipped: no merchant in the zone (NPC classes " + cl + ")").c_str());
+			}
+			else
+			{
+				uint16_t aim[2] = { (uint16_t)merchant->id, 0 };
+				z.Send(kClientTarget, aim, sizeof(aim));
+				z.Poll(300);
+				Say(z, charname, "#loc");
+				std::string where;
+				std::vector<Packet*> l = Collect(z, 5000, [&](const std::vector<Packet*>& g) { return HasText(g, "s Location:", &where); });
+				DeleteAll(l);
+				float mx = merchant->x, my = merchant->y, mz = merchant->z;
+				size_t at = where.find("Location:");
+				if (at != std::string::npos)
+					sscanf(where.c_str() + at + 9, " %f, %f, %f", &mx, &my, &mz);
+				unsigned char u[15];
+				memset(u, 0, sizeof(u));
+				short y = (short)my, x = (short)(mx + 3), zz = (short)(mz + 4);
+				memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
+				u[3] = HeadingTowards(x, y, mx, my);
+				z.Send(kClientUpdate, u, sizeof(u));
+				z.Poll(500);
+				// OP_ShopRequest: Merchant_Click_Struct (entity id, player id, 4 bytes, price multiplier)
+				unsigned char click[16];
+				memset(click, 0, sizeof(click));
+				click[0] = merchant->id & 0xff; click[1] = merchant->id >> 8;
+				z.Send(0x0b20, click, sizeof(click));
+				std::vector<Packet*> shop = Collect(z, 4000, [](const std::vector<Packet*>&) { return false; });
+				bool opened = false;
+				int slot = -1, item = 0, cost = 0, cheapest = 0x7fffffff, items = 0;
+				for (size_t i = 0; i < shop.size(); i++)
+				{
+					const Packet* p = shop[i];
+					if (p->opcode == 0x0b20 && p->size >= 9 && p->pBuffer[8] == 1)
+						opened = true;
+					if (p->opcode != 0x0c20 || p->size < 5 + 193)
+						continue;
+					items++;
+					const unsigned char* it = p->pBuffer + 5;
+					int c = it[140] | (it[141] << 8) | (it[142] << 16) | (it[143] << 24);
+					if (it[187] == 1 && c > 0 && c < cheapest)
+					{
+						cheapest = c;
+						cost = c;
+						item = it[130] | (it[131] << 8);
+						slot = (short)(it[134] | (it[135] << 8));
+					}
+				}
+				DeleteAll(shop);
+				if (!opened || slot < 0)
+					Step(false, "merchant buy", std::string(opened ? "no stack for sale" : "the shop did not open") + " (" + merchant->name + ", " + std::to_string(items) + " items)");
+				else
+				{
+					// OP_ShopPlayerBuy: Merchant_Purchase_Struct (npc, player, slot, 2 bytes, quantity at 12, cost at 16)
+					unsigned char buy[20];
+					memset(buy, 0, sizeof(buy));
+					buy[0] = merchant->id & 0xff; buy[1] = merchant->id >> 8;
+					buy[8] = slot & 0xff; buy[9] = slot >> 8;
+					buy[12] = (unsigned char)qty;
+					z.Send(0x2720, buy, sizeof(buy));
+					std::vector<Packet*> r = Collect(z, 4000, [](const std::vector<Packet*>& g) {
+						for (size_t i = 0; i < g.size(); i++) if (g[i]->opcode == 0x2720) return true;
+						return HasText(g, "afford"); });
+					int gotQty = -1, gotCost = -1;
+					for (size_t i = 0; i < r.size(); i++)
+						if (r[i]->opcode == 0x2720 && r[i]->size >= 20)
+						{
+							gotQty = r[i]->pBuffer[12];
+							gotCost = r[i]->pBuffer[16] | (r[i]->pBuffer[17] << 8) | (r[i]->pBuffer[18] << 16) | (r[i]->pBuffer[19] << 24);
+						}
+					std::string said = LastTexts(r, 1);
+					DeleteAll(r);
+					z.Send(0x3720, 0, 0);	// close the window
+					DeleteAll(r = Collect(z, 800, [](const std::vector<Packet*>&) { return false; }));
+					char b[200];
+					if (gotQty >= 0)
+						snprintf(b, sizeof(b), "item %d x%d from %s, unit cost %d, merchant says total %d", item, gotQty, merchant->name.c_str(), cost, gotCost);
+					else
+						snprintf(b, sizeof(b), "item %d x%d from %s refused: %s", item, qty, merchant->name.c_str(), said.c_str());
+					Step(gotQty >= 0 || said.find("afford") != std::string::npos, "merchant buy", b);
+				}
 			}
 		}
 
