@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <set>
 #include <map>
 #include <string>
 #include <vector>
@@ -885,13 +886,52 @@ namespace
 		// primary hand (slot 13); the bot stands next to a low level NPC and auto-attacks it.
 		{
 			int weapon = getenv("EQBOT_WEAPON") ? atoi(getenv("EQBOT_WEAPON")) : 11050;
-			const SpawnInfo* prey = 0;
-			for (size_t i = 0; i < spawns.size(); i++)
-				if (spawns[i].npc == 1 && spawns[i].level <= 3 && spawns[i].name.compare(0, 2, "a_") == 0)
+			// The prey: the closest small NPC that stands still. Watch 3 s of position updates first: a
+			// walking, flying or swimming one is hit from where it was (\"too far away\").
+			std::set<int> moving;
+			{
+				std::map<int, std::pair<float, float> > seen;
+				std::vector<Packet*> watch = Collect(z, 3000, [](const std::vector<Packet*>&) { return false; });
+				for (size_t i = 0; i < watch.size(); i++)
 				{
-					prey = &spawns[i];
-					break;
+					const Packet* p = watch[i];
+					if (p->opcode != kMobUpdate || p->size < 4)
+						continue;
+					int n = p->pBuffer[0] | (p->pBuffer[1] << 8);
+					for (int k = 0; k < n && 4 + (k + 1) * 15 <= (int)p->size; k++)
+					{
+						const unsigned char* m = p->pBuffer + 4 + k * 15;
+						int id = m[0] | (m[1] << 8);
+						float uy = (short)(m[5] | (m[6] << 8)), ux = (short)(m[7] | (m[8] << 8));
+						if (seen.count(id) && (std::fabs(seen[id].first - ux) > 1 || std::fabs(seen[id].second - uy) > 1))
+							moving.insert(id);
+						seen[id] = std::make_pair(ux, uy);
+						for (size_t s2 = 0; s2 < spawns.size(); s2++)
+							if (spawns[s2].id == id && (std::fabs(spawns[s2].x - ux) > 2 || std::fabs(spawns[s2].y - uy) > 2))
+								moving.insert(id);
+					}
 				}
+				DeleteAll(watch);
+			}
+			float meX = 0, meY = 0;
+			if (pp.size() >= 2416)
+			{
+				memcpy(&meY, &pp[2408], 4);
+				memcpy(&meX, &pp[2412], 4);
+			}
+			const SpawnInfo* prey = 0;
+			float best = 1e30f;
+			for (size_t i = 0; i < spawns.size(); i++)
+			{
+				if (spawns[i].npc != 1 || spawns[i].level > 3 || spawns[i].name.compare(0, 2, "a_") != 0 || moving.count(spawns[i].id))
+					continue;
+				float d = (spawns[i].x - meX) * (spawns[i].x - meX) + (spawns[i].y - meY) * (spawns[i].y - meY);
+				if (d < best)
+				{
+					best = d;
+					prey = &spawns[i];
+				}
+			}
 			Say(z, charname, "#clearcursor");
 			DeleteAll(got = Collect(z, 1500, [](const std::vector<Packet*>&) { return false; }));
 			Say(z, charname, "#si " + std::to_string(weapon));
@@ -926,6 +966,25 @@ namespace
 					}
 				}
 				DeleteAll(got);
+				// Where the zone has it (#loc answers for the target): the spawn list and the updates
+				// can be old, and a fish or a mosquito is not where its spawn point is.
+				{
+					uint16_t aim[2] = { (uint16_t)prey->id, 0 };
+					z.Send(kClientTarget, aim, sizeof(aim));
+					z.Poll(300);
+					Say(z, charname, "#loc");
+					std::string where;
+					std::vector<Packet*> l = Collect(z, 5000, [&](const std::vector<Packet*>& g) { return HasText(g, "s Location:", &where); });
+					float fx, fy, fz;
+					size_t at = where.find("Location:");
+					if (at != std::string::npos && sscanf(where.c_str() + at + 9, " %f, %f, %f", &fx, &fy, &fz) == 3)
+					{
+						px = fx;
+						py = fy;
+						pz = fz;
+					}
+					DeleteAll(l);
+				}
 				unsigned char u[15];
 				memset(u, 0, sizeof(u));
 				short y = (short)py, x = (short)(px + 2), zz = (short)(pz + 4);	// eye height rather than the feet: line of sight
