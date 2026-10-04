@@ -1,4 +1,4 @@
-#include "CombatFormulas.h"
+
 #include <logger.h>
 #include <cmath>
 #include <queue>
