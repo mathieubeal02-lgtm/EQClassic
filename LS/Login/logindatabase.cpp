@@ -427,6 +427,15 @@ int32 Database::CheckEQLogin(const APPLAYER* app, char* oUsername, int8* lsadmin
 	if (accid == 0)
 		return 0;
 
+	// The account name goes to World with the login (ServerLSClientAuth), which names the game account
+	// after it on the first login. It was left empty (the copy below was commented out with the MD5
+	// check): World created one account named '' and refused every new account after it.
+	if (oUsername)
+	{
+		strncpy(oUsername, lcs->username, 29);
+		oUsername[29] = 0;
+	}
+
 	// jimm0thy - this shouldn't be needed since the SQL query is pulling the SHA password
 
 	//MD5 md5pass(lcs->password, strlen(lcs->password));
