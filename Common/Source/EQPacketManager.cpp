@@ -6,6 +6,7 @@
 // 
 // ***************************************************************
 
+#include "SequenceMath.h"
 #include "EQPacketManager.h"
 #include "FragmentLimits.h"
 
@@ -89,7 +90,7 @@ namespace EQC
 					cout << "Incoming ack response: " << dwARSP << " SACK.dwARQ:" << SACK.dwARQ << endl;
 				}
 				EQC::Common::Network::EQPacket *pack;
-				while (!ResendQueue.empty() && dwARSP - ResendQueue.top()->dwARQ >= 0)
+				while (!ResendQueue.empty() && SeqDiff(dwARSP, ResendQueue.top()->dwARQ) >= 0)
 				{
 					if (debug_level >= 5)
 					{
@@ -174,7 +175,7 @@ namespace EQC
 					//      CACK.dwGSQ = 0xFFFF; changed next if to else instead
 				}
 				// Agz: Moved this, was under packet resend before..., later changed to else statement...
-				else if( (pack->dwSEQ - CACK.dwGSQ) <= 0 && !from_buffer)  // Agz: if from the buffer i ignore sequence number..
+				else if( SeqDiff(pack->dwSEQ, CACK.dwGSQ) <= 0 && !from_buffer)  // Agz: if from the buffer i ignore sequence number..
 				{
 					if (debug_level >= 6)
 					{
@@ -207,7 +208,7 @@ namespace EQC
 				if(pack->HDR.a1_ARQ)
 				{
 					// Is this packet a packet we dont want now, but will need later?
-					if(pack->dwARQ - dwLastCACK > 1 && pack->dwARQ - dwLastCACK < 16) // Agz: Added 16 limit
+					if(SeqDiff(pack->dwARQ, dwLastCACK) > 1 && SeqDiff(pack->dwARQ, dwLastCACK) < 16) // Agz: Added 16 limit
 					{
 						// Debug check, if we want to buffer a packet we got from the buffer something is wrong...
 						if (from_buffer)
@@ -248,7 +249,7 @@ namespace EQC
 						return false;
 					}
 					// Is this packet a resend we have already processed?
-					if(pack->dwARQ - dwLastCACK <= 0)
+					if(SeqDiff(pack->dwARQ, dwLastCACK) <= 0)
 					{
 						if (debug_level >= 6)
 						{
@@ -404,7 +405,7 @@ namespace EQC
 				{
 					num++;
 					// Check if we have a packet we want already buffered
-					if (iterator.GetData()->dwARQ - dwLastCACK == 1)
+					if (SeqDiff(iterator.GetData()->dwARQ, dwLastCACK) == 1)
 					{
 						if (debug_level >= 8)
 						{

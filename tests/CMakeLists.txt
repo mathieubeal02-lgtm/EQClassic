@@ -15,3 +15,7 @@ add_test(NAME fragments COMMAND fragment_test)
 # Melee combat formulas (Zone/Source/CombatFormulas.cpp), pure functions.
 add_executable(combat_test combat_test.cpp ../Zone/Source/CombatFormulas.cpp)
 add_test(NAME combat COMMAND combat_test)
+
+# 16-bit sequence/ack ordering across the wrap (SequenceMath.h, used by EQPacketManager).
+add_executable(sequence_test sequence_test.cpp)
+add_test(NAME sequence COMMAND sequence_test)
