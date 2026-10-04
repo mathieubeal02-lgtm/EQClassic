@@ -656,6 +656,11 @@ None of milestones 1–4 changes server code.
     (no position change for over 2 minutes outside rest).
   - The test fails on any guard aggro.
 
+- **Status (2026-10-04).** Done in `eqbot hunt` (`tools/botd/README.md`), in `qeytoqrg` rather
+  than `qeynos2` (the level-1 prey is outside the city). A human warrior and a human cleric pass the
+  checks over 30 minutes (warrior 37 kills and 1 death, cleric 10 kills and 9 deaths). Melee plus a self-heal for clerics; the camp
+  is the place of the first login, not yet chosen from `spawn2`; the dead go back to their corpse.
+
 ### M3: groups with bots and players
 
 - **Code.**

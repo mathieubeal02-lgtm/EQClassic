@@ -3,6 +3,8 @@
 //   eqbot login  <login-host> <user> <password> [port]
 //   eqbot create <login-host> <user> <password> <character>
 //   eqbot play   <login-host> <user> <password> <character>
+//   eqbot walk   <login-host> <user> <password> <character> <waypoints file> [seconds]
+//   eqbot hunt   <login-host> <user> <password> <character> [seconds]
 //
 // login:  the login server handshake the real client does, checking every answer:
 //         LoginInfo (DES-encrypted credentials) -> SessionId, LoginBanner, ServerList,
@@ -11,15 +13,19 @@
 //         (no-op when the character exists).
 // play:   login, world, enter world, then the zone handshake up to "Enterzone complete", and a
 //         clean disconnect.
+// walk, hunt: player bots (tools/botd, docs/bots-design.md), one decision line per action.
 // Exit code 0 when every step succeeded. Output is one line per step, for CI logs.
 // EQBOT_VERBOSE=1 lists the zone packets, EQBOT_RAW=1 dumps every datagram received.
 // EQBOT_STAY=<seconds> keeps `play` in the zone and checks the height of moving mobs.
+// EQBOT_CLASS=warrior|cleric makes `create` build a human of that class instead of a troll shaman.
 #include <openssl/des.h>
 #include <stdint.h>
 #include <zlib.h>
+#include <sys/select.h>
 #include <sys/time.h>
 
 #include <cmath>
+#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -314,8 +320,18 @@ namespace
 		unsigned char approval[40];
 		memset(approval, 0, sizeof(approval));
 		strncpy((char*)approval, charname.c_str(), 29);
-		approval[32] = 9;
-		approval[36] = 10;
+		// The template is a troll shaman. EQBOT_CLASS=warrior or cleric makes a human of that class
+		// (welcome in Qeynos): base stats from World's CheckCharCreateInfo, the free points in STR or WIS.
+		std::string cls = getenv("EQBOT_CLASS") ? getenv("EQBOT_CLASS") : "";
+		int race = 9, klass = 10;
+		const unsigned char* stats = 0;	// STR STA CHA DEX INT AGI WIS
+		static const unsigned char warriorStats[7] = { 110, 85, 75, 75, 75, 80, 75 };
+		static const unsigned char clericStats[7] = { 80, 80, 75, 75, 75, 75, 115 };
+		if (cls == "warrior") { race = 1; klass = 1; stats = warriorStats; }
+		else if (cls == "cleric") { race = 1; klass = 2; stats = clericStats; }
+		else if (!cls.empty()) { Step(false, "class", cls + ": only warrior or cleric (default: troll shaman)"); return 1; }
+		approval[32] = race;
+		approval[36] = klass;
 		w.Send(kNameApproval, approval, sizeof(approval));
 		Packet* p = w.WaitFor(kNameApproval, TIMEOUT_MS);
 		bool approved = p && p->size >= 1 && p->pBuffer[0] == 1;
@@ -326,6 +342,16 @@ namespace
 
 		std::vector<unsigned char> cc(kCharCreateTemplate, kCharCreateTemplate + sizeof(kCharCreateTemplate));
 		strncpy((char*)cc.data(), charname.c_str(), 29);
+		if (stats)
+		{
+			// the template is the profile without its 4-byte checksum: race at 52, class at 54, stats at 119,
+			// deity at 4152 (Karana for a Qeynos human)
+			cc[52] = race;
+			cc[54] = klass;
+			memcpy(&cc[119], stats, 7);
+			cc[4152] = 207 & 0xff;
+			cc[4153] = 207 >> 8;
+		}
 		w.Send(kCharacterCreate, cc.data(), cc.size());
 		std::vector<Packet*> others;
 		p = w.WaitFor(kSendCharInfo, 10000, &others);
@@ -414,6 +440,9 @@ namespace
 		std::vector<std::vector<unsigned char> > spawnPackets;
 		// NPCs spawned one by one during the zone-in (a zone that just booted for us)
 		std::vector<std::vector<unsigned char> > newSpawnPackets;
+		int myId;	// our spawn id (OP_SpawnAppearance type 16 at zone-in)
+		std::vector<unsigned char> inventory;	// OP_CPlayerItems (0xf621): int16 count, deflated {opcode, Item_Struct}[]
+		ZoneState() : myId(0) {}
 	};
 
 	// Keeps the spawn packets of a batch: lists, and single NPCs (NewSpawn, 0x4921).
@@ -426,6 +455,10 @@ namespace
 				st.spawnPackets.push_back(d);
 			else if (got[i]->opcode == 0x4921 && got[i]->size >= 168)
 				st.newSpawnPackets.push_back(d);
+			else if (got[i]->opcode == (int16)0xf520 && got[i]->size >= 12 && (d[4] | (d[5] << 8)) == 16)
+				st.myId = d[8] | (d[9] << 8);
+			else if (got[i]->opcode == (int16)0xf621)
+				st.inventory = d;
 		}
 	}
 
@@ -505,6 +538,7 @@ namespace
 		if (p)
 			st.profile.assign(p->pBuffer, p->pBuffer + p->size);
 		delete p;
+		KeepSpawnPackets(st, got);	// the inventory comes right after the profile
 		DeleteAll(got);
 
 		z.Send(kZoneRequest3, name30, sizeof(name30));
@@ -661,7 +695,8 @@ namespace
 		si.cls = sp[74];
 		si.y = (short)(sp[51] | (sp[52] << 8));
 		si.x = (short)(sp[53] | (sp[54] << 8));
-		si.z = (short)(sp[55] | (sp[56] << 8));
+		// z on the wire: NPCs x10, players x1000 (Mob::FillSpawnStruct); kept in real units here
+		si.z = (short)(sp[55] | (sp[56] << 8)) / (si.npc == 1 ? 10.0f : 1000.0f);
 		return si;
 	}
 
@@ -988,7 +1023,7 @@ namespace
 				}
 				unsigned char u[15];
 				memset(u, 0, sizeof(u));
-				short y = (short)py, x = (short)(px + 2), zz = (short)(pz + 4);	// eye height rather than the feet: line of sight
+				short y = (short)py, x = (short)(px + 2), zz = (short)((pz + 4) * 10);	// eye height rather than the feet: line of sight; a client sends z x10
 				memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
 				u[3] = HeadingTowards(x, y, px, py);	// the zone only lets a player hit what it faces
 				z.Send(kClientUpdate, u, sizeof(u));
@@ -1045,7 +1080,7 @@ namespace
 					}
 					if (moved)
 					{
-						short ny = (short)py, nx = (short)(px + 2), nz = (short)(pz + 4);
+						short ny = (short)py, nx = (short)(px + 2), nz = (short)((pz + 4) * 10);
 						memcpy(u + 5, &ny, 2); memcpy(u + 7, &nx, 2); memcpy(u + 9, &nz, 2);
 						u[3] = HeadingTowards(nx, ny, px, py);
 						z.Send(kClientUpdate, u, sizeof(u));
@@ -1129,7 +1164,7 @@ namespace
 					sscanf(where.c_str() + at + 9, " %f, %f, %f", &mx, &my, &mz);
 				unsigned char u[15];
 				memset(u, 0, sizeof(u));
-				short y = (short)my, x = (short)(mx + 3), zz = (short)(mz + 4);
+				short y = (short)my, x = (short)(mx + 3), zz = (short)((mz + 4) * 10);
 				memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
 				u[3] = HeadingTowards(x, y, mx, my);
 				z.Send(kClientUpdate, u, sizeof(u));
@@ -1225,7 +1260,7 @@ namespace
 			unsigned char u[15];
 			memset(u, 0, sizeof(u));
 			u[0] = meId & 0xFF; u[1] = meId >> 8;
-			short y = (short)npc->y, x = (short)(npc->x + 3), zz = (short)npc->z;
+			short y = (short)npc->y, x = (short)(npc->x + 3), zz = (short)(npc->z * 10);
 			memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
 			z.Send(kClientUpdate, u, sizeof(u));
 			uint16_t target[2] = { (uint16_t)npc->id, 0 };
@@ -1246,12 +1281,761 @@ namespace
 		return failures ? 1 : 0;
 	}
 
+	// ---- walk: a bot that walks waypoints (bots milestone 1, docs/bots-design.md) ----
+
+	struct Waypoint { float x, y, z; };
+
+	// One decision line per action, the format docs/bots-design.md 6.1 verifies the milestones on.
+	void BotLog(const std::string& bot, const std::string& zone, const char* fmt, ...)
+	{
+		char text[400];
+		va_list args;
+		va_start(args, fmt);
+		vsnprintf(text, sizeof(text), fmt, args);
+		va_end(args);
+		struct timeval tv;
+		gettimeofday(&tv, 0);
+		printf("t=%ld.%03ld bot=%s zone=%s %s\n", (long)tv.tv_sec, (long)(tv.tv_usec / 1000), bot.c_str(), zone.c_str(), text);
+		fflush(stdout);
+	}
+
+	int Walk(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname,
+	         const std::string& file, int seconds)
+	{
+		std::vector<Waypoint> wps;
+		FILE* f = fopen(file.c_str(), "r");
+		if (f)
+		{
+			Waypoint w;
+			while (fscanf(f, "%f %f %f", &w.x, &w.y, &w.z) == 3)
+				wps.push_back(w);
+			fclose(f);
+		}
+		if (wps.size() < 2)
+		{
+			fprintf(stderr, "walk: %s needs at least 2 waypoints (x y z per line)\n", file.c_str());
+			return 2;
+		}
+		EqSession z;
+		ZoneState st;
+		if (!EnterZone(host, user, pass, charname, z, st))
+		{
+			BotLog(charname, "-", "action=Login result=failed");
+			return 1;
+		}
+		BotLog(charname, st.zone, "action=EnterZone id=%d waypoints=%d", st.myId, (int)wps.size());
+		const float speed = getenv("EQBOT_SPEED") ? atof(getenv("EQBOT_SPEED")) : 20.0f;	// units/s, about a walk
+		const int tickMs = 250;
+		std::vector<unsigned char> pp = DecodeProfile(st.profile);
+		Waypoint at = wps[0];
+		if (pp.size() >= 2420)
+		{
+			memcpy(&at.y, &pp[2408], 4);
+			memcpy(&at.x, &pp[2412], 4);
+			memcpy(&at.z, &pp[2416], 4);
+		}
+		long start = NowMs(), lastStatus = start, lastTick = start;
+		long packetsIn = 0, packetsOut = 0, arrivals = 0;
+		int next = 0, dir = 1;
+		bool moving = false;
+		while (NowMs() - start < seconds * 1000L)
+		{
+			const Waypoint& to = wps[next];
+			float dx = to.x - at.x, dy = to.y - at.y, dz = to.z - at.z;
+			float dist = sqrtf(dx * dx + dy * dy);
+			if (!moving)
+			{
+				BotLog(charname, st.zone, "action=MoveTo wp=%d target=%.1f,%.1f,%.1f dist=%.1f", next, to.x, to.y, to.z, dist);
+				moving = true;
+			}
+			long now = NowMs();
+			float step = speed * (now - lastTick) / 1000.0f;	// the time really gone since the last update
+			lastTick = now;
+			bool arrived = dist <= step;
+			if (arrived)
+				at = to;
+			else
+			{
+				at.x += dx / dist * step;
+				at.y += dy / dist * step;
+				at.z += dz / dist * step;	// between two grid points the ground is close to the line
+			}
+			unsigned char u[15];
+			memset(u, 0, sizeof(u));
+			short y = (short)at.y, x = (short)at.x, zz = (short)(at.z * 10);	// a client sends z x10
+			u[0] = st.myId & 0xff; u[1] = st.myId >> 8;
+			u[2] = arrived ? 0 : (unsigned char)(speed > 30 ? 46 : 22);	// animation: walking pace
+			u[3] = HeadingTowards(at.x, at.y, to.x, to.y);
+			memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
+			z.Send(kClientUpdate, u, sizeof(u));
+			packetsOut++;
+			// wait out the tick (Poll returns as soon as a packet comes), keep our id when it comes
+			long tickEnd = NowMs() + tickMs;
+			while (NowMs() < tickEnd)
+			{
+				std::vector<Packet*> got = z.Poll((int)(tickEnd - NowMs()));
+				packetsIn += got.size();
+				for (size_t i = 0; i < got.size(); i++)
+					if (got[i]->opcode == (int16)0xf520 && got[i]->size >= 12 && (got[i]->pBuffer[4] | (got[i]->pBuffer[5] << 8)) == 16
+						&& st.myId == 0)
+					{
+						st.myId = got[i]->pBuffer[8] | (got[i]->pBuffer[9] << 8);
+						BotLog(charname, st.zone, "action=Identify id=%d", st.myId);
+					}
+				DeleteAll(got);
+			}
+			if (arrived)
+			{
+				arrivals++;
+				moving = false;
+				BotLog(charname, st.zone, "action=Arrive wp=%d at=%.1f,%.1f,%.1f", next, at.x, at.y, at.z);
+				// EQBOT_VERIFY (GM accounts only): every 5th arrival, where does the zone have us?
+				if (getenv("EQBOT_VERIFY") && arrivals % 5 == 0)
+				{
+					uint16_t none[2] = { 0, 0 };
+					z.Send(kClientTarget, none, sizeof(none));
+					Say(z, charname, "#loc");
+					std::string where;
+					std::vector<Packet*> l = Collect(z, 5000, [&](const std::vector<Packet*>& g) { return HasText(g, "Current Location:", &where); });
+					packetsIn += l.size();
+					DeleteAll(l);
+					float sx, sy, sz;
+					size_t pos = where.find("Location:");
+					if (pos != std::string::npos && sscanf(where.c_str() + pos + 9, " %f, %f, %f", &sx, &sy, &sz) == 3)
+						BotLog(charname, st.zone, "action=Verify server=%.1f,%.1f,%.1f diff=%.1f", sx, sy, sz,
+							sqrtf((sx - at.x) * (sx - at.x) + (sy - at.y) * (sy - at.y)));
+					else
+						BotLog(charname, st.zone, "action=Verify result=no-answer");
+					lastTick = NowMs();
+				}
+				// rest a moment at every third point: sit, then stand
+				if (arrivals % 3 == 0)
+				{
+					unsigned char sa[12];
+					memset(sa, 0, sizeof(sa));
+					sa[0] = st.myId & 0xff; sa[1] = st.myId >> 8; sa[4] = 14; sa[8] = 110;
+					z.Send((int16)0xf520, sa, sizeof(sa));
+					BotLog(charname, st.zone, "action=Sit");
+					long until = NowMs() + 3000;
+					while (NowMs() < until) { std::vector<Packet*> g = z.Poll(250); packetsIn += g.size(); DeleteAll(g); }
+					lastTick = NowMs();	// sitting is not walking
+					sa[8] = 100;
+					z.Send((int16)0xf520, sa, sizeof(sa));
+					packetsOut += 2;
+					BotLog(charname, st.zone, "action=Stand");
+				}
+				if (next + dir < 0 || next + dir >= (int)wps.size())
+					dir = -dir;		// walk the grid back and forth
+				next += dir;
+			}
+			if (NowMs() - lastStatus >= 30000)
+			{
+				double secs = (NowMs() - start) / 1000.0;
+				BotLog(charname, st.zone, "action=Status pos=%.1f,%.1f,%.1f arrivals=%ld in_pps=%.1f out_pps=%.1f", at.x, at.y, at.z, arrivals, packetsIn / secs, packetsOut / secs);
+				lastStatus = NowMs();
+			}
+		}
+		double secs = (NowMs() - start) / 1000.0;
+		BotLog(charname, st.zone, "action=Done arrivals=%ld seconds=%.0f in_pps=%.1f out_pps=%.1f", arrivals, secs, packetsIn / secs, packetsOut / secs);
+		z.Disconnect();
+		return 0;
+	}
+
+
+	// ---- hunt: a bot that hunts alone (bots milestone 2, docs/bots-design.md 9) ----
+	// A state machine, one decision line per change (as walk):
+	//   Seek     closest prey near the camp: "a_"/"an_" NPC, small enough, nobody on it, not a guard
+	//   Consider ask the zone (OP_Consider): never attack an NPC that cons amiable or better
+	//   Approach walk to it; Fight: target + auto-attack; Loot: every item of its corpse
+	//   Rest     sit until healed (under 90 % HP before a pull, and a short sit after each fight); stand on aggro
+	//   Flee     back to the camp under 20 % HP while the prey is still healthy
+	// A bot that is hit fights back whatever it was doing. Killed: it logs, waits, and logs in again
+	// (the zone sends it to its bind point). Spells: Minor Healing on self when a gem holds it.
+
+	struct Mobile { std::string name; int level; float x, y, z; int hp; bool alive; };
+
+	struct HuntStats
+	{
+		int kills, loots, items, deaths, hitsDealt, damageDealt, hitsTaken, damageTaken, refused, recovered, equipped;
+		long expGained;
+		bool campSet;	// the camp is where the first life began: the bot goes back there after a death
+		float campX, campY, campZ;
+		std::set<std::string> emptiedCorpses;	// our own corpses already looted
+		HuntStats() : kills(0), loots(0), items(0), deaths(0), hitsDealt(0), damageDealt(0), hitsTaken(0), damageTaken(0),
+		              refused(0), recovered(0), equipped(0), expGained(0), campSet(false), campX(0), campY(0), campZ(0) {}
+	};
+
+	// Items of the bulk inventory sent at zone-in: slot -> Item_Struct bytes.
+	std::map<int, std::vector<unsigned char> > InventoryItems(const std::vector<unsigned char>& packet)
+	{
+		std::map<int, std::vector<unsigned char> > items;
+		if (packet.size() < 3)
+			return items;
+		int count = packet[0] | (packet[1] << 8);
+		std::vector<unsigned char> raw = Inflate(std::vector<unsigned char>(packet.begin() + 2, packet.end()), 200000);
+		if (count <= 0 || raw.size() % count)
+			return items;
+		size_t rec = raw.size() / count;	// int16 opcode + Item_Struct
+		for (int i = 0; i < count && rec >= 140; i++)
+		{
+			const unsigned char* it = &raw[i * rec + 2];
+			int slot = (short)(it[134] | (it[135] << 8));
+			items[slot] = std::vector<unsigned char>(it, it + rec - 2);
+		}
+		return items;
+	}
+
+	// Puts on what lies in the packs and fits an empty worn slot (after looting our corpse), as a player
+	// does: pack -> cursor (slot 0) -> worn slot. Weapons first in the primary hand.
+	int EquipFromPacks(EqSession& z, const std::string& charname, const std::string& zone, const std::vector<unsigned char>& inventory)
+	{
+		std::map<int, std::vector<unsigned char> > items = InventoryItems(inventory);
+		if (getenv("EQBOT_VERBOSE"))
+			for (std::map<int, std::vector<unsigned char> >::iterator i = items.begin(); i != items.end(); ++i)
+				printf("       item slot=%d nr=%d size=%d slots=0x%08x\n", i->first, i->second[130] | (i->second[131] << 8), (int)i->second.size(),
+				       i->second[136] | (i->second[137] << 8) | (i->second[138] << 16) | ((unsigned)i->second[139] << 24));
+		static const int order[] = { 13, 14, 11, 2, 17, 18, 19, 7, 12, 6, 8, 20, 5, 1, 4, 3, 9, 10, 15, 16, 21 };
+		int moved = 0;
+		for (int from = 22; from <= 29; from++)
+		{
+			if (!items.count(from))
+				continue;
+			const std::vector<unsigned char> it = items[from];
+			if (it.size() < 140)
+				continue;
+			uint32_t slots = it[136] | (it[137] << 8) | (it[138] << 16) | ((uint32_t)it[139] << 24);
+			for (size_t k = 0; k < sizeof(order) / sizeof(order[0]); k++)
+			{
+				int to = order[k];
+				if (!(slots & (1u << to)) || items.count(to))
+					continue;
+				uint32_t a[3] = { (uint32_t)from, 0, 0 }, b[3] = { 0, (uint32_t)to, 0 };
+				z.Send((int16)0x2c21, a, sizeof(a));	// OP_MoveItem: pick up
+				z.Send((int16)0x2c21, b, sizeof(b));	// put on
+				std::vector<Packet*> got = z.Poll(300);
+				DeleteAll(got);
+				items[to] = it;
+				BotLog(charname, zone, "action=Equip item=%d from=%d to=%d", it[130] | (it[131] << 8), from, to);
+				moved++;
+				break;
+			}
+		}
+		return moved;
+	}
+
+	bool IsPreyName(const std::string& n)
+	{
+		if (n.compare(0, 2, "a_") != 0 && n.compare(0, 3, "an_") != 0)
+			return false;
+		std::string l = n;
+		for (size_t i = 0; i < l.size(); i++)
+			l[i] = tolower(l[i]);
+		return l.find("guard") == std::string::npos && l.find("merchant") == std::string::npos;
+	}
+
+	// One life: from zone-in to death or the deadline. Returns false when the login failed.
+	bool HuntLife(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname,
+	              long deadline, HuntStats& hs, bool& died, bool& relog)
+	{
+		died = false;
+		relog = false;
+		EqSession z;
+		ZoneState st;
+		if (!EnterZone(host, user, pass, charname, z, st))
+		{
+			BotLog(charname, "-", "action=Login result=failed");
+			return false;
+		}
+		std::vector<unsigned char> pp = DecodeProfile(st.profile);
+		float meX = 0, meY = 0, meZ = 0;
+		if (pp.size() >= 2420) { memcpy(&meY, &pp[2408], 4); memcpy(&meX, &pp[2412], 4); memcpy(&meZ, &pp[2416], 4); }
+		if (!hs.campSet) { hs.campX = meX; hs.campY = meY; hs.campZ = meZ; hs.campSet = true; }
+		const float campX = hs.campX, campY = hs.campY, campZ = hs.campZ, campRadius = 800;
+		float roamX = campX, roamY = campY;
+		int myLevel = pp.size() > 60 ? pp[60] : 1;
+		int myHp = 100, myMaxHp = 0;	// percent; unknown until the zone sends our HP
+		long myExp = -1;
+		// a heal in a spell gem (setup-accounts.sh gives clerics Minor Healing): cast on self when hurt
+		const int kMinorHealing = 200, kMinorHealingMana = 10;
+		int healGem = -1;
+		for (int g = 0; g < 8 && pp.size() >= 2406; g++)
+			if ((pp[2390 + g * 2] | (pp[2391 + g * 2] << 8)) == kMinorHealing)
+				healGem = g;
+		int myMana = pp.size() >= 72 ? (short)(pp[70] | (pp[71] << 8)) : 0, maxMana = myMana;
+		long castUntil = 0, lastManaRise = 0;
+		if (pp.size() >= 68) { uint32_t e; memcpy(&e, &pp[64], 4); myExp = e; }
+		std::map<int, Mobile> mobs;
+		std::vector<SpawnInfo> spawns = DecodeSpawns(st.spawnPackets);
+		for (size_t i = 0; i < st.newSpawnPackets.size(); i++)
+		{
+			std::vector<unsigned char> d = st.newSpawnPackets[i];
+			Decrypt(d, 0, 0x65e7, 9, 13, false);
+			spawns.push_back(ParseSpawn(&d[4]));
+		}
+		// our own corpses still in the zone: "<name>'s corpse<n>" (or with an underscore)
+		std::map<int, Mobile> myCorpses;
+		for (size_t i = 0; i < spawns.size(); i++)
+		{
+			const SpawnInfo& si = spawns[i];
+			if (si.npc == 1)
+				mobs[si.id] = Mobile{ si.name, si.level, si.x, si.y, si.z, 100, true };
+			else if (si.name.compare(0, charname.size() + 2, charname + "'s") == 0 && !hs.emptiedCorpses.count(si.name))
+				myCorpses[si.id] = Mobile{ si.name, si.level, si.x, si.y, si.z, 100, true };
+		}
+		BotLog(charname, st.zone, "action=EnterZone id=%d level=%d npcs=%d corpses=%d items=%d camp=%.0f,%.0f,%.0f", st.myId, myLevel, (int)mobs.size(),
+		       (int)myCorpses.size(), (int)InventoryItems(st.inventory).size(), campX, campY, campZ);
+		int equipped = EquipFromPacks(z, charname, st.zone, st.inventory);
+		hs.equipped += equipped;
+
+		enum State { Seek, Consider, Approach, Fight, Loot, Rest, Flee, Dead, Recover } state = Seek;
+		const char* names[] = { "Seek", "Consider", "Approach", "Fight", "Loot", "Rest", "Flee", "Dead", "Recover" };
+		float fleeX = 0, fleeY = 0;
+		long recoverSentAt = 0;
+		bool fledThisFight = false;
+		int target = 0;
+		long start = NowMs(), lastTick = start, stateSince = start, lastStatus = start, lastHitTaken = 0, lastNoPrey = 0;
+		const float speed = 20.0f;
+		std::set<int> skip;				// prey we gave up on or must not attack
+		std::map<int, int> faction;		// OP_Consider answers, by NPC id
+		std::set<int> attackers;
+		bool sitting = false;
+		int lootedItems = 0, fightHits = 0;
+		auto setState = [&](State s, const char* why) {
+			if (s == state) return;
+			state = s;
+			stateSince = NowMs();
+			const char* tn = mobs.count(target) ? mobs[target].name.c_str() : myCorpses.count(target) ? myCorpses[target].name.c_str() : "-";
+			BotLog(charname, st.zone, "action=%s target=%s(%d) hp=%d%% why=%s", names[s], tn, target, myHp, why);
+		};
+		auto sendPos = [&](float tx, float ty, bool walking) {
+			unsigned char u[15];
+			memset(u, 0, sizeof(u));
+			short y = (short)meY, x = (short)meX, zz = (short)(meZ * 10);
+			u[0] = st.myId & 0xff; u[1] = st.myId >> 8;
+			u[2] = walking ? 22 : 0;
+			u[3] = HeadingTowards(meX, meY, tx, ty);
+			memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
+			z.Send(kClientUpdate, u, sizeof(u));
+		};
+		auto sit = [&](bool down) {
+			if (down == sitting) return;
+			unsigned char sa[12];
+			memset(sa, 0, sizeof(sa));
+			sa[0] = st.myId & 0xff; sa[1] = st.myId >> 8; sa[4] = 14; sa[8] = down ? 110 : 100;
+			z.Send((int16)0xf520, sa, sizeof(sa));
+			sitting = down;
+			BotLog(charname, st.zone, "action=%s hp=%d%%", down ? "Sit" : "Stand", myHp);
+		};
+		auto castHeal = [&](const char* why) {
+			if (healGem < 0 || myMana < kMinorHealingMana || NowMs() < castUntil)
+				return false;
+			unsigned char c[16];	// CastSpell_Struct: slot, spell, inventory slot (0xffff: a gem), target
+			memset(c, 0, sizeof(c));
+			c[0] = healGem;
+			c[2] = kMinorHealing & 0xff; c[3] = kMinorHealing >> 8;
+			c[4] = 0xff; c[5] = 0xff;
+			c[8] = st.myId & 0xff; c[9] = st.myId >> 8;
+			z.Send((int16)0x7e21, c, sizeof(c));	// OP_CastSpell
+			castUntil = NowMs() + 2500;	// 1 s cast, then the gem's recast; no moving meanwhile
+			BotLog(charname, st.zone, "action=Cast spell=Minor_Healing hp=%d%% mana=%d why=%s", myHp, myMana, why);
+			return true;
+		};
+		auto attack = [&](bool on) {
+			uint32_t v = on ? 1 : 0;
+			z.Send(kAutoAttack, &v, sizeof(v));
+		};
+		// walks toward a point, stops `stop` units short; true when there
+		auto walkTo = [&](float tx, float ty, float tz, float step, float stop) {
+			float dx = tx - meX, dy = ty - meY, dist = sqrtf(dx * dx + dy * dy);
+			if (dist <= stop + 1) { sendPos(tx, ty, false); return true; }
+			if (NowMs() < castUntil) return false;	// moving breaks a cast
+			float s = std::min(step, dist - stop);
+			meX += dx / dist * s; meY += dy / dist * s; meZ = tz;
+			sendPos(tx, ty, true);
+			return false;
+		};
+		while (NowMs() < deadline && state != Dead)
+		{
+			long tickEnd = NowMs() + 250;
+			while (NowMs() < tickEnd)
+			{
+				std::vector<Packet*> got = z.Poll((int)(tickEnd - NowMs()));
+				for (size_t i = 0; i < got.size(); i++)
+				{
+					const Packet* p = got[i];
+					const unsigned char* b = p->pBuffer;
+					if (p->opcode == kMobUpdate && p->size >= 4)
+					{
+						int n = b[0] | (b[1] << 8);
+						for (int k = 0; k < n && 4 + (k + 1) * 15 <= (int)p->size; k++)
+						{
+							const unsigned char* m = b + 4 + k * 15;
+							int id = m[0] | (m[1] << 8);
+							if (!mobs.count(id)) continue;
+							mobs[id].y = (short)(m[5] | (m[6] << 8));
+							mobs[id].x = (short)(m[7] | (m[8] << 8));
+							mobs[id].z = (short)(m[9] | (m[10] << 8)) / 10.0f;
+						}
+					}
+					else if ((p->opcode == kNewSpawn && p->size >= 168) || p->opcode == kZoneSpawns)
+					{
+						// one NPC, or a batch of them (a zone that just booted fills up after we are in)
+						std::vector<SpawnInfo> fresh;
+						if (p->opcode == kZoneSpawns)
+							fresh = DecodeSpawns(std::vector<std::vector<unsigned char> >(1, std::vector<unsigned char>(b, b + p->size)));
+						else
+						{
+							std::vector<unsigned char> d(b, b + p->size);
+							Decrypt(d, 0, 0x65e7, 9, 13, false);
+							fresh.push_back(ParseSpawn(&d[4]));
+						}
+						for (size_t k = 0; k < fresh.size(); k++)
+						{
+							const SpawnInfo& si = fresh[k];
+							if (si.npc != 1)
+								continue;
+							mobs[si.id] = Mobile{ si.name, si.level, si.x, si.y, si.z, 100, true };
+							skip.erase(si.id);
+							faction.erase(si.id);
+						}
+					}
+					else if (p->opcode == (int16)0xb220 && p->size >= 12)	// SpawnHPUpdate: id, cur, max
+					{
+						int id = b[0] | (b[1] << 8);
+						int cur = b[4] | (b[5] << 8) | (b[6] << 16) | (b[7] << 24);
+						int max = b[8] | (b[9] << 8) | (b[10] << 16) | (b[11] << 24);
+						if (id == st.myId && max > 0) { myHp = cur * 100 / max; myMaxHp = max; }
+						else if (mobs.count(id)) mobs[id].hp = max > 0 ? cur * 100 / max : cur;
+					}
+					else if (p->opcode == (int16)0x7f21 && p->size >= 2)	// ManaChange: new mana, spell
+					{
+						int m = b[0] | (b[1] << 8);
+						if (m > myMana) lastManaRise = NowMs();
+						myMana = m;
+						maxMana = std::max(maxMana, m);
+					}
+					else if (p->opcode == (int16)0x3721 && p->size >= 12)	// Consider_Struct: player, target, faction
+					{
+						int id = b[4] | (b[5] << 8);
+						int f = (int)(b[8] | (b[9] << 8) | (b[10] << 16) | ((unsigned)b[11] << 24));
+						faction[id] = f;
+					}
+					else if (p->opcode == (int16)0x9921 && p->size >= 4)	// ExpUpdate: uint32 exp
+					{
+						long e = (long)(b[0] | (b[1] << 8) | (b[2] << 16) | ((unsigned long)b[3] << 24));
+						if (myExp >= 0 && e != myExp)
+						{
+							hs.expGained += e - myExp;
+							BotLog(charname, st.zone, "action=Exp exp=%ld gained=%ld", e, e - myExp);
+						}
+						myExp = e;
+					}
+					else if (p->opcode == (int16)0x5220 && p->size >= 136 && (state == Loot || state == Recover))	// ItemOnCorpse: equipSlot = loot slot
+					{
+						uint32_t corpse = target;
+						int slot = (short)(b[134] | (b[135] << 8));
+						unsigned char li[16];
+						memset(li, 0, sizeof(li));
+						memcpy(li, &corpse, 4);
+						li[4] = st.myId & 0xff; li[5] = st.myId >> 8;
+						li[8] = slot & 0xff; li[9] = slot >> 8;
+						li[12] = 1;	// into the packs
+						z.Send((int16)0xa020, li, sizeof(li));	// OP_LootItem
+						BotLog(charname, st.zone, "action=LootItem corpse=%u item=%d slot=%d", corpse, b[130] | (b[131] << 8), slot);
+						lootedItems++;
+					}
+					else if (p->opcode == kAction && p->size >= 16)
+					{
+						int to = b[0] | (b[1] << 8), from = b[4] | (b[5] << 8);
+						int dmg = b[12] | (b[13] << 8) | (b[14] << 16) | (b[15] << 24);
+						if (from == st.myId && to == target && dmg > 0) { hs.hitsDealt++; hs.damageDealt += dmg; fightHits++; }
+						if (to == st.myId && from != st.myId && mobs.count(from))
+						{
+							hs.hitsTaken++;
+							lastHitTaken = NowMs();
+							if (dmg > 0) hs.damageTaken += dmg;
+							// someone is on us: fight back, whatever we were doing (but running away)
+							if (from != target && state != Fight && state != Flee && state != Dead)
+							{
+								if (attackers.insert(from).second)
+									BotLog(charname, st.zone, "action=Attacked by=%s(%d) hp=%d%%", mobs[from].name.c_str(), from, myHp);
+								sit(false);
+								target = from;
+								state = Seek;	// so that the change is logged
+								setState(Approach, "attacked");
+							}
+						}
+					}
+					else if (p->opcode == kDeath && p->size >= 8)
+					{
+						int id = b[0] | (b[1] << 8), killer = b[4] | (b[5] << 8);
+						if (id == st.myId)
+						{
+							hs.deaths++;
+							BotLog(charname, st.zone, "action=Killed by=%s(%d)", mobs.count(killer) ? mobs[killer].name.c_str() : "?", killer);
+							setState(Dead, "killed");
+							died = true;
+						}
+						else if (mobs.count(id))
+						{
+							mobs[id].alive = false;
+							if (id == target && state != Dead)
+							{
+								hs.kills++;
+								BotLog(charname, st.zone, "action=Kill target=%s(%d) level=%d hits=%d hp=%d%%", mobs[id].name.c_str(), id, mobs[id].level, fightHits, myHp);
+								attack(false);
+								uint32_t corpse = target;	// an NPC's corpse keeps its id
+								z.Send(0x4e20, &corpse, sizeof(corpse));	// OP_LootRequest
+								lootedItems = 0;
+								setState(Loot, "it died");
+							}
+						}
+					}
+					else if (p->opcode == (int16)0xf520 && p->size >= 12 && (b[4] | (b[5] << 8)) == 16 && st.myId == 0)
+						st.myId = b[8] | (b[9] << 8);
+				}
+				DeleteAll(got);
+			}
+			long now = NowMs();
+			float step = speed * (now - lastTick) / 1000.0f;
+			lastTick = now;
+			bool underAttack = now - lastHitTaken < 6000;
+			switch (state)
+			{
+			case Seek:
+			{
+				target = 0;
+				if (myMaxHp && myHp < 90 && !underAttack)	// a fight starts healthy
+				{
+					setState(Rest, "hurt");
+					break;
+				}
+				float best = 1e30f;
+				if (!myCorpses.empty() && !underAttack)
+				{
+					target = myCorpses.begin()->first;
+					lootedItems = 0;
+					setState(Recover, "our corpse is here");
+					break;
+				}
+				int maxPrey = myLevel;	// white and below (at level 1, a level-2 NPC is yellow)
+				for (std::map<int, Mobile>::iterator it = mobs.begin(); it != mobs.end(); ++it)
+				{
+					const Mobile& m = it->second;
+					if (!m.alive || m.hp < 100 || skip.count(it->first) || m.level > maxPrey || !IsPreyName(m.name))
+						continue;
+					float fromCamp = sqrtf((m.x - campX) * (m.x - campX) + (m.y - campY) * (m.y - campY));
+					if (fromCamp > campRadius)
+						continue;
+					// close to us and to the camp (near the zone-in, guards help against what roams)
+					float d = sqrtf((m.x - meX) * (m.x - meX) + (m.y - meY) * (m.y - meY)) + fromCamp;
+					if (d < best) { best = d; target = it->first; }
+				}
+				if (target)
+				{
+					sit(false);
+					if (faction.count(target))
+						setState(Approach, "closest prey");
+					else
+					{
+						unsigned char c[28];	// Consider_Struct: the zone drops any other size
+						memset(c, 0, sizeof(c));
+						c[0] = st.myId & 0xff; c[1] = st.myId >> 8;
+						c[4] = target & 0xff; c[5] = target >> 8;
+						z.Send((int16)0x3721, c, sizeof(c));
+						setState(Consider, "closest prey");
+					}
+				}
+				else
+				{
+					// nothing to hunt: stroll around the camp, as a player waiting for a respawn
+					if (now - lastNoPrey > 30000 || walkTo(roamX, roamY, campZ, step * 0.5f, 3))
+					{
+						float a = (rand() % 360) * 3.14159f / 180, r = 30 + rand() % 120;
+						roamX = campX + r * cosf(a);
+						roamY = campY + r * sinf(a);
+						if (now - lastNoPrey > 30000)
+							BotLog(charname, st.zone, "action=NoPrey roam=%.0f,%.0f", roamX, roamY);
+						lastNoPrey = now;
+					}
+				}
+				break;
+			}
+			case Consider:
+				if (faction.count(target))
+				{
+					int f = faction[target];
+					if (f > 0)	// amiable or better (0x100 amiable ... 0x500 ally); 0 is indifferent
+					{
+						hs.refused++;
+						skip.insert(target);
+						BotLog(charname, st.zone, "action=Refuse target=%s(%d) faction=%d", mobs[target].name.c_str(), target, f);
+						setState(Seek, "cons amiable or better");
+					}
+					else
+						setState(Approach, "cons indifferent or worse");
+				}
+				else if (now - stateSince > 3000)
+				{
+					skip.insert(target);
+					setState(Seek, "no consider answer");
+				}
+				break;
+			case Approach:
+			case Fight:
+			{
+				if (!mobs.count(target) || !mobs[target].alive) { attack(false); setState(Seek, "prey gone"); break; }
+				Mobile& m = mobs[target];
+				if (state == Approach && now - stateSince > 60000) { skip.insert(target); setState(Seek, "too long to reach"); break; }
+				if (state == Fight && now - stateSince > 30000 && fightHits == 0) { attack(false); skip.insert(target); setState(Seek, "no hit in 30 s"); break; }
+				if (state == Fight && myMaxHp && myHp < 50 && castHeal("fighting"))
+					break;
+				if (state == Fight && myHp < 20 && m.hp > 50 && myMaxHp && !fledThisFight)
+				{
+					float dx = meX - m.x, dy = meY - m.y, d = sqrtf(dx * dx + dy * dy) + 0.01f;
+					fleeX = meX + dx / d * 150;
+					fleeY = meY + dy / d * 150;
+					fledThisFight = true;
+					attack(false);
+					setState(Flee, "losing");
+					break;
+				}
+				if (walkTo(m.x, m.y, m.z, step, 2) && state == Approach)
+				{
+					uint16_t t[2] = { (uint16_t)target, 0 };
+					z.Send(kClientTarget, t, sizeof(t));
+					attack(true);
+					fightHits = 0;
+					fledThisFight = false;
+					setState(Fight, "in reach");
+				}
+				break;
+			}
+			case Loot:
+				if (now - stateSince > 2000)	// the items came right after the request
+				{
+					uint32_t corpse = target;
+					z.Send(0x4f20, &corpse, sizeof(corpse));	// OP_EndLootRequest
+					hs.loots++;
+					hs.items += lootedItems;
+					mobs.erase(target);
+					setState(Rest, lootedItems ? "looted" : "nothing to loot");
+					target = 0;	// its id comes back with the next spawn: that one is not our prey
+				}
+				break;
+			case Rest:
+			{
+				if (myMaxHp && myHp < 70 && !sitting && castHeal("resting"))
+					break;
+				if (now < castUntil)
+					break;
+				sit(true);	// sitting is also how a caster meditates
+				bool healed = myMaxHp ? myHp >= 95 : now - stateSince > 20000;
+				// a caster waits for its mana too, while it still comes back
+				if (healGem >= 0 && myMana < maxMana && now - std::max(lastManaRise, stateSince) < 30000)
+					healed = false;
+				if ((healed && now - stateSince > 5000) || now - stateSince > 180000)
+				{
+					sit(false);
+					setState(Seek, healed ? "rested" : "rested long enough");
+				}
+				break;
+			}
+			case Flee:
+				// straight away from what beats us, then rest; one try per fight
+				if (walkTo(fleeX, fleeY, meZ, step * 1.5f, 5) || now - stateSince > 20000)
+					setState(underAttack ? Seek : Rest, underAttack ? "could not get away" : "got away");
+				break;
+			case Recover:
+			{
+				Mobile& c = myCorpses[target];
+				if (now - stateSince > 120000) { hs.emptiedCorpses.insert(c.name); myCorpses.erase(target); setState(Seek, "corpse out of reach"); break; }
+				if (!walkTo(c.x, c.y, c.z, step, 2))
+					break;
+				if (!c.alive)	// request sent: the items came right after it
+				{
+					if (now - recoverSentAt > 3000)
+					{
+						uint32_t corpse = target;
+						z.Send(0x4f20, &corpse, sizeof(corpse));	// OP_EndLootRequest
+						BotLog(charname, st.zone, "action=Recovered corpse=%s items=%d", c.name.c_str(), lootedItems);
+						hs.recovered++;
+						hs.emptiedCorpses.insert(c.name);
+						myCorpses.erase(target);
+						target = 0;
+						if (lootedItems)
+						{
+							relog = true;	// the zone tells where the items went at the next login: equip then
+							state = Dead;
+						}
+						else
+							setState(Seek, "corpse empty");
+					}
+					break;
+				}
+				uint32_t corpse = target;
+				z.Send(0x4e20, &corpse, sizeof(corpse));	// OP_LootRequest
+				c.alive = false;	// asked
+				recoverSentAt = now;
+				break;
+			}
+			case Dead:
+				break;
+			}
+			if (now - lastStatus >= 30000)
+			{
+				BotLog(charname, st.zone, "action=Status state=%s hp=%d%% mana=%d kills=%d loots=%d items=%d exp=%ld deaths=%d pos=%.0f,%.0f,%.0f",
+				       names[state], myHp, myMana, hs.kills, hs.loots, hs.items, hs.expGained, hs.deaths, meX, meY, meZ);
+				lastStatus = now;
+			}
+		}
+		if (state != Dead)
+			attack(false);
+		z.Disconnect();
+		return true;
+	}
+
+	int Hunt(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname, int seconds)
+	{
+		long start = NowMs(), deadline = start + seconds * 1000L;
+		HuntStats hs;
+		int lives = 0;
+		while (NowMs() < deadline)
+		{
+			bool died = false, relog = false;
+			if (!HuntLife(host, user, pass, charname, deadline, hs, died, relog))
+				break;
+			lives++;
+			if (relog)
+			{
+				BotLog(charname, "-", "action=Relog why=equip");
+				continue;
+			}
+			if (!died)
+				break;
+			// the zone moves the dead to their bind point; a new login finds them there
+			BotLog(charname, "-", "action=Respawn wait=15");
+			long until = NowMs() + 15000;
+			while (NowMs() < until && NowMs() < deadline)
+			{
+				struct timeval tv = { 0, 200000 };
+				select(0, 0, 0, 0, &tv);
+			}
+		}
+		BotLog(charname, "-", "action=Done kills=%d loots=%d items=%d exp=%ld deaths=%d recovered=%d equipped=%d refused=%d hits=%d/%d dmg=%d/%d lives=%d seconds=%.0f",
+		       hs.kills, hs.loots, hs.items, hs.expGained, hs.deaths, hs.recovered, hs.equipped, hs.refused, hs.hitsDealt, hs.hitsTaken, hs.damageDealt, hs.damageTaken, lives,
+		       (NowMs() - start) / 1000.0);
+		return lives ? 0 : 1;
+	}
+
 	void Usage()
 	{
 		fprintf(stderr, "usage: eqbot login  <login-host> <user> <password> [port=5999]\n"
 		                "       eqbot create <login-host> <user> <password> <character>\n"
 		                "       eqbot play   <login-host> <user> <password> <character>\n"
-		                "       eqbot test   <login-host> <user> <password> <character>\n");
+		                "       eqbot test   <login-host> <user> <password> <character>\n"
+		                "       eqbot walk   <login-host> <user> <password> <character> <waypoints file> [seconds=60]\n"
+		                "       eqbot hunt   <login-host> <user> <password> <character> [seconds=300]\n");
 	}
 }
 
@@ -1265,6 +2049,10 @@ int main(int argc, char** argv)
 		return Play(argv[2], argv[3], argv[4], argv[5]);
 	if (argc >= 6 && std::string(argv[1]) == "test")
 		return Test(argv[2], argv[3], argv[4], argv[5]);
+	if (argc >= 6 && std::string(argv[1]) == "hunt")
+		return Hunt(argv[2], argv[3], argv[4], argv[5], argc > 6 ? atoi(argv[6]) : 300);
+	if (argc >= 7 && std::string(argv[1]) == "walk")
+		return Walk(argv[2], argv[3], argv[4], argv[5], argv[6], argc > 7 ? atoi(argv[7]) : 60);
 	Usage();
 	return 2;
 }
