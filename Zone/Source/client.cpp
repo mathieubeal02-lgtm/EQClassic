@@ -2742,7 +2742,10 @@ void Client::ProcessOP_GroupFollow(APPLAYER* pApp){
 	if (pApp->size == sizeof(GroupFollow_Struct)){
 		GroupFollow_Struct* gf = (GroupFollow_Struct*) pApp->pBuffer;
 		//cout << "Checking Leader" << endl;
+		gf->leader[sizeof(gf->leader) - 1] = '\0';
 		Client* leader = entity_list.GetClientByName(gf->leader);
+		if (!leader || leader == this)	// a made-up or departed leader would crash the zone
+			return;
 		//cout << "Checking Leader is grouped, if not, make a group" << endl;
 		if (!leader->IsGrouped()){
 			cout << "Leader not grouped, making one" << endl;

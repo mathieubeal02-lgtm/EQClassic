@@ -1359,7 +1359,14 @@ void NPC::Death(Mob* attacker, sint32 damage, int16 spell, int8 attack_skill)
 							client = entity->CastToClient();
 						}
 						//Yeahlight: A client exists to reward
-						if(client)
+						if(client && client->IsGrouped() && entity_list.GetGroupByClient(client))
+						{
+							//A grouped player's kill is the group's: split as when several members fought
+							Group* group = entity_list.GetGroupByClient(client);
+							group->SplitExp(GetLevel());
+							lootrights = BuildLootRights(group, NULL);
+						}
+						else if(client)
 						{
 							//Yeahlight: The NPC does not con green to the rewarding client
 							if(GetLevelCon(client->GetLevel(), GetLevel()) != 0x02)
@@ -1407,7 +1414,14 @@ void NPC::Death(Mob* attacker, sint32 damage, int16 spell, int8 attack_skill)
 							client = entity->CastToClient();
 						}
 						//Yeahlight: A client exists to reward
-						if(client)
+						if(client && client->IsGrouped() && entity_list.GetGroupByClient(client))
+						{
+							//A grouped player's kill is the group's: split as when several members fought
+							Group* group = entity_list.GetGroupByClient(client);
+							group->SplitExp(GetLevel());
+							lootrights = BuildLootRights(group, NULL);
+						}
+						else if(client)
 						{
 							//Yeahlight: The NPC does not con green to the rewarding client
 							if(GetLevelCon(client->GetLevel(), GetLevel()) != 0x02)
@@ -1433,13 +1447,23 @@ void NPC::Death(Mob* attacker, sint32 damage, int16 spell, int8 attack_skill)
 					client = attacker->GetOwner()->CastToClient();
 				else
 					client = attacker->CastToClient();
-				//Yeahlight: We do not reward exp for green con NPCs
-				if(GetLevelCon(client->GetLevel(), GetLevel()) != 0x02)
+				if(client->IsGrouped() && entity_list.GetGroupByClient(client))
 				{
-					//Yeahlight: Grant the rewarding client the experience
-					client->AddEXP(baseExp * expAdjustment);
+					//A grouped player's kill is the group's, even when it fought alone
+					Group* group = entity_list.GetGroupByClient(client);
+					group->SplitExp(GetLevel());
+					lootrights = BuildLootRights(group, NULL);
 				}
-				lootrights = BuildLootRights(NULL, client);
+				//Yeahlight: We do not reward exp for green con NPCs
+				else
+				{
+					if(GetLevelCon(client->GetLevel(), GetLevel()) != 0x02)
+					{
+						//Yeahlight: Grant the rewarding client the experience
+						client->AddEXP(baseExp * expAdjustment);
+					}
+					lootrights = BuildLootRights(NULL, client);
+				}
 			}
 
 			//Yeahlight: Finish up with faction hits to all players involved as long as a non-pet NPC
