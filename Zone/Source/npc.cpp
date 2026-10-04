@@ -1014,7 +1014,7 @@ void NPC::MoveTowards(float x, float y, float d)
 	else
 	{
 		//Yeahlight: Set distance to max melee range minus three units to prevent "dead zones"
-		stop_at_distance = GetMeleeReach() - 3;
+		stop_at_distance = (target ? GetMeleeReach(target) : GetMeleeReach()) - 3;
 	}
 	
 	float distance = fdistance(x,y, NPC::x_pos, NPC::y_pos);
@@ -2049,7 +2049,7 @@ void NPC::CheckMyFeignMemory(bool debugFlag)
 					target = hate_list.GetTop(this->CastToMob());
 					this->requiresNewPath = true;
 					this->onRoamPath = false;
-					float distanceToTarget = GetMeleeReach();
+					float distanceToTarget = GetMeleeReach(target);
 					//Yeahlight: NPC is out of melee range of its target
 					if(target != 0 && fdistance(target->GetX(), target->GetY(), GetX(), GetY()) > distanceToTarget)
 					{
@@ -3246,7 +3246,7 @@ void NPC::CheckMyEngagedStatus(bool debugFlag)
 		//Yeahlight: NPC is not on a specific path and is also not focused on a pathing node
 		else if(!this->nodeFocused)
 		{	
-			float distanceToTarget = GetMeleeReach();
+			float distanceToTarget = GetMeleeReach(target);
 			//Yeahlight: NPC is out of melee range of its target
 			if(fdistance(target->GetX(), target->GetY(), GetX(), GetY()) > distanceToTarget)
 			{
@@ -3581,7 +3581,7 @@ void NPC::CheckMyOwnerStatus()
 	}
 	if(!moving && target != 0)
 	{
-		if(fdistance(target->GetX(), target->GetY(), x_pos, y_pos) > GetMeleeReach())
+		if(fdistance(target->GetX(), target->GetY(), x_pos, y_pos) > GetMeleeReach(target))
 		{
 			//Yeahlight: Animate the pet
 			this->setMoving(true);
@@ -3644,7 +3644,7 @@ void NPC::CheckMyWalkingStatus(bool engaged)
 void NPC::CheckMySummonStatus()
 {
 	//Yeahlight: Summon target if they are out of melee range or they are not in LoS (this will prevent players from exploiting rooted mobs by standing under the NPC in melee range, but out of LoS range)
-	if(fdistance(GetX(), GetY(), target->GetX(), target->GetY()) > GetMeleeReach() || !CheckCoordLos(GetX(), GetY(), GetZ(), target->GetX(), target->GetY(), target->GetZ()))
+	if(fdistance(GetX(), GetY(), target->GetX(), target->GetY()) > GetMeleeReach(target) || !CheckCoordLos(GetX(), GetY(), GetZ(), target->GetX(), target->GetY(), target->GetZ()))
 	{
 		SummonTarget(target);
 	}

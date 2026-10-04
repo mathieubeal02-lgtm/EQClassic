@@ -538,7 +538,7 @@ void NPC::Attack(Mob* other, int Hand, bool procEligible, bool riposte)	 // Kaiy
 	}
 
 	//Yeahlight: NPC is out of melee range or they are casting
-	if (fdistance(other->GetX(), other->GetY(), GetX(), GetY()) > GetMeleeReach() || this->GetCastingSpell())
+	if (fdistance(other->GetX(), other->GetY(), GetX(), GetY()) > GetMeleeReach(other) || this->GetCastingSpell())
 	{
 		//Yeahlight: Reserve the NPC's attack to fire once they are in melee range or done casting
 		reserveMyAttack = true;
@@ -1552,7 +1552,7 @@ void NPC::DoClassAttacks(Mob *target)
 			case SHADOWKNIGHT: case SHADOWKNIGHTGM:
 			{
 				//Yeahlight: For whatever reason, NPC harmtouch spell has a very small, almost melee range on it
-				if(fdistance(target->GetX(), target->GetY(), GetX(), GetY()) <= GetMeleeReach())
+				if(fdistance(target->GetX(), target->GetY(), GetX(), GetY()) <= GetMeleeReach(target))
 				{
 					Spell* spell = spells_handler.GetSpellPtr(929);
 					CastSpell(spell, target->GetID());
@@ -1586,7 +1586,7 @@ void NPC::DoClassAttacks(Mob *target)
 	if(taunt_time && taunting && target->IsNPC())
 	{
 		//Yeahlight: Ensure proper distance and LoS is present
-		if(fdistance(target->GetX(), target->GetY(), GetX(), GetY()) <= GetMeleeReach() && CheckCoordLos(GetX(), GetY(), GetZ() + 2, target->GetX(), target->GetY(), target->GetZ()))
+		if(fdistance(target->GetX(), target->GetY(), GetX(), GetY()) <= GetMeleeReach(target) && CheckCoordLos(GetX(), GetY(), GetZ() + 2, target->GetX(), target->GetY(), target->GetZ()))
 		{
 			NPC* tauntee = target->CastToNPC();
 			Mob* owner = this->GetOwner();
@@ -1693,7 +1693,7 @@ void NPC::DoClassAttacks(Mob *target)
 			if(rand()%100 >= 25 || GetSkill(BASH) == 0)
 			{
 				//Yeahlight: Ensure proper distance and LoS is present
-				if(fdistance(target->GetX(), target->GetY(), GetX(), GetY()) <= GetMeleeReach() && CheckCoordLos(GetX(), GetY(), GetZ() + 2, target->GetX(), target->GetY(), target->GetZ()))
+				if(fdistance(target->GetX(), target->GetY(), GetX(), GetY()) <= GetMeleeReach(target) && CheckCoordLos(GetX(), GetY(), GetZ() + 2, target->GetX(), target->GetY(), target->GetZ()))
 				{
 					DoAnim(animKick);
 					sint16 hitChance = GetHitChance(this, target, KICK);
@@ -1717,7 +1717,7 @@ void NPC::DoClassAttacks(Mob *target)
 			else
 			{
 				//Yeahlight: Ensure proper distance and LoS is present
-				if(fdistance(target->GetX(), target->GetY(), GetX(), GetY()) <= GetMeleeReach() && CheckCoordLos(GetX(), GetY(), GetZ() + 2, target->GetX(), target->GetY(), target->GetZ()))
+				if(fdistance(target->GetX(), target->GetY(), GetX(), GetY()) <= GetMeleeReach(target) && CheckCoordLos(GetX(), GetY(), GetZ() + 2, target->GetX(), target->GetY(), target->GetZ()))
 				{
 					DoAnim(animTailRake);
 					sint16 hitChance = GetHitChance(this, target, BASH);
@@ -1745,7 +1745,7 @@ void NPC::DoClassAttacks(Mob *target)
 				//Yeahlight: NPC is behind target, proceed with backstab
 				if(BehindMob(target, GetX(), GetY())) // Player is behind target
 				{
-					if(fdistance(GetX(), GetY(), target->GetX(), target->GetY()) <= GetMeleeReach())
+					if(fdistance(GetX(), GetY(), target->GetX(), target->GetY()) <= GetMeleeReach(target))
 					{
 						RogueBackstab(target, 0, GetSkill(BACKSTAB));
 					}
@@ -1753,7 +1753,7 @@ void NPC::DoClassAttacks(Mob *target)
 				//Yeahlight: NPC is infront of target, use a standard attack
 				else
 				{
-					if(fdistance(GetX(), GetY(), target->GetX(), target->GetY()) <= GetMeleeReach())
+					if(fdistance(GetX(), GetY(), target->GetX(), target->GetY()) <= GetMeleeReach(target))
 					{
 						//Yeahlight: Proc rates are balanced on attack timer, not the backstab refresh timer; prevent procs from this attack
 						Attack(target, 13, false);
@@ -1788,7 +1788,7 @@ void NPC::DoClassAttacks(Mob *target)
 		case BEASTLORD: case BEASTLORDGM:
 		{
 			//Yeahlight: Ensure proper distance and LoS is present
-			if(fdistance(target->GetX(), target->GetY(), GetX(), GetY()) <= GetMeleeReach() && CheckCoordLos(GetX(), GetY(), GetZ() + 2, target->GetX(), target->GetY(), target->GetZ()))
+			if(fdistance(target->GetX(), target->GetY(), GetX(), GetY()) <= GetMeleeReach(target) && CheckCoordLos(GetX(), GetY(), GetZ() + 2, target->GetX(), target->GetY(), target->GetZ()))
 			{
 				DoAnim(animKick);
 				sint16 hitChance = GetHitChance(this, target, KICK);
@@ -1806,7 +1806,7 @@ void NPC::DoClassAttacks(Mob *target)
 		case PALADIN: case PALADINGM:
 		{
 			//Yeahlight: Ensure proper distance and LoS is present
-			if(GetSkill(BASH) > 0 && fdistance(target->GetX(), target->GetY(), GetX(), GetY()) <= GetMeleeReach() && CheckCoordLos(GetX(), GetY(), GetZ() + 2, target->GetX(), target->GetY(), target->GetZ()))
+			if(GetSkill(BASH) > 0 && fdistance(target->GetX(), target->GetY(), GetX(), GetY()) <= GetMeleeReach(target) && CheckCoordLos(GetX(), GetY(), GetZ() + 2, target->GetX(), target->GetY(), target->GetZ()))
 			{
 				DoAnim(animTailRake);
 				sint16 hitChance = GetHitChance(this, target, BASH);
@@ -1914,7 +1914,7 @@ int16 Mob::MonkSpecialAttack(Mob* other, int8 type)
 
 	//Yeahlight: Range check for NPCs
 	//			 TODO: range check for PCs
-	if(this->IsNPC() && this->CastToNPC()->fdistance(other->GetX(), other->GetY(), GetX(), GetY()) > this->GetMeleeReach())
+	if(this->IsNPC() && this->CastToNPC()->fdistance(other->GetX(), other->GetY(), GetX(), GetY()) > this->GetMeleeReach(other))
 		return 5;
 
 	sint32 ndamage = 0;

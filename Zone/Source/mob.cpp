@@ -5,6 +5,7 @@
 
 #include "Config.h"
 #include "skills.h"
+#include "CombatFormulas.h"
 #include "mob.h"
 #include "client.h"
 #include "PlayerCorpse.h"
@@ -4280,6 +4281,16 @@ sint16 Mob::iksaracmod() {
 int16 Mob::GetMeleeReach()
 {
 	return (4 + sqrt(float(HIT_BOX_MULTIPLIER * this->GetHitBox())));
+}
+
+// The melee range the client uses between two models (CombatFormulas.h): both bounding radii count,
+// so a player can hit a dragon from where the client lets them swing, and a giant reaches further
+// than a gnome. Without the other model, the old reach of this one.
+float Mob::GetMeleeReach(Mob* other)
+{
+	if (!other)
+		return GetMeleeReach();
+	return Combat::MeleeRange(Combat::BoundingRadius(GetRace(), GetSize()), Combat::BoundingRadius(other->GetRace(), other->GetSize()));
 }
 
 //o--------------------------------------------------------------
