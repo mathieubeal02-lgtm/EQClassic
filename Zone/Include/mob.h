@@ -289,6 +289,7 @@ public:
 	int				GetBashDamage();
 	int16			GetIntervalDamage(Mob* attacker, Mob* defender, damageInterval chosenDI, int32 max_hit, int32 min_hit);
 	int16			GetMeleeReach();
+	float			GetMeleeReach(Mob* other);	// against this one: both models' sizes, as the client sees it
 	int16			GetBaseSize()		{ return base_size; }
 	sint32			GetEquipmentMaterial(int8 material_slot);
 	Item_Struct*	GetMyMainHandWeapon() { return myMainHandWeapon; }

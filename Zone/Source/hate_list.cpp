@@ -753,7 +753,7 @@ Mob* HateList::GetTopInRangeNoPet(Mob* sender)
 	while(iterator.MoreElements())
     {
 		//Yeahlight: Entity exists, has more hate than the highest hated entity, is not a pet and is in melee range
-		if(iterator.GetData()->ent != NULL && iterator.GetData()->hate > hate && iterator.GetData()->ent->GetOwner() == NULL && iterator.GetData()->ent->DistNoZ(sender) <= sender->GetMeleeReach())
+		if(iterator.GetData()->ent != NULL && iterator.GetData()->hate > hate && iterator.GetData()->ent->GetOwner() == NULL && iterator.GetData()->ent->DistNoZ(sender) <= sender->GetMeleeReach(iterator.GetData()->ent))
 		{
 			bool permit = true;
 			//Yeahlight: Skip this entity if their owner is the sender

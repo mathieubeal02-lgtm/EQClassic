@@ -61,6 +61,17 @@ namespace Combat
 	int ClientDamageMultiplier(int damage, int offense, int level, int playerClass);
 
 	bool IsMeleeClass(int playerClass);
+
+	// ---- reach ---------------------------------------------------------------------------------
+	// The client decides a swing is in range from both models' bounding radii (Harakiri's rev. 872;
+	// TAKP's CalcBoundingRadius / CombatRange): the server must agree, or a player hits the air (a
+	// dragon) or is hit from too far.
+
+	// Bounding radius of a model: 6 x size / 5 by default; playable races and a few big models
+	// have their own radius or size. size <= 0 counts as 5.
+	float BoundingRadius(int race, float size);
+	// Melee range between two models: (radius1 + radius2) x 0.75, at least 14, plus 2, at most 75.
+	float MeleeRange(float radius1, float radius2);
 }
 
 #endif

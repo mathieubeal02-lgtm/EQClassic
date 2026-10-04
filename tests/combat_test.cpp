@@ -89,6 +89,18 @@ int main()
 		if (d < 100 || d > 210) { printf("FAIL multiplier out of range: %d\n", d); failures++; break; }
 	}
 
+	// Reach: playable races are 5 whatever their size; others 6 x size / 5
+	EXPECT_NEAR(BoundingRadius(1, 0.0f), 5.0);
+	EXPECT_NEAR(BoundingRadius(9, 8.0f), 5.0);	// a troll's size does not change it
+	EXPECT_NEAR(BoundingRadius(60, 0.0f), 6.0);	// skeleton, default size
+	EXPECT_NEAR(BoundingRadius(18, 20.0f), 24.0);	// giant
+	EXPECT_NEAR(BoundingRadius(49, 20.0f), 39.0);	// lava dragon: fixed size 32.5
+	EXPECT_NEAR(BoundingRadius(184, 20.0f), 37.92);
+	EXPECT_NEAR(MeleeRange(5.0f, 5.0f), 16.0);	// two players: floor 14 + 2
+	EXPECT_NEAR(MeleeRange(5.0f, 24.0f), 23.75);	// player and giant
+	EXPECT_NEAR(MeleeRange(5.0f, 39.0f), 35.0);	// player and Nagafen
+	EXPECT_NEAR(MeleeRange(60.0f, 60.0f), 75.0);	// cap
+
 	if (failures == 0)
 		printf("combat_test: all tests passed\n");
 	return failures == 0 ? 0 : 1;

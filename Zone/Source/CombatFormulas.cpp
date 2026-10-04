@@ -366,4 +366,48 @@ namespace Combat
 			damage++;
 		return damage;
 	}
+
+	float BoundingRadius(int race, float size)
+	{
+		float radius = 6.0f;
+		if (size <= 0.0f)
+			size = 5.0f;
+		switch (race)
+		{
+		case 1: case 2: case 3: case 4: case 5: case 6:	// human, barbarian, erudite, wood/high/dark elf
+		case 7: case 8: case 9: case 10: case 11: case 12:	// half elf, dwarf, troll, ogre, halfling, gnome
+		case 128: case 130:									// iksar, vah shir
+			size = 5.0f;
+			radius = 5.0f;
+			break;
+		case 19:	// Trakanon
+		case 192:	// clockwork dragon
+			radius = 10.48f;
+			break;
+		case 184: case 195: case 196: case 198:	// Velious dragons
+			radius = 9.48f;
+			break;
+		case 34:	// giant bat
+			size = 5.0f;
+			break;
+		case 49:	// lava dragon
+			size = 32.5f;
+			break;
+		case 158:	// wurm
+			size = 16.0f;
+			break;
+		}
+		return radius * size / 5.0f;
+	}
+
+	float MeleeRange(float radius1, float radius2)
+	{
+		float range = (radius1 + radius2) * 0.75f;
+		if (range < 14.0f)
+			range = 14.0f;
+		range += 2.0f;
+		if (range > 75.0f)
+			range = 75.0f;
+		return range;
+	}
 }
