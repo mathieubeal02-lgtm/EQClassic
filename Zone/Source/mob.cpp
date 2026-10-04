@@ -1332,7 +1332,10 @@ bool Mob::GetInvisible()
 
 void Mob::SetInvisible(bool toggle)
 {
-	SendAppearancePacket(GetID(), SAT_Invis, (int32)toggle, true);
+	// an NPC being built has no id yet: this told the whole zone that spawn 0 was visible, once per
+	// NPC spawned (300 packets on a zone boot, ahead of everything else for the player)
+	if (GetID() != 0)
+		SendAppearancePacket(GetID(), SAT_Invis, (int32)toggle, true);
 	this->invisible = toggle;
 }
 

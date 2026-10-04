@@ -1007,6 +1007,35 @@ void EntityList::SendZoneSpawnsBulk(Client* client)
 	}
 }
 
+// These spawns (by id), as one deflated OP_ZoneSpawns per MAX_SPAWNS_PER_PACKET, like the zone-in list:
+// the NPCs a zone spawns while players come in, instead of a packet each.
+void EntityList::SendSpawnsBulk(Client* client, const std::vector<int16>& ids)
+{
+	std::vector<NewSpawn_Struct> spawns;
+	for (size_t k = 0; k < ids.size(); k++)
+	{
+		Mob* mob = GetMob(ids[k]);
+		if (!mob || !mob->IsNPC())
+			continue;
+		NewSpawn_Struct ns;
+		memset(&ns, 0, sizeof(ns));
+		mob->FillSpawnStruct(&ns, client);
+		spawns.push_back(ns);
+	}
+	for (size_t first = 0; first < spawns.size(); first += MAX_SPAWNS_PER_PACKET)
+	{
+		size_t count = spawns.size() - first < MAX_SPAWNS_PER_PACKET ? spawns.size() - first : MAX_SPAWNS_PER_PACKET;
+		int rawSize = count * sizeof(NewSpawn_Struct);
+		APPLAYER* outapp = new APPLAYER;
+		outapp->opcode = OP_ZoneSpawns;
+		outapp->pBuffer = new uchar[rawSize + 64];
+		outapp->size = DeflatePacket((uchar*)&spawns[first], rawSize, outapp->pBuffer, rawSize + 64);
+		EncryptZoneSpawnPacket(outapp);
+		client->QueuePacket(outapp);
+		delete outapp;
+	}
+}
+
 #define MAX_SPAWN_UPDATES_PER_PACKET	25
 /*
 Bulk spawn update packet, to be requested by the client on a timer.

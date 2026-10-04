@@ -5217,29 +5217,24 @@ void Client::ShowFaction(Client* to, NPC* npc)
 // the zone, where the client drops it. NPCs born between the two are now sent once it is in.
 void Client::SendNewSpawn(NPC* npc)
 {
-	if (client_state == CLIENT_CONNECTED)
+	// in game and the zone settled: now; while the zone spawns its NPCs (bulk phase) or the client
+	// still zones in (its list already sent): batched, at the next Process / the end of its zone-in
+	if (client_state == CLIENT_CONNECTED && !zone->GetBulkOnly())
 	{
 		APPLAYER app;
 		npc->CreateSpawnPacket(&app);
 		QueuePacket(&app);
 	}
-	else if (client_state == CLIENT_CONNECTING5)
+	else if (client_state == CLIENT_CONNECTED || client_state == CLIENT_CONNECTING5)
 		deferredSpawnIDs.push_back(npc->GetID());
 	// before that, the spawn list it has yet to get includes this NPC
 }
 
 void Client::SendDeferredSpawns()
 {
-	for (size_t i = 0; i < deferredSpawnIDs.size(); i++)
-	{
-		Mob* mob = entity_list.GetMob(deferredSpawnIDs[i]);
-		if (!mob || !mob->IsNPC())
-			continue;
-		APPLAYER app;
-		mob->CreateSpawnPacket(&app);
-		QueuePacket(&app);
-	}
-	if (!deferredSpawnIDs.empty())
-		EQC::Common::Log(EQCLog::Debug, CP_CLIENT, "%s: %i NPCs spawned during zone-in sent", GetName(), (int)deferredSpawnIDs.size());
+	if (deferredSpawnIDs.empty())
+		return;
+	entity_list.SendSpawnsBulk(this, deferredSpawnIDs);
+	EQC::Common::Log(EQCLog::Debug, CP_CLIENT, "%s: %i new NPCs sent in bulk", GetName(), (int)deferredSpawnIDs.size());
 	deferredSpawnIDs.clear();
 }

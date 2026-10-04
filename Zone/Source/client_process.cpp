@@ -62,6 +62,10 @@ bool Client::Process()
 
 	if(Connected())
 	{
+		// NPCs a loading zone spawned since the last pass, in one packet
+		if (!deferredSpawnIDs.empty())
+			SendDeferredSpawns();
+
 		//Melinko: Check if warrior is in berserker frenzy
 		if(!this->CastToClient()->IsBerserk())
 		{
