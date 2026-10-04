@@ -2369,6 +2369,12 @@ int Mob::AddBuff(Mob *caster, Spell* spell, int duration)
 		cur = overwrite_slots.begin();
 		end = overwrite_slots.end();
 		for(; cur != end; cur++) {
+			// The same spell again (a clicky recast, a rebuff) is refreshed in its slot by
+			// HandleBuffSpellEffects: fading it first told the client it had worn off ("speed
+			// returns to normal") after the client had put it back, so the icon went away while the
+			// buff was still on (Journeyman's Boots).
+			if (buffs[*cur].spell && buffs[*cur].spell->GetSpellID() == spell->GetSpellID())
+				continue;
 			// strip spell
 			BuffFadeBySlot(*cur, false);
 
