@@ -1634,7 +1634,7 @@ namespace
 		long lastAssistCall = 0, lastMeleeMsg = 0;
 		unsigned moveTick = 0;
 		int tooFar = 0, cantSee = 0;
-		bool closeIn = false;
+		bool closeIn = false, backOff = false;
 		int target = 0;
 		long start = NowMs(), lastTick = start, stateSince = start, lastStatus = start, lastHitTaken = 0, lastNoPrey = 0;
 		const float speed = 20.0f;
@@ -1643,6 +1643,8 @@ namespace
 		std::set<int> attackers;
 		bool sitting = false;
 		int lootedItems = 0, fightHits = 0;
+		uint8_t lastHeading = 0;
+		long lastHitDealt = 0;
 		auto setState = [&](State s, const char* why) {
 			if (s == state) return;
 			state = s;
@@ -1656,7 +1658,10 @@ namespace
 			short y = (short)meY, x = (short)meX, zz = (short)(meZ * 10);
 			u[0] = st.myId & 0xff; u[1] = st.myId >> 8;
 			u[2] = walking ? 22 : 0;
-			u[3] = HeadingTowards(meX, meY, tx, ty);
+			// right on top of it, the direction means nothing: keep the last heading
+			if ((tx - meX) * (tx - meX) + (ty - meY) * (ty - meY) > 0.25f)
+				lastHeading = HeadingTowards(meX, meY, tx, ty);
+			u[3] = lastHeading;
 			memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
 			// The zone passes a player's update on only when its deltas change (else every 10 s): a
 			// walking bot flips the lowest delta_y bit, which the zone divides away (delta / 125) before
@@ -1794,7 +1799,7 @@ namespace
 						std::string text((const char*)b + 4, strnlen((const char*)b + 4, p->size - 4));
 						bool far = text.find("too far away") != std::string::npos, blind = text.find("can't see your target") != std::string::npos;
 						if (far) { tooFar++; closeIn = true; }
-						if (blind) cantSee++;
+						if (blind) { cantSee++; backOff = true; }
 						if ((far || blind) && NowMs() - lastMeleeMsg > 10000)
 						{
 							BotLog(charname, st.zone, "action=MeleeBlocked why=%s too_far=%d cant_see=%d", far ? "too_far" : "cant_see", tooFar, cantSee);
@@ -1927,7 +1932,7 @@ namespace
 					{
 						int to = b[0] | (b[1] << 8), from = b[4] | (b[5] << 8);
 						int dmg = b[12] | (b[13] << 8) | (b[14] << 16) | (b[15] << 24);
-						if (from == st.myId && to == target && dmg > 0) { hs.hitsDealt++; hs.damageDealt += dmg; fightHits++; }
+						if (from == st.myId && to == target && dmg > 0) { hs.hitsDealt++; hs.damageDealt += dmg; fightHits++; lastHitDealt = NowMs(); }
 						if (to == st.myId && from != st.myId && mobs.count(from))
 						{
 							hs.hitsTaken++;
@@ -2151,7 +2156,7 @@ namespace
 				if (!mobs.count(target) || !mobs[target].alive) { attack(false); setState(Seek, "prey gone"); break; }
 				Mobile& m = mobs[target];
 				if (state == Approach && now - stateSince > 60000) { skip.insert(target); setState(Seek, "too long to reach"); break; }
-				if (state == Fight && now - stateSince > 30000 && fightHits == 0 && !(member && nukeGem >= 0)) { attack(false); skip.insert(target); setState(Seek, "no hit in 30 s"); break; }
+				if (state == Fight && now - std::max(stateSince, lastHitDealt) > 30000 && !(member && nukeGem >= 0)) { attack(false); skip.insert(target); setState(Seek, "no hit in 30 s"); break; }
 				if (member && nukeGem >= 0)
 				{
 					// a wizard stays back and nukes
@@ -2181,9 +2186,20 @@ namespace
 				}
 				if (closeIn)
 				{
-					// the zone says we are out of reach: step right onto it
+					// the zone says we are out of reach: step closer
 					closeIn = false;
-					walkTo(m.x, m.y, m.z, step, 0);
+					walkTo(m.x, m.y, m.z, step, 1.5f);
+					break;
+				}
+				if (backOff)
+				{
+					// the zone says we do not face it (we stand on it, or it moved): step back, face it
+					backOff = false;
+					float dx = meX - m.x, dy = meY - m.y, d = sqrtf(dx * dx + dy * dy);
+					if (d < 0.5f) { dx = 1; dy = 0; d = 1; }
+					meX = m.x + dx / d * 3;
+					meY = m.y + dy / d * 3;
+					sendPos(m.x, m.y, false);
 					break;
 				}
 				if (walkTo(m.x, m.y, m.z, step, 2) && state == Approach)

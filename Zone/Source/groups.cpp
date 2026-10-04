@@ -54,6 +54,7 @@ int Group::GetGroupID() {
 
 void Group::ResetGroupData() {
 	this->ignoreNextDisband = false;
+	this->disbanded = false;
 	this->pvMembers.clear();
 }
 
@@ -398,7 +399,7 @@ void Group::DelMember(char* name, bool ignoresender, bool leftgame) {
 			pack = new ServerPacket(ServerOP_GroupRefresh, sizeof(ServerGroupRefresh_Struct));
 			memset(pack->pBuffer, 0, pack->size);
 			ServerGroupRefresh_Struct* sgr = (ServerGroupRefresh_Struct*) pack->pBuffer;			
-			strncpy(sgr->member, Member->GetName(), MAX_NAME_SIZE);
+			strncpy(sgr->member, name, MAX_NAME_SIZE);	// Member is null here: not in zone
 			sgr->gid = this->GetGroupID();
 			sgr->action = REMOVE_MEMBER;
 			worldserver.SendPacket(pack);
@@ -480,7 +481,11 @@ void Group::DisbandGroup(bool newleader) {
 	safe_delete(outapp);//delete outapp;
 
 	if (!newleader)
-		entity_list.RemoveEntity(this->GetID());
+	{
+		// EntityList::Process removes us (we may be inside it, deleting a member)
+		this->pvMembers.clear();
+		this->disbanded = true;
+	}
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -777,9 +782,10 @@ void Group::MemberZonedOut(Client* zoner){
 			it->Ptr = NULL;
 	}
 
-	// Delete group entity for this zone if no one is left.
+	// Delete group entity for this zone if no one is left (at EntityList::Process's next pass: a
+	// zoning member may be being removed by it right now)
 	if ( this->GetMembersInGroup() == 0 )
-		entity_list.RemoveEntity(this->GetID());
+		this->disbanded = true;
 }
 
 //////////////////////////////////////////////////////////////////////
