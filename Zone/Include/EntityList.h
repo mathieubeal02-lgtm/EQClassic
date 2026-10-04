@@ -44,6 +44,7 @@ public:
 	void	ChannelMessageSend(Mob* to, int8 chan_num, int8 language, char* message, ...);
 	//void    SendZoneSpawns(Client*);
 	void	SendZoneSpawnsBulk(Client* client);
+	void	SendSpawnsBulk(Client* client, const std::vector<int16>& ids);
 	void    SendZoneObjects(Client* client);
 	void    Save();
 
