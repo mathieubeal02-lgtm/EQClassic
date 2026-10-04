@@ -411,7 +411,22 @@ namespace
 		std::string zone;
 		std::vector<unsigned char> profile;
 		std::vector<std::vector<unsigned char> > spawnPackets;
+		// NPCs spawned one by one during the zone-in (a zone that just booted for us)
+		std::vector<std::vector<unsigned char> > newSpawnPackets;
 	};
+
+	// Keeps the spawn packets of a batch: lists, and single NPCs (NewSpawn, 0x4921).
+	void KeepSpawnPackets(ZoneState& st, const std::vector<Packet*>& got)
+	{
+		for (size_t i = 0; i < got.size(); i++)
+		{
+			std::vector<unsigned char> d(got[i]->pBuffer, got[i]->pBuffer + got[i]->size);
+			if (got[i]->opcode == 0x6121)
+				st.spawnPackets.push_back(d);
+			else if (got[i]->opcode == 0x4921 && got[i]->size >= 168)
+				st.newSpawnPackets.push_back(d);
+		}
+	}
 
 	const int16 kZoneSpawns = 0x6121;	// NewSpawn_Struct[], deflated + encrypted
 
@@ -498,17 +513,14 @@ namespace
 			{
 				if (getenv("EQBOT_VERBOSE"))
 					printf("       step3 -> 0x%04x %d bytes\n", (unsigned)(unsigned short)early[i]->opcode, (int)early[i]->size);
-				if (early[i]->opcode == kZoneSpawns)
-					st.spawnPackets.push_back(std::vector<unsigned char>(early[i]->pBuffer, early[i]->pBuffer + early[i]->size));
 			}
+			KeepSpawnPackets(st, early);
 			DeleteAll(early);
 		}
 		z.Send(kZoneRequest4, 0, 0);
 		p = z.WaitFor(kZoneDone, 20000, &others);
 		int spawns = (int)others.size();
-		for (size_t i = 0; i < others.size(); i++)
-			if (others[i]->opcode == kZoneSpawns)
-				st.spawnPackets.push_back(std::vector<unsigned char>(others[i]->pBuffer, others[i]->pBuffer + others[i]->size));
+		KeepSpawnPackets(st, others);
 		DeleteAll(others);
 		snprintf(gb, sizeof(gb), "zone header + %d spawn/door/object packets", spawns);
 		Step(p != 0, "zone data", p ? gb : "no answer");
@@ -530,9 +542,8 @@ namespace
 			{
 				if (getenv("EQBOT_VERBOSE"))
 					printf("       late -> 0x%04x %d bytes\n", (unsigned)(unsigned short)late[i]->opcode, (int)late[i]->size);
-				if (late[i]->opcode == kZoneSpawns)
-					st.spawnPackets.push_back(std::vector<unsigned char>(late[i]->pBuffer, late[i]->pBuffer + late[i]->size));
 			}
+			KeepSpawnPackets(st, late);
 			DeleteAll(late);
 		}
 		Step(true, "in zone", charname + " in " + zname);
@@ -805,6 +816,12 @@ namespace
 
 		// The spawns: this player among them, and NPCs.
 		std::vector<SpawnInfo> spawns = DecodeSpawns(st.spawnPackets);
+		for (size_t i = 0; i < st.newSpawnPackets.size(); i++)
+		{
+			std::vector<unsigned char> d = st.newSpawnPackets[i];
+			Decrypt(d, 0, 0x65e7, 9, 13, false);
+			spawns.push_back(ParseSpawn(&d[4]));
+		}
 		g_spawns = &spawns;
 		// A zone that just booted spawns its NPCs after the player came in: wait for them.
 		std::vector<Packet*> waited = Collect(z, 15000, [&](const std::vector<Packet*>&) {
