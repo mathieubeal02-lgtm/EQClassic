@@ -20,6 +20,7 @@
 #include <sys/time.h>
 
 #include <cmath>
+#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -414,6 +415,8 @@ namespace
 		std::vector<std::vector<unsigned char> > spawnPackets;
 		// NPCs spawned one by one during the zone-in (a zone that just booted for us)
 		std::vector<std::vector<unsigned char> > newSpawnPackets;
+		int myId;	// our spawn id (OP_SpawnAppearance type 16 at zone-in)
+		ZoneState() : myId(0) {}
 	};
 
 	// Keeps the spawn packets of a batch: lists, and single NPCs (NewSpawn, 0x4921).
@@ -426,6 +429,8 @@ namespace
 				st.spawnPackets.push_back(d);
 			else if (got[i]->opcode == 0x4921 && got[i]->size >= 168)
 				st.newSpawnPackets.push_back(d);
+			else if (got[i]->opcode == (int16)0xf520 && got[i]->size >= 12 && (d[4] | (d[5] << 8)) == 16)
+				st.myId = d[8] | (d[9] << 8);
 		}
 	}
 
@@ -661,7 +666,8 @@ namespace
 		si.cls = sp[74];
 		si.y = (short)(sp[51] | (sp[52] << 8));
 		si.x = (short)(sp[53] | (sp[54] << 8));
-		si.z = (short)(sp[55] | (sp[56] << 8));
+		// z on the wire: NPCs x10, players x1000 (Mob::FillSpawnStruct); kept in real units here
+		si.z = (short)(sp[55] | (sp[56] << 8)) / (si.npc == 1 ? 10.0f : 1000.0f);
 		return si;
 	}
 
@@ -988,7 +994,7 @@ namespace
 				}
 				unsigned char u[15];
 				memset(u, 0, sizeof(u));
-				short y = (short)py, x = (short)(px + 2), zz = (short)(pz + 4);	// eye height rather than the feet: line of sight
+				short y = (short)py, x = (short)(px + 2), zz = (short)((pz + 4) * 10);	// eye height rather than the feet: line of sight; a client sends z x10
 				memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
 				u[3] = HeadingTowards(x, y, px, py);	// the zone only lets a player hit what it faces
 				z.Send(kClientUpdate, u, sizeof(u));
@@ -1045,7 +1051,7 @@ namespace
 					}
 					if (moved)
 					{
-						short ny = (short)py, nx = (short)(px + 2), nz = (short)(pz + 4);
+						short ny = (short)py, nx = (short)(px + 2), nz = (short)((pz + 4) * 10);
 						memcpy(u + 5, &ny, 2); memcpy(u + 7, &nx, 2); memcpy(u + 9, &nz, 2);
 						u[3] = HeadingTowards(nx, ny, px, py);
 						z.Send(kClientUpdate, u, sizeof(u));
@@ -1129,7 +1135,7 @@ namespace
 					sscanf(where.c_str() + at + 9, " %f, %f, %f", &mx, &my, &mz);
 				unsigned char u[15];
 				memset(u, 0, sizeof(u));
-				short y = (short)my, x = (short)(mx + 3), zz = (short)(mz + 4);
+				short y = (short)my, x = (short)(mx + 3), zz = (short)((mz + 4) * 10);
 				memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
 				u[3] = HeadingTowards(x, y, mx, my);
 				z.Send(kClientUpdate, u, sizeof(u));
@@ -1225,7 +1231,7 @@ namespace
 			unsigned char u[15];
 			memset(u, 0, sizeof(u));
 			u[0] = meId & 0xFF; u[1] = meId >> 8;
-			short y = (short)npc->y, x = (short)(npc->x + 3), zz = (short)npc->z;
+			short y = (short)npc->y, x = (short)(npc->x + 3), zz = (short)(npc->z * 10);
 			memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
 			z.Send(kClientUpdate, u, sizeof(u));
 			uint16_t target[2] = { (uint16_t)npc->id, 0 };
@@ -1246,12 +1252,173 @@ namespace
 		return failures ? 1 : 0;
 	}
 
+	// ---- walk: a bot that walks waypoints (bots milestone 1, docs/bots-design.md) ----
+
+	struct Waypoint { float x, y, z; };
+
+	// One decision line per action, the format docs/bots-design.md 6.1 verifies the milestones on.
+	void BotLog(const std::string& bot, const std::string& zone, const char* fmt, ...)
+	{
+		char text[400];
+		va_list args;
+		va_start(args, fmt);
+		vsnprintf(text, sizeof(text), fmt, args);
+		va_end(args);
+		struct timeval tv;
+		gettimeofday(&tv, 0);
+		printf("t=%ld.%03ld bot=%s zone=%s %s\n", (long)tv.tv_sec, (long)(tv.tv_usec / 1000), bot.c_str(), zone.c_str(), text);
+		fflush(stdout);
+	}
+
+	int Walk(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname,
+	         const std::string& file, int seconds)
+	{
+		std::vector<Waypoint> wps;
+		FILE* f = fopen(file.c_str(), "r");
+		if (f)
+		{
+			Waypoint w;
+			while (fscanf(f, "%f %f %f", &w.x, &w.y, &w.z) == 3)
+				wps.push_back(w);
+			fclose(f);
+		}
+		if (wps.size() < 2)
+		{
+			fprintf(stderr, "walk: %s needs at least 2 waypoints (x y z per line)\n", file.c_str());
+			return 2;
+		}
+		EqSession z;
+		ZoneState st;
+		if (!EnterZone(host, user, pass, charname, z, st))
+		{
+			BotLog(charname, "-", "action=Login result=failed");
+			return 1;
+		}
+		BotLog(charname, st.zone, "action=EnterZone id=%d waypoints=%d", st.myId, (int)wps.size());
+		const float speed = getenv("EQBOT_SPEED") ? atof(getenv("EQBOT_SPEED")) : 20.0f;	// units/s, about a walk
+		const int tickMs = 250;
+		std::vector<unsigned char> pp = DecodeProfile(st.profile);
+		Waypoint at = wps[0];
+		if (pp.size() >= 2420)
+		{
+			memcpy(&at.y, &pp[2408], 4);
+			memcpy(&at.x, &pp[2412], 4);
+			memcpy(&at.z, &pp[2416], 4);
+		}
+		long start = NowMs(), lastStatus = start, lastTick = start;
+		long packetsIn = 0, packetsOut = 0, arrivals = 0;
+		int next = 0, dir = 1;
+		bool moving = false;
+		while (NowMs() - start < seconds * 1000L)
+		{
+			const Waypoint& to = wps[next];
+			float dx = to.x - at.x, dy = to.y - at.y, dz = to.z - at.z;
+			float dist = sqrtf(dx * dx + dy * dy);
+			if (!moving)
+			{
+				BotLog(charname, st.zone, "action=MoveTo wp=%d target=%.1f,%.1f,%.1f dist=%.1f", next, to.x, to.y, to.z, dist);
+				moving = true;
+			}
+			long now = NowMs();
+			float step = speed * (now - lastTick) / 1000.0f;	// the time really gone since the last update
+			lastTick = now;
+			bool arrived = dist <= step;
+			if (arrived)
+				at = to;
+			else
+			{
+				at.x += dx / dist * step;
+				at.y += dy / dist * step;
+				at.z += dz / dist * step;	// between two grid points the ground is close to the line
+			}
+			unsigned char u[15];
+			memset(u, 0, sizeof(u));
+			short y = (short)at.y, x = (short)at.x, zz = (short)(at.z * 10);	// a client sends z x10
+			u[0] = st.myId & 0xff; u[1] = st.myId >> 8;
+			u[2] = arrived ? 0 : (unsigned char)(speed > 30 ? 46 : 22);	// animation: walking pace
+			u[3] = HeadingTowards(at.x, at.y, to.x, to.y);
+			memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
+			z.Send(kClientUpdate, u, sizeof(u));
+			packetsOut++;
+			// wait out the tick (Poll returns as soon as a packet comes), keep our id when it comes
+			long tickEnd = NowMs() + tickMs;
+			while (NowMs() < tickEnd)
+			{
+				std::vector<Packet*> got = z.Poll((int)(tickEnd - NowMs()));
+				packetsIn += got.size();
+				for (size_t i = 0; i < got.size(); i++)
+					if (got[i]->opcode == (int16)0xf520 && got[i]->size >= 12 && (got[i]->pBuffer[4] | (got[i]->pBuffer[5] << 8)) == 16
+						&& st.myId == 0)
+					{
+						st.myId = got[i]->pBuffer[8] | (got[i]->pBuffer[9] << 8);
+						BotLog(charname, st.zone, "action=Identify id=%d", st.myId);
+					}
+				DeleteAll(got);
+			}
+			if (arrived)
+			{
+				arrivals++;
+				moving = false;
+				BotLog(charname, st.zone, "action=Arrive wp=%d at=%.1f,%.1f,%.1f", next, at.x, at.y, at.z);
+				// EQBOT_VERIFY (GM accounts only): every 5th arrival, where does the zone have us?
+				if (getenv("EQBOT_VERIFY") && arrivals % 5 == 0)
+				{
+					uint16_t none[2] = { 0, 0 };
+					z.Send(kClientTarget, none, sizeof(none));
+					Say(z, charname, "#loc");
+					std::string where;
+					std::vector<Packet*> l = Collect(z, 5000, [&](const std::vector<Packet*>& g) { return HasText(g, "Current Location:", &where); });
+					packetsIn += l.size();
+					DeleteAll(l);
+					float sx, sy, sz;
+					size_t pos = where.find("Location:");
+					if (pos != std::string::npos && sscanf(where.c_str() + pos + 9, " %f, %f, %f", &sx, &sy, &sz) == 3)
+						BotLog(charname, st.zone, "action=Verify server=%.1f,%.1f,%.1f diff=%.1f", sx, sy, sz,
+							sqrtf((sx - at.x) * (sx - at.x) + (sy - at.y) * (sy - at.y)));
+					else
+						BotLog(charname, st.zone, "action=Verify result=no-answer");
+					lastTick = NowMs();
+				}
+				// rest a moment at every third point: sit, then stand
+				if (arrivals % 3 == 0)
+				{
+					unsigned char sa[12];
+					memset(sa, 0, sizeof(sa));
+					sa[0] = st.myId & 0xff; sa[1] = st.myId >> 8; sa[4] = 14; sa[8] = 110;
+					z.Send((int16)0xf520, sa, sizeof(sa));
+					BotLog(charname, st.zone, "action=Sit");
+					long until = NowMs() + 3000;
+					while (NowMs() < until) { std::vector<Packet*> g = z.Poll(250); packetsIn += g.size(); DeleteAll(g); }
+					lastTick = NowMs();	// sitting is not walking
+					sa[8] = 100;
+					z.Send((int16)0xf520, sa, sizeof(sa));
+					packetsOut += 2;
+					BotLog(charname, st.zone, "action=Stand");
+				}
+				if (next + dir < 0 || next + dir >= (int)wps.size())
+					dir = -dir;		// walk the grid back and forth
+				next += dir;
+			}
+			if (NowMs() - lastStatus >= 30000)
+			{
+				double secs = (NowMs() - start) / 1000.0;
+				BotLog(charname, st.zone, "action=Status pos=%.1f,%.1f,%.1f arrivals=%ld in_pps=%.1f out_pps=%.1f", at.x, at.y, at.z, arrivals, packetsIn / secs, packetsOut / secs);
+				lastStatus = NowMs();
+			}
+		}
+		double secs = (NowMs() - start) / 1000.0;
+		BotLog(charname, st.zone, "action=Done arrivals=%ld seconds=%.0f in_pps=%.1f out_pps=%.1f", arrivals, secs, packetsIn / secs, packetsOut / secs);
+		z.Disconnect();
+		return 0;
+	}
+
 	void Usage()
 	{
 		fprintf(stderr, "usage: eqbot login  <login-host> <user> <password> [port=5999]\n"
 		                "       eqbot create <login-host> <user> <password> <character>\n"
 		                "       eqbot play   <login-host> <user> <password> <character>\n"
-		                "       eqbot test   <login-host> <user> <password> <character>\n");
+		                "       eqbot test   <login-host> <user> <password> <character>\n"
+		                "       eqbot walk   <login-host> <user> <password> <character> <waypoints file> [seconds=60]\n");
 	}
 }
 
@@ -1265,6 +1432,8 @@ int main(int argc, char** argv)
 		return Play(argv[2], argv[3], argv[4], argv[5]);
 	if (argc >= 6 && std::string(argv[1]) == "test")
 		return Test(argv[2], argv[3], argv[4], argv[5]);
+	if (argc >= 7 && std::string(argv[1]) == "walk")
+		return Walk(argv[2], argv[3], argv[4], argv[5], argv[6], argc > 7 ? atoi(argv[7]) : 60);
 	Usage();
 	return 2;
 }
