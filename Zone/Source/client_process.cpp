@@ -19,6 +19,7 @@
 #include "database.h"
 #include "EQCUtils.hpp"
 #include "packet_functions.h"
+#include "MiscFunctions.h"
 #include "packet_dump.h"
 #include "worldserver.h"
 #include "packet_dump_file.h"
@@ -3137,14 +3138,15 @@ void Client::ProcessOP_GMSummon(APPLAYER* pApp) {
 
 	if (st && st->IsCorpse()) // player using the /corpse command
 	{
-		// any player could drag any corpse of the zone to them (and loot it): their own only, from close
-		// by, unless GM (we keep no consent list)
+		// any player could drag any corpse of the zone to them (and loot it): their own or one they have
+		// /consent for, from close by, unless GM
 		if (admin < 100)
 		{
 			Corpse* corpse = st->CastToCorpse();
-			if (!corpse->IsPlayerCorpse() || corpse->GetCharID() != this->CharacterID())
+			if (!corpse->IsPlayerCorpse() || (corpse->GetCharID() != this->CharacterID()
+				&& !Database::Instance()->HasConsent(corpse->GetOrgname(), GetName())))
 			{
-				Message(RED, "You may only drag your own corpse.");
+				Message(RED, "You do not have consent to drag that corpse.");
 				return;
 			}
 			if (Dist(st) > 100)
@@ -5024,29 +5026,35 @@ void Client::ProcessOP_ConsumeItem(APPLAYER* pApp){
 }
 
 
+bool isAlphabetic(string check);	// Client_Messaging.cpp
+
+// /consent <name> lets that player drag your corpses (/corpse); the same command again takes it back,
+// as on TAKP. It used to send the request back and keep nothing.
 void Client::ProcessOP_ConsentRequest(APPLAYER* pApp){
-	if (!PacketFits<ConsentRequest_Struct>(pApp, "ProcessOP_ConsentRequest"))
+	if (pApp->size < 2)
 		return;
-	//Ignore empty consent request.
-	if(sizeof(pApp->pBuffer) == 1){
+	char name[64];
+	strn0cpy(name, (char*)pApp->pBuffer, pApp->size + 1 < sizeof(name) ? pApp->size + 1 : sizeof(name));
+	if (!name[0] || !isAlphabetic(name))
+		return;
+	if (strcasecmp(name, GetName()) == 0)
+	{
+		Message(BLACK, "You cannot consent yourself.");
 		return;
 	}
-
-	ConsentRequest_Struct* crs = (ConsentRequest_Struct*)pApp->pBuffer;
-	cout << crs->name;
-
-	APPLAYER* outapp = new APPLAYER(OP_ConsentResponse, sizeof(ConsentResponse_Struct));
-	ConsentResponse_Struct* conres = (ConsentResponse_Struct*)outapp->pBuffer;
-	memset(conres, 0, sizeof(ConsentResponse_Struct));
-
-	// jimm0thy - Should these be static? I would think they should be set to actual values, in testing though I got OPCode errors 
-	strcpy(conres->consentee, "Consentee");
-	strcpy(conres->consenter, "Consenter");
-	strcpy(conres->corpseZoneName, "qeynos");
-
-	QueuePacket(pApp);
-	safe_delete(outapp);//delete outapp;
-
+	bool allowed = false;
+	if (!Database::Instance()->ToggleConsent(GetName(), name, &allowed))
+	{
+		Message(RED, "Consent could not be saved.");
+		return;
+	}
+	if (allowed)
+		Message(BLACK, "You have given %s permission to drag your corpse.", name);
+	else
+		Message(BLACK, "You have denied %s permission to drag your corpse.", name);
+	Client* other = entity_list.GetClientByName(name);
+	if (other)
+		other->Message(BLACK, allowed ? "%s has given you permission to drag their corpse." : "%s has denied you permission to drag their corpse.", GetName());
 }
 
 void Client::Process_UnknownOpCode(APPLAYER* pApp)

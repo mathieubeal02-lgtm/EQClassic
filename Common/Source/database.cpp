@@ -1540,6 +1540,44 @@ bool Database::GetClientZonePoints(const char* short_name, std::vector<ZonePoint
 	return true;
 }
 
+// /consent is kept here because the corpse and the consented player may be in other zones (other
+// processes) than the owner. The table is created on first use.
+static const char* CONSENT_TABLE = "CREATE TABLE IF NOT EXISTS character_consent (owner varchar(64) NOT NULL, consented varchar(64) NOT NULL, PRIMARY KEY (owner, consented))";
+
+bool Database::HasConsent(const char* owner, const char* consented)
+{
+	char errbuf[MYSQL_ERRMSG_SIZE];
+	char* query = 0;
+	MYSQL_RES* result;
+	bool found = false;
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT 1 FROM character_consent WHERE owner=LOWER('%s') AND consented=LOWER('%s')",
+		SQLEscape(owner).c_str(), SQLEscape(consented).c_str()), errbuf, &result))
+	{
+		found = mysql_num_rows(result) > 0;
+		mysql_free_result(result);
+	}
+	safe_delete_array(query);
+	return found;
+}
+
+bool Database::ToggleConsent(const char* owner, const char* consented, bool* nowAllowed)
+{
+	char errbuf[MYSQL_ERRMSG_SIZE];
+	char* query = 0;
+	RunQuery(query, MakeAnyLenString(&query, "%s", CONSENT_TABLE), errbuf);
+	safe_delete_array(query);
+	*nowAllowed = !HasConsent(owner, consented);
+	bool ok;
+	if (*nowAllowed)
+		ok = RunQuery(query, MakeAnyLenString(&query, "INSERT INTO character_consent (owner, consented) VALUES (LOWER('%s'), LOWER('%s'))",
+			SQLEscape(owner).c_str(), SQLEscape(consented).c_str()), errbuf);
+	else
+		ok = RunQuery(query, MakeAnyLenString(&query, "DELETE FROM character_consent WHERE owner=LOWER('%s') AND consented=LOWER('%s')",
+			SQLEscape(owner).c_str(), SQLEscape(consented).c_str()), errbuf);
+	safe_delete_array(query);
+	return ok;
+}
+
 // jimm0thy - Zone Shutdown delay per Database
 int32 Database::getZoneShutDownDelay(char* short_name)
 {
