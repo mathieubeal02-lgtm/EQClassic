@@ -26,15 +26,22 @@ def zone_pids():
 
 
 def usage(pids):
-    cpu, rss = 0, 0
+    """{pid: utime+stime ticks}, total RSS bytes."""
+    cpu, rss = {}, 0
     for p in pids:
         try:
             f = open('/proc/%d/stat' % p).read().rsplit(')', 1)[1].split()
         except OSError:
             continue
-        cpu += int(f[11]) + int(f[12])
+        cpu[p] = int(f[11]) + int(f[12])
         rss += int(f[21]) * PAGE
     return cpu, rss
+
+
+def delta(now, before):
+    # only processes alive at both samples: one that exited (or started) in between would count
+    # its whole lifetime, or a negative one
+    return sum(now[p] - before[p] for p in now if p in before)
 
 
 def main():
@@ -50,7 +57,7 @@ def main():
             b, br = usage(bots)
             now = time.time()
             dt = (now - last_t) * TICK
-            f.write('%d %.1f %.0f %.1f %.0f\n' % (now, 100.0 * (z - last_z) / dt, zr / 2**20, 100.0 * (b - last_b) / dt, br / 2**20))
+            f.write('%d %.1f %.0f %.1f %.0f\n' % (now, 100.0 * delta(z, last_z) / dt, zr / 2**20, 100.0 * delta(b, last_b) / dt, br / 2**20))
             f.flush()
             last_z, last_b, last_t = z, b, now
 

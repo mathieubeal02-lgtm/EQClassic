@@ -4,6 +4,8 @@
 # waypoint of a waypoints file in a zone. Safe to run again: existing accounts and characters are
 # kept, only their place is reset.
 # Usage: setup-accounts.sh <count> <zone> <waypoints file> [password, default botpass]
+# BOTD_FIRST: index of the first account (default 1). EQBOT_CLASS=warrior: troll warriors instead of
+# troll shamans (eqbot create).
 # Database: EQC_DB_USER/EQC_DB_PASS/EQC_DB_NAME (eqc/eqc/eqclassic). Servers must be up (characters
 # are created through World, like a player would).
 set -e
@@ -14,7 +16,8 @@ EQBOT=${EQBOT:-../../build-linux/bin/eqbot}
 read X Y Z <<<"$(head -1 "$WAYPOINTS")"
 # y, x, z, heading: 16 bytes from 2408, then the zone name at 2424
 POS=$(python3 -c "import struct;print(struct.pack('<ffff',$Y,$X,$Z,0.0).hex())")
-for i in $(seq 1 "$COUNT"); do
+FIRST=${BOTD_FIRST:-1}
+for i in $(seq "$FIRST" $((FIRST + COUNT - 1))); do
   account=$(printf 'bot_%03d' "$i")
   n=$((i - 1))
   name="Bot$(printf "\\x$(printf %x $((97 + n / 26 % 26)))")$(printf "\\x$(printf %x $((97 + n % 26)))")"
@@ -25,5 +28,10 @@ for i in $(seq 1 "$COUNT"); do
   "$EQBOT" create 127.0.0.1 "$account" "$PASS" "$name" > /dev/null 2>&1 || { echo "$account: could not create $name"; continue; }
   sleep 2	# one login at a time (World's active_accounts rows are matched by IP)
   $DB -e "UPDATE character_ SET profile = CONCAT(SUBSTRING(profile, 1, 2408), UNHEX('$POS'), RPAD('$ZONE', 15, '\0'), SUBSTRING(profile, 2440)) WHERE name = '$name'"
+  if [ "${EQBOT_CLASS:-}" = cleric ]; then
+    # Minor Healing (spell 200) in the spell book (int16[256] at 1878) and in gem 1 (int16[8] at 2390),
+    # as a player would scribe and memorize the starting scroll
+    $DB -e "UPDATE character_ SET profile = CONCAT(SUBSTRING(profile, 1, 1878), UNHEX('C800'), SUBSTRING(profile, 1881, 2390 - 1880), UNHEX('C800'), SUBSTRING(profile, 2393)) WHERE name = '$name'"
+  fi
   echo "$account $PASS $name"
 done

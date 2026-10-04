@@ -1,20 +1,26 @@
 #!/bin/bash
-# Runs N walking bots (bots milestone 1, docs/bots-design.md 9) and measures the servers meanwhile.
-# Usage: fleet.sh <count> <waypoints file> <seconds> [password, default botpass]
-# Each bot is `eqbot walk` on bot_NNN (see setup-accounts.sh), started 2 s apart (one login at a
-# time). Logs go to $BOTD_LOGS (default ./logs/<date>); botlog.py summarises them.
+# Runs N bots (bots milestones 1 and 2, docs/bots-design.md 9) and measures the servers meanwhile.
+# Usage: fleet.sh <count> <waypoints file | hunt> <seconds> [password, default botpass]
+# Each bot is `eqbot walk` (or `eqbot hunt`) on bot_NNN (see setup-accounts.sh; BOTD_FIRST: first
+# index, default 1), started 2 s apart (one login at a time). Logs go to $BOTD_LOGS (default ./logs/<date>); botlog.py summarises them.
 cd "$(dirname "$0")"
-COUNT=${1:?count}; WAYPOINTS=$(readlink -f "${2:?waypoints file}"); SECONDS_=${3:?seconds}; PASS=${4:-botpass}
+COUNT=${1:?count}; MODE=${2:?waypoints file or hunt}; [ "$MODE" = hunt ] || WAYPOINTS=$(readlink -f "$MODE"); SECONDS_=${3:?seconds}; PASS=${4:-botpass}
 EQBOT=$(readlink -f "${EQBOT:-../../build-linux/bin/eqbot}")
 LOGS=${BOTD_LOGS:-logs/$(date +%Y%m%d-%H%M%S)}
 mkdir -p "$LOGS"
 pids=()
-for i in $(seq 1 "$COUNT"); do
+FIRST=${BOTD_FIRST:-1}
+for i in $(seq "$FIRST" $((FIRST + COUNT - 1))); do
   account=$(printf 'bot_%03d' "$i")
   n=$((i - 1))
   name="Bot$(printf "\\x$(printf %x $((97 + n / 26 % 26)))")$(printf "\\x$(printf %x $((97 + n % 26)))")"
-  # the last ones start up to 2 x COUNT s later: they walk that much less
-  "$EQBOT" walk 127.0.0.1 "$account" "$PASS" "$name" "$WAYPOINTS" "$((SECONDS_ - 2 * (i - 1)))" > "$LOGS/$name.log" 2>&1 &
+  # the last ones start up to 2 x COUNT s later: they play that much less
+  left=$((SECONDS_ - 2 * (i - FIRST)))
+  if [ "$MODE" = hunt ]; then
+    "$EQBOT" hunt 127.0.0.1 "$account" "$PASS" "$name" "$left" > "$LOGS/$name.log" 2>&1 &
+  else
+    "$EQBOT" walk 127.0.0.1 "$account" "$PASS" "$name" "$WAYPOINTS" "$left" > "$LOGS/$name.log" 2>&1 &
+  fi
   pids+=($!)
   sleep 2
 done
