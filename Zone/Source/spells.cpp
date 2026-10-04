@@ -1,4 +1,5 @@
 #include "client.h"
+#include "CombatFormulas.h"
 #include "spdat.h"
 #include "packet_dump.h"
 #include "moremath.h"
@@ -136,7 +137,8 @@ void Mob::CastSpell(Spell* spell, TSpellID target_id, int16 slot, int32 cast_tim
 	{
 		CAST_CLIENT_DEBUG_PTR(this)->Log(CP_SPELL, "Mob::CastSpell: Spell %s fizzled", spell->GetSpellName());
 		InterruptSpell(true);
-		SetMana(mana_available - mana_required);
+		// a fizzle costs 40% of the spell's mana, at most an eighth of the pool (it took all of it)
+		SetMana(mana_available - Combat::FizzleManaCost(mana_required, GetMaxMana()));
 		return;
 	}
 
@@ -2190,48 +2192,55 @@ void Mob::SendBeginCastPacket(int16 spellid, int32 cast_time)
 }
 
 //////////////////////////////////////////////////
-// true = no fizzle, false = fizzle. Copied from EQEmu 5.0 sources (neotokyo).
+// true = the spell fizzles. The chance comes from Combat::CastSuccessChance (the client's own check, as
+// TAKP has it): 95% success for most spells (98% specialized), less only for spells with a fizzle
+// adjustment cast with low skill. The EQEmu 5.0 formula used before made every cast fizzle 5-95%.
 bool Mob::CheckFizzle(Spell* spell) {
 	if (!this->IsClient() ) return false;
 	if (!spell) return true;
-
-	int par_skill;
-	int act_skill;
-
-	par_skill = spell->GetSpellClass(GetClass()-1) * 5 - 10;  //IIRC even if you are lagging behind the skill levels you don't fizzle much
-	if (par_skill > 235) par_skill = 235;
-	par_skill += spell->GetSpellClass(GetClass()-1); // maximum of 270 for level 65 spell
-
-	int8 spell_skill = spell->GetSpellSkill();
-	act_skill = CastToClient()->GetSkill(spell_skill);
-	act_skill += this->CastToClient()->GetLevel(); // maximum of whatever the client can cheat
-
-	// == 0 --> on par
-	// > 0  --> skill is lower, higher chance of fizzle
-	// < 0  --> skill is better, lower chance of fizzle
-	// the max that diff can be is +- 235
-	int diff = par_skill + spell->GetSpellBaseDiff() - act_skill;
-
-	// if you have high int/wis you fizzle less, you fizzle more if you are stupid
-	int8 stat = GetWIS() > GetINT() ? GetWIS() : GetINT();
-	diff -= (stat - 125) / 20;
-
-	// base fizzlechance is lets say 5%
-	int basefizzle = 10;
-	int fizzlechance = basefizzle + diff/5;
-
-	if (fizzlechance < 5)
-		fizzlechance = 5; // let there remain some chance to fizzle
-	if (fizzlechance > 95)
-		fizzlechance = 95; // and let there be a chance to succeed
-
-
-	CAST_CLIENT_DEBUG_PTR(this)->Log(CP_SPELL, "Mob::CheckFizzle: %s final fizzle chance: %i, base spell diff: %i", spell->GetSpellName(), fizzlechance, spell->GetSpellBaseDiff());
-		
-	int result = MakeRandomInt(0, 100);
-	if (result > fizzlechance)
+	Client* client = CastToClient();
+	if (client->Admin() >= 100)
 		return false;
-	return true;
+
+	int playerClass = GetClass();
+	int spellLevel = spell->GetSpellClass(playerClass - 1);
+	int skill = spell->GetSpellSkill();
+
+	int primeStat = 0;
+	switch (playerClass)
+	{
+	case BARD:
+		primeStat = (GetCHA() + GetDEX()) / 2;
+		break;
+	case CLERIC: case PALADIN: case RANGER: case DRUID: case SHAMAN: case BEASTLORD:
+		primeStat = GetWIS();
+		break;
+	case SHADOWKNIGHT: case NECROMANCER: case WIZARD: case MAGICIAN: case ENCHANTER:
+		primeStat = GetINT();
+		break;
+	}
+
+	int specializeSkill = 0;
+	switch (skill)
+	{
+	case ABJURATION:	specializeSkill = client->GetSkill(SPECIALIZE_ABJURE); break;
+	case ALTERATION:	specializeSkill = client->GetSkill(SPECIALIZE_ALTERATION); break;
+	case CONJURATION:	specializeSkill = client->GetSkill(SPECIALIZE_CONJURATION); break;
+	case DIVINATION:	specializeSkill = client->GetSkill(SPECIALIZE_DIVINATION); break;
+	case EVOCATION:		specializeSkill = client->GetSkill(SPECIALIZE_EVOCATION); break;
+	}
+	if (specializeSkill == 254 || specializeSkill == 255)	// FE/FF: not trained / cannot learn
+		specializeSkill = 0;
+
+	int castingSkill = client->GetSkill(skill);
+	if (castingSkill == 254 || castingSkill == 255)
+		castingSkill = 0;
+	int chance = Combat::CastSuccessChance(playerClass, spellLevel, (int)spell->GetSpellBaseDiff(),
+		castingSkill, primeStat, MakeRandomInt(0, 10), specializeSkill);
+
+	CAST_CLIENT_DEBUG_PTR(this)->Log(CP_SPELL, "Mob::CheckFizzle: %s success chance %i%%, base spell diff %i", spell->GetSpellName(), chance, spell->GetSpellBaseDiff());
+
+	return MakeRandomInt(1, 100) > chance;
 }
 
 //////////////////////////////////////////////////

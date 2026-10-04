@@ -101,6 +101,33 @@ int main()
 	EXPECT_NEAR(MeleeRange(5.0f, 39.0f), 35.0);	// player and Nagafen
 	EXPECT_NEAR(MeleeRange(60.0f, 60.0f), 75.0);	// cap
 
+	// Death: no loss up to level 5, level% of the level's exp below 25, a quarter from 25; halved, x 0.9
+	EXPECT_EQ(DeathExpLoss(5, 40000), 0);
+	EXPECT_EQ(DeathExpLoss(6, 54900), 1482);		// human warrior: 54900 x 6% / 2 x 0.9
+	EXPECT_EQ(DeathExpLoss(20, 924300), 83187);
+	EXPECT_EQ(DeathExpLoss(30, 2193300), 246745);
+	EXPECT_EQ(DeathExpLoss(60, 100000000), 6000000);	// cap
+
+	// Casting: 95 without adjustment, 98 with a maxed specialization
+	EXPECT_EQ(CastSuccessChance(12, 10, 0, 50, 150, 5, 0), 95);
+	EXPECT_EQ(CastSuccessChance(12, 10, 0, 50, 150, 5, 200), 98);
+	// with an adjustment: skill 100 + 5 x (18 - 9) + 150/10 - 5 - 20 = 135 -> 95
+	EXPECT_EQ(CastSuccessChance(12, 10, 20, 100, 150, 5, 0), 95);
+	// a level 49 spell at skill 150: 150 + 5 x (18 - 48) + 20 - 10 - 30 = -20 -> 5
+	EXPECT_EQ(CastSuccessChance(12, 49, 30, 150, 200, 10, 0), 5);
+	// skill 235, level 39 spell, adjustment 30: 235 - 105 + 20 - 0 - 30 = 120 -> 95
+	EXPECT_EQ(CastSuccessChance(6, 39, 30, 235, 200, 0, 0), 95);
+	// skill 200, level 49 spell, adjustment 25: 200 - 150 + 20 - 10 - 25 = 35, + 50 spec / 10 + 1 = 41
+	EXPECT_EQ(CastSuccessChance(6, 49, 25, 200, 200, 10, 50), 41);
+	// level 56+ spells ignore the adjustment: 235 - 160 + 25 - 0 = 100 -> 95
+	EXPECT_EQ(CastSuccessChance(12, 60, 40, 235, 255, 0, 0), 95);
+
+	EXPECT_EQ(GroupExpBonusPercent(1), 0);
+	EXPECT_EQ(GroupExpBonusPercent(2), 2);
+	EXPECT_EQ(GroupExpBonusPercent(6), 10);
+	EXPECT_EQ(FizzleManaCost(100, 2000), 40);
+	EXPECT_EQ(FizzleManaCost(400, 800), 100);	// capped at an eighth of the pool
+
 	if (failures == 0)
 		printf("combat_test: all tests passed\n");
 	return failures == 0 ? 0 : 1;

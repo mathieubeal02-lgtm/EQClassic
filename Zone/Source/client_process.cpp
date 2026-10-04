@@ -5532,6 +5532,26 @@ void Client::ProcessOP_ClassTrainSkill(APPLAYER* pApp)
 	
 	ClassSkillChange_Struct* gmskill = (ClassSkillChange_Struct*) pApp->pBuffer;
 
+	// The client checks all this, but nothing stopped a crafted packet from raising any skill to
+	// anything without points or a trainer (TAKP checks the same).
+	if (pp.trainingpoints <= 0)
+		return;
+	Mob* trainer = entity_list.GetMob((int16)gmskill->npcid);
+	if (!trainer || !trainer->IsNPC() || trainer->GetClass() != GetClass() + (WARRIORGM - WARRIOR) || Dist(trainer) > 100)
+	{
+		EQC::Common::Log(EQCLog::Debug, CP_CLIENT, "%s: skill training refused (no trainer of their class close by)", GetName());
+		return;
+	}
+	if (gmskill->skill_type == 0 && (gmskill->skill_id < 0 || gmskill->skill_id >= 74
+		|| GetSkill(gmskill->skill_id) == 255
+		|| (GetSkill(gmskill->skill_id) != 254 && GetSkill(gmskill->skill_id) >= CheckMaxSkill(gmskill->skill_id, GetRace(), GetClass(), GetLevel(), true))))
+		return;
+	if (gmskill->skill_type == 1 && (gmskill->skill_id < 0 || gmskill->skill_id >= 24
+		|| (GetLanguageSkill(gmskill->skill_id) != 254 && GetLanguageSkill(gmskill->skill_id) >= 100)))
+		return;
+	if (gmskill->skill_type != 0 && gmskill->skill_type != 1)
+		return;
+
 	// train a regular skill
 	if(gmskill->skill_type == 0) {
 		int16 skillLevel = GetSkill(gmskill->skill_id);
