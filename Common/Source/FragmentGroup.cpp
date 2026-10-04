@@ -66,7 +66,9 @@ namespace EQC
 				{
 					*size+=fragment[i].GetSize();		
 				}
-				buf = new uchar[*size];
+				// one zero byte past the end: a string the client did not terminate cannot be read past the packet
+				buf = new uchar[*size + 1];
+				buf[*size] = 0;
 				p = buf;
 				for(i=0; i<num_fragments; i++)
 				{
