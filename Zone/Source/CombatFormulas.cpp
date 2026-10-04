@@ -410,4 +410,65 @@ namespace Combat
 			range = 75.0f;
 		return range;
 	}
+
+	int DeathExpLoss(int level, int levelExp)
+	{
+		if (level <= 5 || levelExp <= 0)
+			return 0;
+		long long loss = level >= 25 ? levelExp / 4 : (long long)levelExp * level / 100;
+		loss /= 2;
+		loss = loss * 9 / 10;
+		if (loss > 6000000)
+			loss = 6000000;
+		return (int)loss;
+	}
+
+	int CastSuccessChance(int playerClass, int spellLevel, int fizzleAdjustment, int castingSkill,
+	                      int primeStat, int randomPenalty, int specializeSkill)
+	{
+		const int BARD = 8;
+		int chance = 95;
+		if (fizzleAdjustment != 0)
+		{
+			// the adjustment does not apply to spells past level 55, nor past 40 for the hybrids
+			if (spellLevel > 55)
+				fizzleAdjustment = 0;
+			if ((playerClass == 3 || playerClass == 4 || playerClass == 5 || playerClass == 15) && spellLevel > 40)
+				fizzleAdjustment = 0;
+			if (playerClass == BARD && fizzleAdjustment > 15)
+				fizzleAdjustment = 15;
+			int effectiveLevel = spellLevel - 1 > 50 ? 50 : spellLevel - 1;
+			if (castingSkill < 0)
+				castingSkill = 0;
+			chance = castingSkill + 5 * (18 - effectiveLevel) + primeStat / 10 - randomPenalty - fizzleAdjustment;
+			int low = playerClass == BARD ? 1 : 5;
+			if (chance < low)
+				chance = low;
+			if (chance > 95)
+				chance = 95;
+		}
+		if (specializeSkill > 0)
+		{
+			chance += specializeSkill / 10 + 1;
+			if (chance > 98)
+				chance = 98;
+		}
+		return chance;
+	}
+
+	int FizzleManaCost(int manaCost, int maxMana)
+	{
+		int cost = manaCost * 4 / 10;
+		int cap = maxMana / 8;
+		return cost > cap ? cap : cost;
+	}
+
+	int GroupExpBonusPercent(int membersInZone)
+	{
+		if (membersInZone < 2)
+			return 0;
+		if (membersInZone > 6)
+			membersInZone = 6;
+		return 2 * (membersInZone - 1);
+	}
 }

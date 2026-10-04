@@ -1,4 +1,5 @@
 //////////////////////////////////////////////////////////////////////
+#include "CombatFormulas.h"
 #include "groups.h"
 #include "entity.h"
 #include "client.h"
@@ -535,6 +536,8 @@ void Group::SplitExp(sint16 NPCLevel, int16 zoneExpModifier)
 	TNumMember NumMembers = this->GetMembersInZone();
 	int16 totalGroupLevel = this->GetTotalLevel();
 	int32 baseMobExp = NPCLevel * NPCLevel * zoneExpModifier;
+	// group bonus (Yeahlight's research): 2% per member in the zone past the first
+	baseMobExp += baseMobExp * Combat::GroupExpBonusPercent((int)NumMembers) / 100;
 	int32 expReward = 0;
 
 	//Yeahlight: Break down the total exp for each group member

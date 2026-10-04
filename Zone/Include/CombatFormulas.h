@@ -72,6 +72,25 @@ namespace Combat
 	float BoundingRadius(int race, float size);
 	// Melee range between two models: (radius1 + radius2) x 0.75, at least 14, plus 2, at most 75.
 	float MeleeRange(float radius1, float radius2);
+
+	// ---- death ---------------------------------------------------------------------------------
+	// Experience lost on death (as TAKP has it from Sony's history): a share of the experience the
+	// current level took (levelExp = exp(level) - exp(level - 1)), level% of it below 25 and a
+	// quarter from 25, halved (May 24 1999) and x 0.9, at most 6,000,000. Nothing up to level 5.
+	int DeathExpLoss(int level, int levelExp);
+	// Experience bonus of a group kill, in percent: 2% per member past the first (2, 4, 6, 8, 10).
+	int GroupExpBonusPercent(int membersInZone);
+
+	// ---- casting -------------------------------------------------------------------------------
+	// Chance (percent) that a player's spell does not fizzle, as the client computes it (TAKP's
+	// CheckFizzle): 95 unless the spell has a fizzle adjustment; then casting skill + 5 x (18 - spell
+	// level, at most 50) + prime stat / 10 - a 0..10 random penalty - the adjustment, within 5..95
+	// (bards 1..95). Specialization adds skill / 10 + 1, up to 98. spellLevel is the level this class
+	// gets the spell at; primeStat WIS or INT (bards (CHA + DEX) / 2).
+	int CastSuccessChance(int playerClass, int spellLevel, int fizzleAdjustment, int castingSkill,
+	                      int primeStat, int randomPenalty, int specializeSkill);
+	// Mana a fizzle costs: 40% of the spell's, at most an eighth of the caster's pool.
+	int FizzleManaCost(int manaCost, int maxMana);
 }
 
 #endif

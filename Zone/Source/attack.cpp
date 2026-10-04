@@ -481,8 +481,9 @@ void Client::ExpLost()
 	//Yeahlight: You lose exp at all levels over 5
 	if(GetLevel() > 5)
 	{
-		//Yeahlight: TODO: Check this formula
-		int exploss = (int)(GetLevel() * (GetLevel() / 18.0) * 12000);
+		// A share of what the current level took (CombatFormulas.h). The old level x level/18 x 12000
+		// took 44% of a level at 6 and 4% at 59 (about 3% and 11% on live).
+		int exploss = Combat::DeathExpLoss(GetLevel(), (int)(GetEXPForLevel(GetLevel()) - GetEXPForLevel(GetLevel() - 1)));
 		if(exploss > 0)
 		{
 			if(exploss > GetEXP())
