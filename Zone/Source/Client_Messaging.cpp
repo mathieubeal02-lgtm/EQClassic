@@ -5,6 +5,7 @@
 #include "ZoneGuildManager.h"
 #include "groups.h"
 #include "MessageTypes.h"
+#include "MiscFunctions.h"
 
 #ifdef EMBPERL
 	#include "embparser.h"
@@ -209,7 +210,10 @@ void Client::ChannelMessageReceived(int8 chan_num, int8 language, char* message,
 			Mob* mypet = this->GetPet();
 			strcpy(npcNamePrefix, this->GetName());
 			strcat(npcNamePrefix, npcNameSuffix);
-			strncpy(compareName, targetname, strlen(targetname) - 2);
+			// (a 1-letter name made the length wrap around and strncpy zero-fill far past compareName)
+			size_t targetLength = strlen(targetname);
+			if (targetLength > 2)
+				strn0cpy(compareName, targetname, (int32)(targetLength - 2 < sizeof(compareName) ? targetLength - 2 + 1 : sizeof(compareName)));
 
 			//Yeahlight: This client is attempting to communicate with its pet
 			if(mypet != 0 && (strstr(mypet->GetName(),targetname) != NULL || strcmp(compareName, npcNamePrefix) == 0))

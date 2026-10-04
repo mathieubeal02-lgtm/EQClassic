@@ -992,6 +992,9 @@ void Client::ProcessOP_ZoneChange(APPLAYER* pApp)
 	//DumpPacket(pApp);
 
 	ZoneChange_Struct* zc = (ZoneChange_Struct*)pApp->pBuffer;
+	// fixed fields the client fills: they are copied into buffers of the same size below
+	zc->char_name[sizeof(zc->char_name) - 1] = 0;
+	zc->zone_name[sizeof(zc->zone_name) - 1] = 0;
 
 	if(strcasecmp(zc->zone_name, "zonesummon") == 0)
 	{
@@ -1984,6 +1987,8 @@ void Client::ProcessOP_Surname(APPLAYER* pApp)
 	if (pApp->size == sizeof(Surname_Struct))
 	{
 		Surname_Struct* surname = (Surname_Struct*) pApp->pBuffer;
+		surname->name[sizeof(surname->name) - 1] = 0;
+		surname->Surname[sizeof(surname->Surname) - 1] = 0;
 
 		//Fill the unknown part of surname struct.
 		for(int i=0; i<20;i++)
@@ -3127,10 +3132,27 @@ void Client::ProcessOP_GMSummon(APPLAYER* pApp) {
 	}
 
 	GMSummon_Struct* gms = (GMSummon_Struct*)pApp->pBuffer;
-	Mob* st = entity_list.GetMob(gms->charname);
+	gms->charname[sizeof(gms->charname) - 1] = 0;
+	Mob* st = gms->charname[0] ? entity_list.GetMob(gms->charname) : 0;
 
-	if (st->IsCorpse()) // player using the /corpse command
+	if (st && st->IsCorpse()) // player using the /corpse command
 	{
+		// any player could drag any corpse of the zone to them (and loot it): their own only, from close
+		// by, unless GM (we keep no consent list)
+		if (admin < 100)
+		{
+			Corpse* corpse = st->CastToCorpse();
+			if (!corpse->IsPlayerCorpse() || corpse->GetCharID() != this->CharacterID())
+			{
+				Message(RED, "You may only drag your own corpse.");
+				return;
+			}
+			if (Dist(st) > 100)
+			{
+				Message(RED, "Your corpse is too far away.");
+				return;
+			}
+		}
 		st->CastToCorpse()->Summon(this);
 
 		int32 CorpseID = st->CastToCorpse()->GetDBID();
@@ -3151,7 +3173,7 @@ void Client::ProcessOP_GMSummon(APPLAYER* pApp) {
 
 		if (admin >= 100)
 		{
-			int8 tmp = gms->charname[strlen(gms->charname) - 1];
+			int8 tmp = gms->charname[0] ? gms->charname[strlen(gms->charname) - 1] : 0;
 			if (st != 0)
 			{
 				this->Message(BLACK, "Local: Summoning %s to %i, %i, %i", gms->charname, gms->x, gms->y, gms->z);
@@ -3593,7 +3615,15 @@ void Client::ProcessOP_GMSurname(APPLAYER* pApp){
 		cout << "Wrong size on OP_GMSurname. Got: " << pApp->size << ", Expected: " << sizeof(GMSurname_Struct) << endl;
 		return;
 	}
+	if (admin < 100)
+	{
+		// players set their own surname with OP_Surname; this one names anybody
+		EQC::Common::Log(EQCLog::Debug, CP_CLIENT, "OP_GMSurname from non-GM %s ignored", GetName());
+		return;
+	}
 	GMSurname_Struct* gmln = (GMSurname_Struct*) pApp->pBuffer;
+	gmln->name[sizeof(gmln->name) - 1] = 0;
+	gmln->Surname[sizeof(gmln->Surname) - 1] = 0;
 	if (strlen(gmln->Surname) >= 20) 
 	{
 		Message(RED, "/Surname: New last name too long. (max=19)");
@@ -4018,9 +4048,10 @@ void Client::ProcessOP_Social_Text(APPLAYER* pApp)
 	//cptr += sprintf((char *)cptr, "%s", pApp->pBuffer + 2);
 
 	//Yeahlight: New client method
+	// the client's text is bounded by the packet (one zero byte past its end), the copy by our buffer;
+	// 500 characters leave room for the " him" -> " you" replacements made in place below
 	uchar *cptr = outapp->pBuffer;
-	cptr += sprintf((char *)cptr, "%s", GetName());
-	cptr += sprintf((char *)cptr, "%s", pApp->pBuffer);
+	snprintf((char *)cptr, outapp->size, "%s%.500s", GetName(), (char *)pApp->pBuffer);
 	//cout << "Check target" << endl;
 
 	if(target != NULL && target->IsClient() && target != this)
@@ -4259,6 +4290,9 @@ void Client::ProcessOP_ChannelMessage(APPLAYER* pApp)
 	if (pApp->size >= sizeof(ChannelMessage_Struct)) // was ==, but needs to be >=
 	{
 		ChannelMessage_Struct* cm=(ChannelMessage_Struct*)pApp->pBuffer;
+		// the names are fixed fields the client may fill up; the message is terminated by the packet's end
+		cm->targetname[sizeof(cm->targetname) - 1] = 0;
+		cm->sender[sizeof(cm->sender) - 1] = 0;
 		ChannelMessageReceived(cm->chan_num, cm->language, &cm->message[0], &cm->targetname[0]);
 	}
 	else
@@ -6402,9 +6436,14 @@ void Client::ProcessOP_GMBecomeNPC(APPLAYER* pApp)
 	//Yeahlight: TODO: Set temporary PVP flags and max level flags for the GM here and
 	//                 set conditions in attack.cpp. The GM should also be indifferent
 	//                 to other NPCs.
+	if (admin < 100)
+	{
+		EQC::Common::Log(EQCLog::Debug, CP_CLIENT, "OP_GMBecomeNPC from non-GM %s ignored", GetName());
+		return;
+	}
 	BecomeNPC_Struct* bnpc = (BecomeNPC_Struct*)pApp->pBuffer;
 	Mob* client = (Mob*) entity_list.GetMob(bnpc->entityID);
-	if(client == NULL)
+	if(client == NULL || !client->IsClient())
 		return;
 	client->CastToClient()->QueuePacket(pApp);
 	client->SendAppearancePacket(client->GetID(), SAT_NPC_Name, 1, true);

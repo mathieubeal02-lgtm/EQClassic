@@ -372,7 +372,9 @@ namespace EQC
 				else 
 				{
 					APPLAYER *app	= new APPLAYER;   
-					app->pBuffer    = new uchar[pack->dwExtraSize]; memcpy(app->pBuffer,pack->pExtra, pack->dwExtraSize); // Agz: Added alloc
+					// one zero byte past the end: a string the client did not terminate cannot be read past the packet
+					app->pBuffer    = new uchar[pack->dwExtraSize + 1]; memcpy(app->pBuffer,pack->pExtra, pack->dwExtraSize); // Agz: Added alloc
+					app->pBuffer[pack->dwExtraSize] = 0;
 					app->size       = pack->dwExtraSize;
 					app->opcode     = pack->dwOpCode;
 					if (debug_level >= 9)
