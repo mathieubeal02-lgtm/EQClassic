@@ -49,6 +49,7 @@ class Client : public Mob
 {
 public:
 	int		DiffInventory(Client* to);	// #diffinv: our inventory against the one the client uploaded last
+	void	ShowFaction(Client* to, NPC* npc);	// #showfaction
 	Client(int32 ip, int16 port, int send_socket);
     ~Client();
 
