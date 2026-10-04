@@ -3751,9 +3751,12 @@ void Client::ProcessOP_ShopRequest(APPLAYER* pApp){
 		return;
 	}
 	// Send back opcode OP_ShopRequest - tells client to open merchant window.
+	// an id nobody has, or one that is not a merchant NPC, crashed the zone below
+	Mob* tmp = entity_list.GetMob(mc->entityid);
+	if (!tmp || !tmp->IsNPC() || tmp->CastToNPC()->MerchantType == 0 || Dist(tmp) > 100)
+		return;
 	APPLAYER* outapp = new APPLAYER(OP_ShopRequest, sizeof(Merchant_Click_Struct));
 	Merchant_Click_Struct* mco=(Merchant_Click_Struct*)outapp->pBuffer;
-	Mob* tmp = entity_list.GetMob(mc->entityid);
 
 	mco->entityid = mc->entityid;
 	mco->playerid = mc->playerid;
@@ -3761,7 +3764,7 @@ void Client::ProcessOP_ShopRequest(APPLAYER* pApp){
 	int8 action=0x01;
 
 	if(tmp->CastToNPC()->IsEngaged()){
-		this->Message(BLACK, "%s says, 'Can't you see I am busy here?'");
+		this->Message(BLACK, "%s says, 'Can't you see I am busy here?'", tmp->GetName());
 		action = 0;
 	}
 
@@ -3811,10 +3814,22 @@ void Client::ProcessOP_ShopRequest(APPLAYER* pApp){
 
 	UpdateGoods(merchantid);
 	this->merchantid=merchantid;
+	this->merchantEntityID = tmp->GetID();
 }
 
 //////////////////////
 //Tazadar: It removes players sold items now
+// The merchant NPC this player opened (OP_ShopRequest), if it is still there and within reach.
+Mob* Client::OpenMerchant()
+{
+	if (merchantid == 0 || merchantEntityID == 0)
+		return 0;
+	Mob* merchant = entity_list.GetMob(merchantEntityID);
+	if (!merchant || !merchant->IsNPC() || Dist(merchant) > 100)
+		return 0;
+	return merchant;
+}
+
 void Client::ProcessOP_ShopPlayerBuy(APPLAYER* pApp){
 	if (!PacketFits<Merchant_Purchase_Struct>(pApp, "ProcessOP_ShopPlayerBuy"))
 		return;						
@@ -3828,15 +3843,10 @@ void Client::ProcessOP_ShopPlayerBuy(APPLAYER* pApp){
 	int merchantid;
 	bool update=false;//Tazadar : Update the vendor window?
 	bool sold=false;// Tazadar : Item has been sold?
-	Mob* tmp = entity_list.GetMob(mp->npcid);
-	if (tmp != 0)
-	{
-		merchantid=tmp->CastToNPC()->MerchantType;
-	}
-	else 
-	{
+	Mob* tmp = OpenMerchant();
+	if (tmp == 0 || tmp->GetID() != mp->npcid || mp->itemslot >= 30)
 		return;
-	}
+	merchantid=tmp->CastToNPC()->MerchantType;
 	uint16 item_nr = this->merchantgoods[mp->itemslot];//Tazadar : We check if the item really exists
 	if (item_nr == 0)
 	{
@@ -3860,6 +3870,25 @@ void Client::ProcessOP_ShopPlayerBuy(APPLAYER* pApp){
 		sold=true;//Tazadar:The item has already been sold and trade is canceled !
 	}
 	if(sold==false){//Tazadar:If the vendor has the item ! :)
+		// Pay first: a purchase charged the price of one item whatever the quantity, and a player
+		// short of money still emptied the merchant's stock. Only stacks come by more than one.
+		Item_Struct* toBuy = Database::Instance()->GetItem(item_nr);
+		if (!toBuy)
+			return;
+		if (mp->quantity < 1 || toBuy->common.stackable != 1)
+			mp->quantity = 1;
+		{
+			int32 stock = Database::Instance()->GetMerchantStack(this->merchantid, item_nr);
+			int32 wanted = (stock != 0 && stock < mp->quantity) ? stock : mp->quantity;
+			int32 unit = floor(toBuy->cost * this->pricemultiplier);
+			if ((toBuy->cost * this->pricemultiplier - unit) > 0.49)
+				unit++;
+			if (toBuy->cost > 0 && !TakeMoneyFromPP(unit * wanted))
+			{
+				Message(RED, "You cannot afford that.");
+				return;
+			}
+		}
 		int32 stack;
 		stack=Database::Instance()->GetMerchantStack(this->merchantid,item_nr);//Tazdar:We count how many items he has
 		if(stack!=0){//Tazadar:If we dont have unlimited amount of items !! :)
@@ -3896,12 +3925,8 @@ void Client::ProcessOP_ShopPlayerBuy(APPLAYER* pApp){
 		cout << "taking " << mpo->itemcost << " copper from " << name << "."<< endl;
 		cout<< "Item cost " << item->cost<<endl;
 		QueuePacket(outapp);
-		if(item->cost <= 0){
-			int tmp=AutoPutItemInInventory(item,stack,-1);
-			if(tmp==0){
-				this->Message(WHITE,"Your inventory appears full now!");
-			}
-		}else if(TakeMoneyFromPP(exactprice)){ //Cofruben: check if we can..
+		// (paid above, for the whole quantity)
+		{
 			int tmp=AutoPutItemInInventory(item,stack,-1);
 			if(tmp==0){
 				this->Message(WHITE,"Your inventory appears full now!");
@@ -3948,19 +3973,42 @@ void Client::ProcessOP_ShopPlayerSell(APPLAYER* pApp){
 	}
 	cout << name << " is trying to sell an item from the slot: " << (int)mp->itemslot <<endl;
 
+	// No merchant open (or out of reach): money from nowhere. A container slot past 329 read out of
+	// containerinv. The quantity was the client's word: 255 of a single bone chip paid 255 times.
+	if (!OpenMerchant())
+		return;
 	uint16 item_nr=0;
 	bool itemhere=false;
+	sint8* charges = 0;
 	if(mp->itemslot<30){
 		if(pp.inventory[mp->itemslot] != 0xFFFF){
 			item_nr=pp.inventory[mp->itemslot];
+			charges = &pp.invItemProprieties[mp->itemslot].charges;
 			itemhere=true;
 		}
 	}
-	if(mp->itemslot>249){
+	if(mp->itemslot>=250 && mp->itemslot<330){
 		if(pp.containerinv[mp->itemslot-250]!=0xFFFF){
 			item_nr=pp.containerinv[mp->itemslot-250];
+			charges = &pp.bagItemProprieties[mp->itemslot-250].charges;
 			itemhere=true;
 		}
+	}
+	Item_Struct* sold = itemhere ? Database::Instance()->GetItem(item_nr) : 0;
+	if (!sold)
+		itemhere = false;
+	bool partial = false;
+	if (itemhere)
+	{
+		if (sold->common.stackable == 1)
+		{
+			int have = *charges < 1 ? 1 : *charges;
+			if (mp->quantity < 1 || mp->quantity > have)
+				mp->quantity = have;
+			partial = mp->quantity < have;
+		}
+		else
+			mp->quantity = 1;
 	}
 	if (itemhere) 
 	{
@@ -3978,7 +4026,7 @@ void Client::ProcessOP_ShopPlayerSell(APPLAYER* pApp){
 			//this->UpdateGoodsSell(item_nr);
 		}
 		if(slotitem!=0){
-			int stack=Database::Instance()->GetMerchantStack(this->merchantid,pp.inventory[mp->itemslot]);
+			int stack=Database::Instance()->GetMerchantStack(this->merchantid,item_nr);
 			if(stack!=0){//Tazadar:If we dont have unlimited amount of items !!
 				Database::Instance()->UpdateStack(this->merchantid,stack+mp->quantity,item_nr);
 				if(!ShowedVendorItem(item_nr)){//Tazadar:If vendor does not show the sold item we ask him to :)
@@ -3988,10 +4036,12 @@ void Client::ProcessOP_ShopPlayerSell(APPLAYER* pApp){
 		}
 
 		AddMoneyToPP(Cost,false);
-		if(mp->itemslot<30 ){
+		if (partial)
+			*charges -= mp->quantity;	// part of a stack: the rest stays
+		else if(mp->itemslot<30 ){
 			pp.inventory[mp->itemslot] = 0xFFFF;
 		}
-		if(mp->itemslot>249){
+		else {
 			pp.containerinv[mp->itemslot-250]=0xFFFF;
 		}
 	}
@@ -5740,6 +5790,7 @@ void Client::Process_ClientKicked(APPLAYER *app)
 
 void Client::Process_ShoppingEnd(APPLAYER *app)
 {
+	merchantEntityID = 0;	// window closed: no more buying or selling
 	APPLAYER* outapp = new APPLAYER(OP_ShopEndConfirm, 2);
 	outapp->pBuffer[0] = 0x0a;
 	outapp->pBuffer[1] = 0x66;
