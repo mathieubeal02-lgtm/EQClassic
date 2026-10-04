@@ -360,3 +360,6 @@ Dependencies/*
 !Dependencies/.keep
 Dependencies.zip
 server/
+
+# Read-only reference clone (docs/bots-design.md), not a submodule
+externals/mod-playerbots/
