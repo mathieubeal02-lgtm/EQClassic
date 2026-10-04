@@ -177,6 +177,8 @@ int command_init(void) {
 		command_add("questhelp","- What the targeted NPC's quest reacts to: phrases and items",EQC_Alpha_Tester,command_questhelp) ||
 		command_add("lootchance","- The targeted NPC's loot table: each drop's rolls and each item's chance a kill",EQC_Alpha_Tester,command_lootchance) ||
 		command_add("mrange","- Melee range between you and your target, the distance, and whether a swing reaches",EQC_Alpha_Tester,command_mrange) ||
+		command_add("trainwindow","- Opens the class training window on the targeted NPC",GM_MANAGEMENT_ACESSS,command_trainwindow) ||
+		command_add("traingreed","<byte offset> <float> - Trial: writes a float into the next training window packets (0 0: off)",GM_MANAGEMENT_ACESSS,command_traingreed) ||
 		command_add("diffinv","- Compares the inventory the client uploaded last (OP_Save) with the server's",GM_MANAGEMENT_ACESSS,command_diffinv) ||
 		command_add("probespawn","[id] - Sends a position update for a spawn id nobody has, next to you (finds the client's answer to an unknown spawn)",GM_MANAGEMENT_ACESSS,command_probespawn) ||
 
@@ -970,6 +972,26 @@ void command_showfaction(Client *c, const Seperator *sep)
 		return;
 	}
 	c->ShowFaction(c, c->GetTarget()->CastToNPC());
+}
+
+// Opens the class training window on the targeted NPC, as if the player had right-clicked it.
+extern int g_trainGreedOffset;
+extern float g_trainGreedValue;
+void command_traingreed(Client *c, const Seperator *sep)
+{
+	g_trainGreedOffset = atoi(sep->arg[1]);
+	g_trainGreedValue = (float)atof(sep->arg[2]);
+	c->Message(BLACK, "Training window: float %f at byte %i.", g_trainGreedValue, g_trainGreedOffset);
+}
+
+void command_trainwindow(Client *c, const Seperator *sep)
+{
+	if (!c->GetTarget() || !c->GetTarget()->IsNPC())
+	{
+		c->Message(RED, "Target an NPC first.");
+		return;
+	}
+	c->OpenTrainingWindow(c->GetTarget());
 }
 
 void command_diffinv(Client *c, const Seperator *sep)

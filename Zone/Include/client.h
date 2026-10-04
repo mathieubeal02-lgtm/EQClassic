@@ -55,6 +55,7 @@ public:
 	void	SendNewSpawn(NPC* npc);
 	void	SendDeferredSpawns();
 	std::vector<int16>	deferredSpawnIDs;
+	void	OpenTrainingWindow(Mob* trainer);	// #trainwindow
 	Client(int32 ip, int16 port, int send_socket);
     ~Client();
 
