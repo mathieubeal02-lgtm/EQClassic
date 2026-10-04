@@ -4048,8 +4048,10 @@ void Client::ProcessOP_Social_Text(APPLAYER* pApp)
 	//cptr += sprintf((char *)cptr, "%s", pApp->pBuffer + 2);
 
 	//Yeahlight: New client method
-	// the client's text is bounded by the packet (one zero byte past its end), the copy by our buffer
-	snprintf((char *)outapp->pBuffer, outapp->size, "%s%s", GetName(), (char *)pApp->pBuffer);
+	// the client's text is bounded by the packet (one zero byte past its end), the copy by our buffer;
+	// 500 characters leave room for the " him" -> " you" replacements made in place below
+	uchar *cptr = outapp->pBuffer;
+	snprintf((char *)cptr, outapp->size, "%s%.500s", GetName(), (char *)pApp->pBuffer);
 	//cout << "Check target" << endl;
 
 	if(target != NULL && target->IsClient() && target != this)
