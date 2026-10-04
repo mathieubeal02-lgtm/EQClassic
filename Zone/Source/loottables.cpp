@@ -124,6 +124,12 @@ void Database::AddLootDropToNPC(int32 lootdrop_id, ItemList* itemlist, int8 Equi
 						ServerLootItem_Struct* item = new ServerLootItem_Struct;
 						item->item_nr = dbitem->item_nr;
 						item->charges = atoi(row[2]);
+						// lootdrop_entries.item_charges is 1 for most items: one with charges that is not a stack
+						// (wand, potion, clicky) drops with all of them (Harakiri, Jan 2017)
+						if (dbitem->common.stackable != 1 && dbitem->common.charges > item->charges)
+							item->charges = dbitem->common.charges;
+						if (dbitem->common.stackable == 1 && item->charges < 1)
+							item->charges = 1;
 						//Yeahlight: Rip the bitmask apart and seperate it into slots
 						int16 slots[22] = {0};
 						int itemSlots = dbitem->equipableSlots;
