@@ -175,6 +175,7 @@ int command_init(void) {
 		command_add("npcstats","- Show stats about target NPC",GM_MANAGEMENT_ACESSS,command_npcstats) ||
 		command_add("showfaction","- How the targeted NPC regards you and why, and the faction hits for killing it",EQC_Alpha_Tester,command_showfaction) ||
 		command_add("questhelp","- What the targeted NPC's quest reacts to: phrases and items",EQC_Alpha_Tester,command_questhelp) ||
+		command_add("trainwindow","- Opens the class training window on the targeted NPC",GM_MANAGEMENT_ACESSS,command_trainwindow) ||
 		command_add("diffinv","- Compares the inventory the client uploaded last (OP_Save) with the server's",GM_MANAGEMENT_ACESSS,command_diffinv) ||
 		command_add("probespawn","[id] - Sends a position update for a spawn id nobody has, next to you (finds the client's answer to an unknown spawn)",GM_MANAGEMENT_ACESSS,command_probespawn) ||
 
@@ -930,6 +931,17 @@ void command_showfaction(Client *c, const Seperator *sep)
 		return;
 	}
 	c->ShowFaction(c, c->GetTarget()->CastToNPC());
+}
+
+// Opens the class training window on the targeted NPC, as if the player had right-clicked it.
+void command_trainwindow(Client *c, const Seperator *sep)
+{
+	if (!c->GetTarget() || !c->GetTarget()->IsNPC())
+	{
+		c->Message(RED, "Target an NPC first.");
+		return;
+	}
+	c->OpenTrainingWindow(c->GetTarget());
 }
 
 void command_diffinv(Client *c, const Seperator *sep)

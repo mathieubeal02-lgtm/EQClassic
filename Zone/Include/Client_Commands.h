@@ -62,6 +62,7 @@ void command_zone(Client *c, const Seperator *sep);
 void command_loc(Client *c, const Seperator *sep);
 void command_probespawn(Client *c, const Seperator *sep);
 void command_diffinv(Client *c, const Seperator *sep);
+void command_trainwindow(Client *c, const Seperator *sep);
 void command_showfaction(Client *c, const Seperator *sep);
 void command_questhelp(Client *c, const Seperator *sep);
 // show targeted npc status

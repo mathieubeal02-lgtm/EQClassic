@@ -5440,6 +5440,17 @@ void Client::ProcessOP_AssistTarget(APPLAYER* pApp){
 *  exploiting. Also, make sure to add class points upon leveling.	*
 ********************************************************************/
 
+// #trainwindow: the training window of `trainer`, as if the player had asked for it
+void Client::OpenTrainingWindow(Mob* trainer)
+{
+	APPLAYER app(OP_ClassTraining, sizeof(ClassTrain_Struct));
+	memset(app.pBuffer, 0, app.size);
+	ClassTrain_Struct* ct = (ClassTrain_Struct*)app.pBuffer;
+	ct->npcid = trainer->GetID();
+	ct->playerid = GetID();
+	ProcessOP_ClassTraining(&app);
+}
+
 void Client::ProcessOP_ClassTraining(APPLAYER* pApp)
 {
 	//Yeahlight: GMs ignore invis PCs
@@ -5450,6 +5461,15 @@ void Client::ProcessOP_ClassTraining(APPLAYER* pApp)
 	{
 
 		ClassTrain_Struct* classtrain = (ClassTrain_Struct*) pApp->pBuffer;
+
+		// what the client sends past the skill caps (looking for the price multiplier the client
+		// computes training costs with; Harakiri found it, rev. 791)
+		{
+			char hex[3 * 64 + 1] = "";
+			for (int i = 81; i < 137 && i < (int)pApp->size; i++)
+				sprintf(hex + 3 * (i - 81), "%02x ", pApp->pBuffer[i]);
+			EQC::Common::Log(EQCLog::Debug, CP_CLIENT, "ClassTraining request bytes 81..136: %s", hex);
+		}
 
 
 		// --- Class Training Documentation ---
@@ -5496,6 +5516,18 @@ void Client::ProcessOP_ClassTraining(APPLAYER* pApp)
 		// Harakiri: one of these bits are important to show the train dialog
 		for(int i=0; i < sizeof(classtrain->unknown); i++) {
 			classtrain->unknown[i] = 1;
+		}
+
+		// trial: EQC_TRAIN_GREED="<byte offset>:<float>" writes a price multiplier there
+		if (getenv("EQC_TRAIN_GREED"))
+		{
+			int offset = 0;
+			float greed = 0;
+			if (sscanf(getenv("EQC_TRAIN_GREED"), "%d:%f", &offset, &greed) == 2 && offset >= 0 && offset + 4 <= (int)pApp->size)
+			{
+				memcpy(pApp->pBuffer + offset, &greed, sizeof(float));
+				EQC::Common::Log(EQCLog::Debug, CP_CLIENT, "ClassTraining: price multiplier %f at byte %d", greed, offset);
+			}
 		}
 		
 		QueuePacket(pApp);
