@@ -152,6 +152,7 @@ void Client::InitProcessArray()
 	process_opcode_array[OP_UseDiscipline]	= &Client::ProcessOP_UseDiscipline;
 	process_opcode_array[OP_Translocate]	= &Client::ProcessOP_TranslocateResponse;	
 	process_opcode_array[OP_ClientError]	= &Client::ProcessOP_ClientError;
+	process_opcode_array[OP_ConsentRequest]	= &Client::ProcessOP_ConsentRequest;
 	process_opcode_array[OP_ApplyPoison]	= &Client::ProcessOP_ApplyPoison;
 	process_opcode_array[OP_PlayerDeath]	= &Client::ProcessOP_PlayerDeath;
 	process_opcode_array[OP_PlayerSave]		= &Client::ProcessOP_PlayerSave;
