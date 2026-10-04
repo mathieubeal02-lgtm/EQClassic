@@ -467,6 +467,8 @@ private:
 	int32 npctradegp;
 	int32 npctradepp;
 	int merchantid; //Tazadar :the id of the merchant we are trading with
+	int16 merchantEntityID;	// the merchant NPC whose window is open (0: none)
+	Mob* OpenMerchant();	// that NPC if still there and within reach, else 0
 	int32 startingslot; // Tazadar :the slot where the goods begin
 	uint16 merchantgoods[30];//Tazadar :all the id of the items showed on merchant window
 	int8 totalitemdisplayed;//Tazadar: items showed by the merchant

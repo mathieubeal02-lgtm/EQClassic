@@ -108,6 +108,8 @@ Client::Client(int32 in_ip, int16 in_port, int in_send_socket)
 	// Set State to Connecting1
 	client_state = CLIENT_CONNECTING1;
 	clientPPTime = 0;
+	merchantid = 0;
+	merchantEntityID = 0;
 	memset(&clientPP, 0, sizeof(clientPP));
 
 	// Create Timeout Timer
