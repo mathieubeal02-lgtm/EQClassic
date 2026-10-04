@@ -1642,13 +1642,17 @@ bool Client::SummonItem(int16 item_id, sint8 charges) {
 		// Harakiri only apply charges when its a consumable item, else use DB defaults
 		if(charges > 0 && i->IsConsumable()) {
 			pp.invItemProprieties[0].charges = charges;
-			item->common.charges = charges;
 		} else {
 			pp.invItemProprieties[0].charges = item->common.charges;			
 		}
 		// a stack needs at least one charge, else the client deletes it and the cursor stays busy here
 		if(item->common.stackable == 1 && pp.invItemProprieties[0].charges < 1)
 			pp.invItemProprieties[0].charges = 1;
+		// an item with charges that is not a stack (wand, potion, clicky) comes with all of them: quest
+		// rewards asked for 1 (Harakiri, Jan 2017: "Quest Rewards should now contain max charges")
+		if(item->common.stackable != 1 && item->common.charges > pp.invItemProprieties[0].charges)
+			pp.invItemProprieties[0].charges = item->common.charges;
+		safe_delete(i);
 
 		APPLAYER* outapp = new APPLAYER(OP_SummonedItem, sizeof(SummonedItem_Struct));
 		memcpy(outapp->pBuffer, item, sizeof(Item_Struct));
@@ -1687,13 +1691,17 @@ bool Client::SummonItemNonBlob(int16 item_id, sint8 charges) {
 		// Harakiri only apply charges when its a consumable item, else use DB defaults
 		if(charges > 0 && i->IsConsumable()) {
 			pp.invItemProprieties[0].charges = charges;
-			item->common.charges = charges;
 		} else {
 			pp.invItemProprieties[0].charges = item->common.charges;			
 		}
 		// a stack needs at least one charge, else the client deletes it and the cursor stays busy here
 		if(item->common.stackable == 1 && pp.invItemProprieties[0].charges < 1)
 			pp.invItemProprieties[0].charges = 1;
+		// an item with charges that is not a stack (wand, potion, clicky) comes with all of them: quest
+		// rewards asked for 1 (Harakiri, Jan 2017: "Quest Rewards should now contain max charges")
+		if(item->common.stackable != 1 && item->common.charges > pp.invItemProprieties[0].charges)
+			pp.invItemProprieties[0].charges = item->common.charges;
+		safe_delete(i);
 					
 		APPLAYER* outapp = new APPLAYER(OP_SummonedItem, sizeof(SummonedItem_Struct));
 		memcpy(outapp->pBuffer, item, sizeof(Item_Struct));
