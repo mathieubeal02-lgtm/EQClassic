@@ -50,6 +50,11 @@ class Client : public Mob
 public:
 	int		DiffInventory(Client* to);	// #diffinv: our inventory against the one the client uploaded last
 	void	ShowFaction(Client* to, NPC* npc);	// #showfaction
+	// A new NPC for this client: now if in game, at the end of its zone-in if its spawn list is
+	// already sent (a zone still loading spawns its NPCs while the first player comes in)
+	void	SendNewSpawn(NPC* npc);
+	void	SendDeferredSpawns();
+	std::vector<int16>	deferredSpawnIDs;
 	Client(int32 ip, int16 port, int send_socket);
     ~Client();
 

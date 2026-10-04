@@ -5622,6 +5622,7 @@ void Client::Process_ClientConnection5(APPLAYER *app)
 
 		// We are now fully connected and ready to play					
 		client_state = CLIENT_CONNECTED;
+		SendDeferredSpawns();
 
 		/*outapp = new APPLAYER(OP_Stamina, sizeof(Stamina_Struct));
 		Stamina_Struct* sta = (Stamina_Struct*)outapp->pBuffer;
