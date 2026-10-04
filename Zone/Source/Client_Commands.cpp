@@ -2,6 +2,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cctype>
+#include "MiscFunctions.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -171,6 +173,8 @@ int command_init(void) {
 
 		command_add("loc","Shows you your current location.",EQC_Alpha_Tester,command_loc) ||		
 		command_add("npcstats","- Show stats about target NPC",GM_MANAGEMENT_ACESSS,command_npcstats) ||
+		command_add("showfaction","- How the targeted NPC regards you and why, and the faction hits for killing it",EQC_Alpha_Tester,command_showfaction) ||
+		command_add("questhelp","- What the targeted NPC's quest reacts to: phrases and items",EQC_Alpha_Tester,command_questhelp) ||
 		command_add("diffinv","- Compares the inventory the client uploaded last (OP_Save) with the server's",GM_MANAGEMENT_ACESSS,command_diffinv) ||
 		command_add("probespawn","[id] - Sends a position update for a spawn id nobody has, next to you (finds the client's answer to an unknown spawn)",GM_MANAGEMENT_ACESSS,command_probespawn) ||
 
@@ -838,6 +842,96 @@ void command_zone(Client *c, const Seperator *sep)
 // shows in the zone's log as "[Client] Unknown opcode".
 // Harakiri's #diffinv (his rev. 748) asked the client for a dump of its inventory; we do not know that
 // opcode, but the client uploads its whole profile (OP_Save) every minute or two and at camp.
+// #questhelp (Harakiri's #grimshowtrigger / #questhelp): what the targeted NPC's Perl quest reacts to,
+// read from its file (quests/<zone>/<npc type id>.pl, else quests/<zone>/<name>.pl): the $text
+// patterns it answers and the items it checks for in a hand-in.
+void command_questhelp(Client *c, const Seperator *sep)
+{
+	if (!c->GetTarget() || !c->GetTarget()->IsNPC())
+	{
+		c->Message(RED, "Target an NPC first.");
+		return;
+	}
+	NPC* npc = c->GetTarget()->CastToNPC();
+	char path[256];
+	snprintf(path, sizeof(path), "quests/%s/%i.pl", zone->GetShortName(), (int)npc->GetNPCTypeID());
+	FILE* f = fopen(path, "r");
+	if (!f)
+	{
+		const NPCType* type = Database::Instance()->GetNPCType(npc->GetNPCTypeID());
+		char name[64] = "";
+		strn0cpy(name, type ? type->name : npc->GetName(), sizeof(name));
+		for (int i = strlen(name) - 1; i >= 0 && name[i] >= '0' && name[i] <= '9'; i--)
+			name[i] = 0;
+		for (char* p = name; *p; p++)
+			if (*p == '`') *p = '-';
+		snprintf(path, sizeof(path), "quests/%s/%s.pl", zone->GetShortName(), name);
+		f = fopen(path, "r");
+	}
+	if (!f)
+	{
+		c->Message(BLACK, "%s has no quest file (%s).", npc->GetName(), path);
+		return;
+	}
+	std::string text, items;
+	char line[1024];
+	while (fgets(line, sizeof(line), f))
+	{
+		// $text=~/pattern/i
+		for (char* p = strstr(line, "$text=~/"); p; p = strstr(p, "$text=~/"))
+		{
+			p += 8;
+			char* end = strchr(p, '/');
+			if (!end)
+				break;
+			if (!text.empty()) text += ", ";
+			text += "'" + std::string(p, end - p) + "'";
+			p = end;
+		}
+		// $itemcount{12345} and check_handin(\%itemcount, 12345 => 1, ...)
+		for (char* p = line; *p; p++)
+		{
+			int id = 0;
+			if (strncmp(p, "itemcount{", 10) == 0)
+				id = atoi(p + 10);
+			else if (*p >= '0' && *p <= '9' && (p == line || !isalnum((unsigned char)p[-1])) && strstr(line, "check_handin"))
+			{
+				char* q = p;
+				while (*q >= '0' && *q <= '9') q++;
+				while (*q == ' ') q++;
+				if (q[0] == '=' && q[1] == '>' && q - p > 3)
+					id = atoi(p);
+			}
+			if (id <= 0)
+				continue;
+			char entry[96];
+			Item_Struct* item = Database::Instance()->GetItem(id);
+			snprintf(entry, sizeof(entry), "%i %s", id, item ? item->name : "(unknown item)");
+			if (items.find(entry) == std::string::npos)
+			{
+				if (!items.empty()) items += ", ";
+				items += entry;
+			}
+			while (*p >= '0' && *p <= '9') p++;
+			if (!*p) break;
+		}
+	}
+	fclose(f);
+	c->Message(BLACK, "%s (%s):", npc->GetName(), path);
+	c->Message(BLACK, "  says: %s", text.empty() ? "nothing" : text.c_str());
+	c->Message(BLACK, "  items: %s", items.empty() ? "none" : items.c_str());
+}
+
+void command_showfaction(Client *c, const Seperator *sep)
+{
+	if (!c->GetTarget() || !c->GetTarget()->IsNPC())
+	{
+		c->Message(RED, "Target an NPC first.");
+		return;
+	}
+	c->ShowFaction(c, c->GetTarget()->CastToNPC());
+}
+
 void command_diffinv(Client *c, const Seperator *sep)
 {
 	Client* who = (c->GetTarget() && c->GetTarget()->IsClient()) ? c->GetTarget()->CastToClient() : c;

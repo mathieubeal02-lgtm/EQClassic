@@ -5161,3 +5161,53 @@ int Client::DiffInventory(Client* to)
 		to->Message(BLACK, "%s: %i difference(s) with the profile the client uploaded %i s ago.", GetName(), differences, (int)(time(0) - clientPPTime));
 	return differences;
 }
+
+static const char* FactionValueName(FACTION_VALUE v)
+{
+	switch (v)
+	{
+	case FACTION_ALLY: return "ally";
+	case FACTION_WARMLY: return "warmly";
+	case FACTION_KINDLY: return "kindly";
+	case FACTION_AMIABLE: return "amiable";
+	case FACTION_INDIFFERENT: return "indifferent";
+	case FACTION_APPREHENSIVE: return "apprehensive";
+	case FACTION_DUBIOUS: return "dubious";
+	case FACTION_THREATENLY: return "threatening";
+	case FACTION_SCOWLS: return "scowls";
+	}
+	return "?";
+}
+
+// #showfaction (Harakiri's rev. 890): how `npc` regards this player and why (base, class, race and deity
+// modifiers of its primary faction, the player's own standing), then the faction hits for killing it.
+void Client::ShowFaction(Client* to, NPC* npc)
+{
+	sint32 primary = npc->GetPrimaryFactionID();
+	to->Message(BLACK, "%s (%s %s, deity %i) and %s:", GetName(), EQC::Common::GetRaceName(GetRace()), EQC::Common::GetClassName(GetClass()), GetDeity(), npc->GetName());
+	FactionMods fm;
+	if (primary <= 0 || !Database::Instance()->GetFactionData(&fm, GetClass(), GetRace(), GetDeity(), primary))
+	{
+		to->Message(BLACK, "  no primary faction: it cons by race and class only.");
+	}
+	else
+	{
+		char name[50] = "";
+		Database::Instance()->GetFactionName(primary, name, sizeof(name));
+		sint32 own = GetCharacterFactionLevel(primary);
+		sint32 total = fm.base + fm.class_mod + fm.race_mod + fm.deity_mod + own;
+		to->Message(BLACK, "  primary faction %i %s: base %i, class %+i, race %+i, deity %+i, yours %+i = %i (%s)",
+			primary, name, fm.base, fm.class_mod, fm.race_mod, fm.deity_mod, own, total, FactionValueName(CalculateFaction(&fm, own)));
+	}
+	const NPCFactionList* list = Database::Instance()->GetNPCFactionList(Database::Instance()->GetNPCFactionID(npc->GetNPCTypeID()));
+	if (!list)
+		return;
+	for (int i = 0; i < MAX_NPC_FACTIONS; i++)
+	{
+		if (list->factionid[i] == 0 || list->factionvalue[i] == 0)
+			continue;
+		char name[50] = "";
+		Database::Instance()->GetFactionName(list->factionid[i], name, sizeof(name));
+		to->Message(BLACK, "  killing it: %s %+i (now %i)", name, list->factionvalue[i], GetCharacterFactionLevel(list->factionid[i]));
+	}
+}
