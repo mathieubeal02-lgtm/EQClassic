@@ -83,27 +83,24 @@ void EntityList::AddNPC(NPC* npc, bool SendSpawnPacket)
 
 	// The first 10 s of a zone (bulk only) spawn its NPCs without packets, as nobody is in yet. A
 	// client quick enough to be in (its spawn list taken before the NPCs existed) never saw them:
-	// in bulk mode the packet still goes to the clients already there.
-	bool clientsHere = false;
+	// in bulk mode the packet still goes to the clients there (Client::SendNewSpawn: now, or at the
+	// end of their zone-in).
 	if(SendSpawnPacket && zone->GetBulkOnly())
 	{
 		LinkedListIterator<Entity*> it(list);
-		for(it.Reset(); it.MoreElements() && !clientsHere; it.Advance())
-			clientsHere = it.GetData()->IsClient();
-		if(clientsHere)
-		{
-			APPLAYER app;
-			npc->CreateSpawnPacket(&app);
-			QueueClients(npc, &app);
-		}
+		for(it.Reset(); it.MoreElements(); it.Advance())
+			if(it.GetData()->IsClient())
+				it.GetData()->CastToClient()->SendNewSpawn(npc);
 	}
 
 	//Yeahlight: Spawn has been flagged to send a packet and is not blocked from doing so
 	if(SendSpawnPacket && !zone->GetBulkOnly())
 	{
-		APPLAYER app;
-		npc->CreateSpawnPacket(&app);
-		QueueClients(npc, &app);		
+		// a client still zoning in gets it at the end (sent now, the client dropped it)
+		LinkedListIterator<Entity*> it(list);
+		for(it.Reset(); it.MoreElements(); it.Advance())
+			if(it.GetData()->IsClient())
+				it.GetData()->CastToClient()->SendNewSpawn(npc);
 
 		// Harakiri notify event
 		#ifdef EMBPERL	

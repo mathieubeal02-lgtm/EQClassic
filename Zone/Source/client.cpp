@@ -5211,3 +5211,35 @@ void Client::ShowFaction(Client* to, NPC* npc)
 		to->Message(BLACK, "  killing it: %s %+i (now %i)", name, list->factionvalue[i], GetCharacterFactionLevel(list->factionid[i]));
 	}
 }
+
+// Bot tests (Kaladim, Grobb just booted): a client zoning in while the zone spawned its NPCs saw none.
+// Its spawn list (Login 4) came before they existed, and their NewSpawn reached it before it was in
+// the zone, where the client drops it. NPCs born between the two are now sent once it is in.
+void Client::SendNewSpawn(NPC* npc)
+{
+	if (client_state == CLIENT_CONNECTED)
+	{
+		APPLAYER app;
+		npc->CreateSpawnPacket(&app);
+		QueuePacket(&app);
+	}
+	else if (client_state == CLIENT_CONNECTING5)
+		deferredSpawnIDs.push_back(npc->GetID());
+	// before that, the spawn list it has yet to get includes this NPC
+}
+
+void Client::SendDeferredSpawns()
+{
+	for (size_t i = 0; i < deferredSpawnIDs.size(); i++)
+	{
+		Mob* mob = entity_list.GetMob(deferredSpawnIDs[i]);
+		if (!mob || !mob->IsNPC())
+			continue;
+		APPLAYER app;
+		mob->CreateSpawnPacket(&app);
+		QueuePacket(&app);
+	}
+	if (!deferredSpawnIDs.empty())
+		EQC::Common::Log(EQCLog::Debug, CP_CLIENT, "%s: %i NPCs spawned during zone-in sent", GetName(), (int)deferredSpawnIDs.size());
+	deferredSpawnIDs.clear();
+}
