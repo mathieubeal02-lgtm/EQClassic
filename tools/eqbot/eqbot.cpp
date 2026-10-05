@@ -2442,6 +2442,53 @@ namespace
 		return lives ? 0 : 1;
 	}
 
+	// ---- cast: one spell from a gem on ourselves; the zone casts it (OP_ManaChange naming the spell,
+	// OP_BeginCast) or refuses ----
+	int Cast(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname, int gem, int spell)
+	{
+		EqSession z;
+		ZoneState st;
+		if (!EnterZone(host, user, pass, charname, z, st))
+			return 1;
+		std::vector<Packet*> early = z.Poll(1500);
+		KeepSpawnPackets(st, early);
+		DeleteAll(early);
+		unsigned char c[16];	// CastSpell_Struct: slot, spell, inventory slot (0xffff: a gem), target
+		memset(c, 0, sizeof(c));
+		c[0] = gem;
+		c[2] = spell & 0xff; c[3] = spell >> 8;
+		c[4] = 0xff; c[5] = 0xff;
+		c[8] = st.myId & 0xff; c[9] = st.myId >> 8;
+		z.Send((int16)0x7e21, c, sizeof(c));
+		std::vector<Packet*> got = Collect(z, 4000, [](const std::vector<Packet*>&) { return false; });
+		bool began = false;
+		for (size_t i = 0; i < got.size(); i++)
+		{
+			const unsigned char* b = got[i]->pBuffer;
+			if (got[i]->opcode == (int16)0xa920 && got[i]->size >= 6)	// BeginCast_Struct: caster id, spell id
+				began = began || (b[4] | (b[5] << 8)) == spell;
+			// ManaChange_Struct (new mana, spell): the caster's own sign that the spell went
+			if (got[i]->opcode == (int16)0x7f21 && got[i]->size >= 4)
+			{
+				if (getenv("EQBOT_VERBOSE")) printf("       mana %d spell %d\n", b[0] | (b[1] << 8), b[2] | (b[3] << 8));
+				began = began || (b[2] | (b[3] << 8)) == spell;
+			}
+		}
+		for (size_t i = 0; i < got.size() && getenv("EQBOT_VERBOSE"); i++)
+			if (got[i]->opcode != kMobUpdate)
+				printf("       0x%04x %d bytes\n", (unsigned)(unsigned short)got[i]->opcode, (int)got[i]->size);
+		std::vector<std::string> texts = Texts(got);
+		for (size_t i = 0; i < texts.size(); i++)
+			printf("       zone says: %s\n", texts[i].c_str());
+		DeleteAll(got);
+		char d[64];
+		snprintf(d, sizeof(d), "spell %d from gem %d: %s", spell, gem, began ? "cast" : "not cast");
+		Step(true, "cast", d);
+		printf("CAST %s\n", began ? "started" : "refused");
+		z.Disconnect();
+		return 0;
+	}
+
 	void Usage()
 	{
 		fprintf(stderr, "usage: eqbot login  <login-host> <user> <password> [port=5999]\n"
@@ -2449,7 +2496,8 @@ namespace
 		                "       eqbot play   <login-host> <user> <password> <character>\n"
 		                "       eqbot test   <login-host> <user> <password> <character>\n"
 		                "       eqbot walk   <login-host> <user> <password> <character> <waypoints file> [seconds=60]\n"
-		                "       eqbot hunt   <login-host> <user> <password> <character> [seconds=300]\n");
+		                "       eqbot hunt   <login-host> <user> <password> <character> [seconds=300]\n"
+		                "       eqbot cast   <login-host> <user> <password> <character> <gem> <spell id>\n");
 	}
 }
 
@@ -2463,6 +2511,8 @@ int main(int argc, char** argv)
 		return Play(argv[2], argv[3], argv[4], argv[5]);
 	if (argc >= 6 && std::string(argv[1]) == "test")
 		return Test(argv[2], argv[3], argv[4], argv[5]);
+	if (argc >= 8 && std::string(argv[1]) == "cast")
+		return Cast(argv[2], argv[3], argv[4], argv[5], atoi(argv[6]), atoi(argv[7]));
 	if (argc >= 6 && std::string(argv[1]) == "hunt")
 		return Hunt(argv[2], argv[3], argv[4], argv[5], argc > 6 ? atoi(argv[6]) : 300);
 	if (argc >= 7 && std::string(argv[1]) == "walk")
