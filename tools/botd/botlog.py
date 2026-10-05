@@ -10,8 +10,9 @@ between fights, gained experience, never attacked an NPC it refused (amiable or 
 and never stood still for over 2 minutes outside a rest.
 A group (milestone 3: a leader with EQBOT_INVITE, members with EQBOT_ROLE=member): every member
 joined, the leader killed enough, each member got experience within 5 s of at least half of the
-leader's kills made while it was in the group (shared kills), a healer cast heals on the leader, and
-no member pulled (no Consider, no "closest prey"). Exit 1 on failure.
+leader's kills made while it was in the group (shared kills), a healer healed other members (heals
+on the leader are shown apart: a tank above its prey may never need one), and no member pulled (no
+Consider, no "closest prey"). Exit 1 on failure.
 """
 import os
 import re
@@ -136,7 +137,7 @@ def group(logs, names, expected, min_kills):
     kills = [t for t, a, kv in logs_by_bot[leader] if a == 'Kill' and kv.get('assist') != '1']
     ok = len(kills) >= min_kills
     print('leader %s: %d kills' % (leader, len(kills)))
-    print('%-8s %5s %7s %7s %8s %6s %6s %6s %s' % ('member', 'joins', 'shared', 'in_grp', 'assists', 'heals', 'nukes', 'deaths', 'pulled'))
+    print('%-8s %5s %7s %7s %8s %6s %9s %6s %6s %s' % ('member', 'joins', 'shared', 'in_grp', 'assists', 'heals', 'on_leader', 'nukes', 'deaths', 'pulled'))
     for bot, ev in logs_by_bot.items():
         if bot == leader:
             continue
@@ -154,12 +155,13 @@ def group(logs, names, expected, min_kills):
         in_group = [t for t in kills if grouped(t)]
         shared = [t for t in in_group if any(t - 1 <= e <= t + 5 for e in exp)]
         assists = sum(1 for _, a, kv in ev if a == 'Approach' and kv.get('why') == 'assist')
-        heals = sum(1 for _, a, kv in ev if a == 'Cast' and kv.get('spell') == 'Minor_Healing' and kv.get('target') == leader)
+        heals = sum(1 for _, a, kv in ev if a == 'Cast' and kv.get('spell') == 'Minor_Healing' and kv.get('target') != bot)
+        on_leader = sum(1 for _, a, kv in ev if a == 'Cast' and kv.get('spell') == 'Minor_Healing' and kv.get('target') == leader)
         nukes = sum(1 for _, a, kv in ev if a == 'Cast' and kv.get('spell') == 'Frost_Bolt')
         deaths = sum(1 for _, a, _ in ev if a == 'Killed')
         pulled = sum(1 for _, a, kv in ev if a == 'Consider' or kv.get('why') == 'closest prey')
         healer = any(a == 'Cast' and kv.get('spell') == 'Minor_Healing' for _, a, kv in ev)
-        print('%-8s %5d %7d %7d %8d %6d %6d %6d %d' % (bot, len(joins), len(shared), len(in_group), assists, heals, nukes, deaths, pulled))
+        print('%-8s %5d %7d %7d %8d %6d %9d %6d %6d %d' % (bot, len(joins), len(shared), len(in_group), assists, heals, on_leader, nukes, deaths, pulled))
         if not joins or pulled or len(shared) * 2 < len(in_group) or not in_group or (healer and heals == 0):
             ok = False
     if expected is not None and len(names) != expected:

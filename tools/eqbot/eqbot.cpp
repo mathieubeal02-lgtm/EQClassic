@@ -1641,6 +1641,7 @@ namespace
 		std::string recovering;	// the corpse we are going back to
 		bool fledThisFight = false;
 		long lastAssistCall = 0, lastMeleeMsg = 0, waitSince = 0;
+		bool helpPending = false;	// leader: asked the zone what a member in trouble fights
 		unsigned moveTick = 0;
 		int tooFar = 0, cantSee = 0;
 		bool closeIn = false, backOff = false;
@@ -1899,7 +1900,18 @@ namespace
 						std::string from((const char*)b + 32, strnlen((const char*)b + 32, 32));
 						std::string text((const char*)b + 70, strnlen((const char*)b + 70, p->size - 70));
 						BotLog(charname, st.zone, "action=Heard from=%s text=%s", from.c_str(), text.c_str());
-						if (text.compare(0, 3, "oom") == 0) medding.insert(from);
+						if (text == "help" && !member && members.count(from) && state != Fight && state != Loot && state != Dead)
+						{
+							// a member is attacked: /assist it, and go for what it fights
+							int mid = playerByName(from);
+							if (mid)
+							{
+								uint16_t a[2] = { (uint16_t)mid, 0 };
+								z.Send((int16)0x0022, a, sizeof(a));
+								helpPending = true;
+							}
+						}
+						else if (text.compare(0, 3, "oom") == 0) medding.insert(from);
 						else if (text == "ready") medding.erase(from);
 						else if (from == leaderName && member)
 						{
@@ -1920,16 +1932,18 @@ namespace
 							else if (text == "camp") following = false;
 						}
 					}
-					else if (p->opcode == (int16)0x0022 && p->size >= 2 && member)	// /assist answer: the leader's target
+					else if (p->opcode == (int16)0x0022 && p->size >= 2 && (member || helpPending))	// /assist answer: their target
 					{
 						int id = b[0] | (b[1] << 8);
+						bool help = !member;
+						helpPending = false;
 						if (id && mobs.count(id) && mobs[id].alive && id != target && state != Dead && state != Recover && state != Loot)
 						{
-							hs.assists++;
+							if (!help) hs.assists++;
 							sit(false);
 							target = id;
 							state = Seek;
-							setState(Approach, "assist");
+							setState(Approach, help ? "help" : "assist");
 						}
 					}
 					else if (p->opcode == (int16)0x3721 && p->size >= 12)	// Consider_Struct: player, target, faction
@@ -1976,7 +1990,11 @@ namespace
 							if (from != target && state != Fight && state != Flee && state != Dead)
 							{
 								if (attackers.insert(from).second)
+								{
 									BotLog(charname, st.zone, "action=Attacked by=%s(%d) hp=%d%%", mobs[from].name.c_str(), from, myHp);
+									if (member && grouped)
+										gsay("help");
+								}
 								sit(false);
 								target = from;
 								state = Seek;	// so that the change is logged
@@ -2087,9 +2105,17 @@ namespace
 					break;
 				}
 				float best = 1e30f;
-				if (!myCorpses.empty() && !underAttack)
+				int corpseId = 0;
+				for (std::map<int, Mobile>::iterator it = myCorpses.begin(); it != myCorpses.end() && !corpseId; ++it)
 				{
-					target = myCorpses.begin()->first;
+					// grouped, only a corpse near the leader: nobody goes alone across the zone
+					int lid = member && grouped ? playerByName(leaderName) : 0;
+					if (!lid || fabsf(players[lid].x - it->second.x) + fabsf(players[lid].y - it->second.y) < 150)
+						corpseId = it->first;
+				}
+				if (corpseId && !underAttack)
+				{
+					target = corpseId;
 					recovering = myCorpses[target].name;
 					lootedItems = 0;
 					setState(Recover, "our corpse is here");

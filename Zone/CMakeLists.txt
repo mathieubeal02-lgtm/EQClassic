@@ -95,3 +95,11 @@ target_compile_definitions(zone PRIVATE WIN32 _CONSOLE ZONE EMBPERL EQC_SHAREDME
 target_link_libraries(zone PRIVATE ws2_32 eqc::mysql eqc::zlib eqc::perl SharedMemory)
 eqc_copy_runtime_dlls(zone)
 install(TARGETS zone RUNTIME DESTINATION .)
+
+# Symbols next to zone.exe, Release too (/Zi does not change the generated code; /OPT:REF,ICF keep the
+# Release link as it was): a hung or crashed zone can then be read with winedbg or a debugger.
+if(MSVC)
+  target_compile_options(zone PRIVATE $<$<CONFIG:Release>:/Zi>)
+  target_link_options(zone PRIVATE $<$<CONFIG:Release>:/DEBUG /OPT:REF /OPT:ICF>)
+  install(FILES $<TARGET_PDB_FILE:zone> DESTINATION . OPTIONAL)
+endif()

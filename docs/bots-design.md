@@ -674,6 +674,15 @@ None of milestones 1–4 changes server code.
     on the tank, and no member pulling its own mob.
   - A real player or a GM eqbot session sends `/invite` to a bot, and the bot joins and follows.
 
+- **Status (2026-10-05).** Done in `eqbot hunt` (`EQBOT_INVITE`, `EQBOT_ROLE=member`, `fleet.sh
+  group`, `tools/botd/README.md`). A warrior leads a cleric and a wizard in `qeytoqrg`: every kill
+  of a 30-minute run was shared (each member's `OP_ExpUpdate` within 5 s), the wizard assists with
+  `/assist` and nukes, the cleric heals whoever drops under 60 % (the level-5 tank never did against
+  that prey: the heals went to the wizard), no member pulled. Another account (an eqbot GM session)
+  invited a member bot, which joined and followed it. On the way the zone got three fixes: a
+  grouped player's solo kill is now split with its group, a group disbanding while its members drop
+  no longer hangs the zone, and two null dereferences (`OP_GroupFollow`, `OP_AssistTarget`).
+
 ### M4: talks
 
 - **Code.** The chat inbox and `ChatAddressed` trigger; templates (LFG, inc, oom, thanks, level-up);
