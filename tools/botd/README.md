@@ -1,8 +1,8 @@
-# botd: player bots (milestones 1 and 2)
+# botd: player bots (milestones 1 to 3)
 
 Bots that log in like real players and live in the world, as designed in `docs/bots-design.md`:
 headless clients built on `tools/eqbot`, nothing in the servers. Milestone 1 is a fleet that connects
-and walks, milestone 2 bots hunt alone; groups and talking come next.
+and walks, milestone 2 bots hunt alone, milestone 3 bots hunt in groups; talking comes next.
 
 ## Pieces
 
@@ -10,10 +10,11 @@ and walks, milestone 2 bots hunt alone; groups and talking come next.
 |---|---|
 | `../eqbot` `walk` | One bot: logs in, enters its zone, walks a list of waypoints back and forth (about 15 units/s, a position every 250 ms, sits and stands at every third point), logs one line per action, logs out cleanly |
 | `../eqbot` `hunt` | One bot hunts alone around the place it logs in (its camp, 800 units): picks the closest small NPC (`a_`/`an_`, level up to its own + 1, nobody on it, no guard), considers it and never attacks one that cons amiable or better, walks to it, auto-attacks, loots every item of the corpse, sits until healed (it only pulls above 90 % HP), flees to the camp under 20 % HP, fights back whatever attacks it, strolls around the camp when nothing is up. Killed: logs, waits 15 s, logs in again, goes back to its corpse and loots it (the zone puts worn items back on), then hunts around its first camp again. A cleric casts Minor Healing on itself under 50 % HP in a fight and under 70 % before resting, and meditates until its mana is back |
-| `setup-accounts.sh` | Creates the bot accounts `bot_001`... (status 0, never GM) and one character each (`Botaa`, `Botab`...), placed at the first waypoint. `BOTD_FIRST` picks the first index, `EQBOT_CLASS=warrior` or `cleric` makes humans of that class (default: troll shamans, which Qeynos guards kill on sight); clerics get Minor Healing scribed and memorized, as a player would do with the starting scroll |
-| `fleet.sh` | Starts N bots (`walk` along a waypoints file, or `hunt`) 2 s apart (one login at a time), samples the load every 10 s, summarises |
+| `../eqbot` `hunt` in a group | `EQBOT_INVITE=Botca,Botcb` makes a hunter the leader: it targets and invites them (again after a death), pulls only when they are near, above 80 % HP and nobody said "oom", takes yellow prey too, and says `assist` on each pull, `sit` after the loot, `follow` when it moves on. `EQBOT_ROLE=member` makes a hunter that never pulls: it joins whoever invites it (a real player too), follows, answers `assist` with `/assist` on the leader (melee, or Frost Bolt from 30 units for a wizard), heals the lowest member under 60 % (cleric), says `oom, medding` and `ready`, obeys `sit`, `follow` and `camp` (stay) |
+| `setup-accounts.sh` | Creates the bot accounts `bot_001`... (status 0, never GM) and one character each (`Botaa`, `Botab`...), placed at the first waypoint. `BOTD_FIRST` picks the first index, `EQBOT_CLASS=warrior`, `cleric` or `wizard` makes humans of that class (default: troll shamans, which Qeynos guards kill on sight); casters get their starting spell scribed and memorized (Minor Healing, Frost Bolt), as a player would do with the scroll |
+| `fleet.sh` | Starts N bots (`walk` along a waypoints file, `hunt`, or `group`: the first bot leads the others) 2 s apart (one login at a time), samples the load every 10 s, summarises |
 | `load.py` | CPU (interval, from `/proc`) and RSS of the `zone.exe` processes and of the bots |
-| `botlog.py` | Reads the action lines and checks milestone 1 (every bot entered and finished, with arrivals, no login failure, server-side positions within 5 units) or, for hunters, milestone 2 (finished, at least 10 kills, an item looted, sat between fights, experience gained, no attack on a refused NPC or a guard, never still for over 2 minutes outside a rest) |
+| `botlog.py` | Reads the action lines and checks milestone 1 (every bot entered and finished, with arrivals, no login failure, server-side positions within 5 units) or, for hunters, milestone 2 (finished, at least 10 kills, an item looted, sat between fights, experience gained, no attack on a refused NPC or a guard, never still for over 2 minutes outside a rest) or, for a group, milestone 3 (every member joined, at least 10 leader kills, each member got experience within 5 s of at least half the kills made while it was grouped, heals on the leader from a healer, no member pulled) |
 | `paths/` | Waypoint files, `x y z` per line: NPC grids from `grid_entries`, which NPCs already walk |
 
 ## Run
@@ -33,6 +34,16 @@ BOTD_FIRST=52 EQBOT_CLASS=warrior ./setup-accounts.sh 1 qeytoqrg paths/qeytoqrg-
 BOTD_FIRST=53 EQBOT_CLASS=cleric  ./setup-accounts.sh 1 qeytoqrg paths/qeytoqrg-safe.txt
 BOTD_FIRST=52 ./fleet.sh 2 hunt 1800
 ```
+
+A group (milestone 3): a warrior leads a cleric and a wizard for 30 minutes:
+
+```sh
+BOTD_FIRST=54 EQBOT_CLASS=wizard ./setup-accounts.sh 1 qeytoqrg paths/qeytoqrg-safe.txt   # Botcb
+BOTD_FIRST=52 ./fleet.sh 3 group 1800                    # Botbz leads Botca and Botcb
+```
+
+To group with them from the real client: target a member (`EQBOT_ROLE=member`, not grouped) and
+`/invite`; it follows you and assists when you say `assist` in `/gsay`.
 
 A waypoint file from another grid:
 
@@ -78,6 +89,11 @@ t=1791135640.534 bot=Botbz zone=qeytoqrg action=Rest target=-(155) hp=72% why=lo
 - `OP_Consider` must be exactly 28 bytes (`Consider_Struct`) or the zone drops it. The answer's
   faction: 0 indifferent, positive amiable to ally, negative apprehensive to scowls. NPCs without a
   faction (rats, snakes, skeletons) con indifferent.
+- Groups: `/invite` reaches the player the inviter targets; the member answers `OP_GroupFollow`
+  (leader, invited). `/gsay` is one `OP_ChannelMessage` per member (its name first, channel 2).
+  `/assist` (`OP_AssistTarget`, 0x0022, the leader's spawn id) comes back with the leader's target.
+  The zone refreshes a group as "you leave" (`OP_GroupUpdate` action 4) then every member again
+  (action 0). Player HP updates reach players nearby, so a healer sees its group's HP.
 - The design asked for the test in `qeynos2`; it runs in `qeytoqrg`, where the level-1 prey is.
   Not done yet: nukes and other spells, camps chosen from `spawn2`, corpse runs to another zone.
 - Level-1 casters die often in the Qeynos Hills (gnoll scouts, level 3-4, roam and aggro): deaths are

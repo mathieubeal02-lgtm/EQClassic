@@ -2,12 +2,17 @@
 """Summarises bot decision logs (docs/bots-design.md 6.1): one line per action,
 `t=<epoch> bot=<name> zone=<zone> action=<Action> key=value...`.
 
-Usage: botlog.py <log dir> [expected bot count] [minimum kills per hunter, default 10]
+Usage: botlog.py <log dir> [expected bot count] [minimum kills per hunter or group, default 10]
 Checks, walking bots (milestone 1): every bot entered its zone and finished (action=Done) with
 arrivals, no login failure; server-side positions (action=Verify, GM bots only) within 5 units.
 Hunting bots (milestone 2, eqbot hunt): finished, enough kills, at least one item looted, sat
 between fights, gained experience, never attacked an NPC it refused (amiable or better) nor a guard,
-and never stood still for over 2 minutes outside a rest. Exit 1 on failure.
+and never stood still for over 2 minutes outside a rest.
+A group (milestone 3: a leader with EQBOT_INVITE, members with EQBOT_ROLE=member): every member
+joined, the leader killed enough, each member got experience within 5 s of at least half of the
+leader's kills made while it was in the group (shared kills), a healer healed other members (heals
+on the leader are shown apart: a tank above its prey may never need one), and no member pulled (no
+Consider, no "closest prey"). Exit 1 on failure.
 """
 import os
 import re
@@ -67,6 +72,8 @@ def main():
     expected = int(sys.argv[2]) if len(sys.argv) > 2 else None
     min_kills = int(sys.argv[3]) if len(sys.argv) > 3 else 10
     names = sorted(n for n in os.listdir(logs) if n.endswith('.log'))
+    if any(' action=Invite ' in open(os.path.join(logs, n), errors='replace').read() for n in names):
+        return group(logs, names, expected, min_kills)
     if names and all(' action=Kill ' in open(os.path.join(logs, n), errors='replace').read() or
                      'Seek' in open(os.path.join(logs, n), errors='replace').read() for n in names):
         return hunters(logs, names, expected, min_kills)
@@ -111,6 +118,56 @@ def main():
             print('load: zone cpu avg %.1f%% max %.1f%%, zone rss max %.0f MB; bots cpu avg %.1f%% max %.1f%%, bots rss max %.0f MB'
                   % (sum(zc) / len(zc), max(zc), max(zr), sum(bc) / max(len(bc), 1), max(bc or [0]), max(br or [0])))
     print('[ OK ] milestone 1 checks' if ok else '[FAIL] milestone 1 checks')
+    return 0 if ok else 1
+
+
+def events(path):
+    out = []
+    for line in open(path, errors='replace'):
+        m = LINE.match(line.strip())
+        if m:
+            out.append((float(m.group(1)), m.group(4), fields(m.group(5))))
+    return out
+
+
+def group(logs, names, expected, min_kills):
+    logs_by_bot = {n[:-4]: events(os.path.join(logs, n)) for n in names}
+    leaders = [b for b, ev in logs_by_bot.items() if any(a == 'Invite' for _, a, _ in ev)]
+    leader = leaders[0]
+    kills = [t for t, a, kv in logs_by_bot[leader] if a == 'Kill' and kv.get('assist') != '1']
+    ok = len(kills) >= min_kills
+    print('leader %s: %d kills' % (leader, len(kills)))
+    print('%-8s %5s %7s %7s %8s %6s %9s %6s %6s %s' % ('member', 'joins', 'shared', 'in_grp', 'assists', 'heals', 'on_leader', 'nukes', 'deaths', 'pulled'))
+    for bot, ev in logs_by_bot.items():
+        if bot == leader:
+            continue
+        joins = [t for t, a, _ in ev if a == 'Join']
+        exp = [t for t, a, _ in ev if a == 'Exp']
+        left = sorted([(t, 0) for t, a, kv in ev if a == 'GroupLeft' and kv.get('name') == bot] + [(t, 1) for t in joins])
+
+        def grouped(t):
+            state = 0
+            for when, joined in left:
+                if when > t:
+                    break
+                state = joined
+            return state
+        in_group = [t for t in kills if grouped(t)]
+        shared = [t for t in in_group if any(t - 1 <= e <= t + 5 for e in exp)]
+        assists = sum(1 for _, a, kv in ev if a == 'Approach' and kv.get('why') == 'assist')
+        heals = sum(1 for _, a, kv in ev if a == 'Cast' and kv.get('spell') == 'Minor_Healing' and kv.get('target') != bot)
+        on_leader = sum(1 for _, a, kv in ev if a == 'Cast' and kv.get('spell') == 'Minor_Healing' and kv.get('target') == leader)
+        nukes = sum(1 for _, a, kv in ev if a == 'Cast' and kv.get('spell') == 'Frost_Bolt')
+        deaths = sum(1 for _, a, _ in ev if a == 'Killed')
+        pulled = sum(1 for _, a, kv in ev if a == 'Consider' or kv.get('why') == 'closest prey')
+        healer = any(a == 'Cast' and kv.get('spell') == 'Minor_Healing' for _, a, kv in ev)
+        print('%-8s %5d %7d %7d %8d %6d %9d %6d %6d %d' % (bot, len(joins), len(shared), len(in_group), assists, heals, on_leader, nukes, deaths, pulled))
+        if not joins or pulled or len(shared) * 2 < len(in_group) or not in_group or (healer and heals == 0):
+            ok = False
+    if expected is not None and len(names) != expected:
+        print('expected %d bots, found %d logs' % (expected, len(names)))
+        ok = False
+    print('[ OK ] milestone 3 checks' if ok else '[FAIL] milestone 3 checks')
     return 0 if ok else 1
 
 

@@ -799,6 +799,13 @@ void EntityList::Process()
 			else if (iterator.GetData()->IsProjectile()){
 				iterator.RemoveCurrent();
 			}
+			else if (iterator.GetData()->IsGroup()){	// disbanded
+				iterator.RemoveCurrent();
+			}
+			else
+			{
+				iterator.Advance();	// never spin on an entity we do not know how to remove
+			}
 		}
 		else
 		{
@@ -1429,7 +1436,7 @@ Group* EntityList::GetGroupByID(int32 group_id){
 
 	while(iterator.MoreElements())
 	{ 
-		if (iterator.GetData()->IsGroup() && iterator.GetData()->CastToGroup()->GetGroupID() == group_id)
+		if (iterator.GetData()->IsGroup() && !iterator.GetData()->CastToGroup()->IsDisbanded() && iterator.GetData()->CastToGroup()->GetGroupID() == group_id)
 			return iterator.GetData()->CastToGroup();
 		iterator.Advance(); 
 	}

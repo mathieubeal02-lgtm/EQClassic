@@ -5471,6 +5471,12 @@ void Client::ProcessOP_AssistTarget(APPLAYER* pApp){
 	BackSlashAssist_Struct* bsa = (BackSlashAssist_Struct*)pApp->pBuffer;
 
 	Entity* entity = entity_list.GetID(bsa->bsa_target);
+	if (!entity || !entity->IsMob())	// no such spawn: nothing to assist
+	{
+		bsa->bsa_target = 0;
+		QueuePacket(pApp);
+		return;
+	}
 	if(entity->CastToMob()->GetTarget() != 0) {
 		if(DistNoRoot(entity->CastToMob()->GetTarget()) <= TARGETING_RANGE*TARGETING_RANGE)
 			entid = entity->CastToMob()->GetTarget()->GetID();

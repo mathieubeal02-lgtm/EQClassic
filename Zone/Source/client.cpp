@@ -1,3 +1,5 @@
+#include <map>
+#include <string>
 #include <cstdarg>
 #include <iostream>
 #include <iomanip>
@@ -2742,7 +2744,10 @@ void Client::ProcessOP_GroupFollow(APPLAYER* pApp){
 	if (pApp->size == sizeof(GroupFollow_Struct)){
 		GroupFollow_Struct* gf = (GroupFollow_Struct*) pApp->pBuffer;
 		//cout << "Checking Leader" << endl;
+		gf->leader[sizeof(gf->leader) - 1] = '\0';
 		Client* leader = entity_list.GetClientByName(gf->leader);
+		if (!leader || leader == this)	// a made-up or departed leader would crash the zone
+			return;
 		//cout << "Checking Leader is grouped, if not, make a group" << endl;
 		if (!leader->IsGrouped()){
 			cout << "Leader not grouped, making one" << endl;
@@ -3833,6 +3838,21 @@ void Client::ZonePC(char* zonename, float x, float y, float z)
 //| node. Zones a player to a connecting zone if they are
 //| close enough to a zoneline node.
 //o--------------------------------------------------------------
+// The ground height where a zone line lands, from the target zone's map, loaded once per zone: every
+// position update a player spent inside a zone line loaded that map again (and leaked it), and a
+// missing map was dereferenced.
+static float ZoneLineLandingZ(const char* targetZone, VERTEX me)
+{
+	static std::map<std::string, Map*> maps;
+	std::map<std::string, Map*>::iterator it = maps.find(targetZone);
+	Map* m = it != maps.end() ? it->second : (maps[targetZone] = Map::LoadMapfile(targetZone));
+	if (!m)
+		return -999999.0f;
+	VERTEX hit;
+	FACE* onhit;
+	return m->FindBestZ(MAP_ROOT_NODE, me, &hit, &onhit);
+}
+
 void Client::ScanForZoneLines()
 {
 	bool debugFlag = true;
@@ -3950,7 +3970,7 @@ void Client::ScanForZoneLines()
 
 						if (best_z == 0)
 						{
-							best_z = zone->map->LoadMapfile(zone->thisZonesZoneLines[i]->target_zone)->FindBestZ(MAP_ROOT_NODE, me, &hit, &onhit);
+							best_z = ZoneLineLandingZ(zone->thisZonesZoneLines[i]->target_zone, me);
 						}
 
 						if (best_z == -999999.000000)
@@ -4024,7 +4044,7 @@ void Client::ScanForZoneLines()
 
 						if (best_z == 0)
 						{
-							best_z = zone->map->LoadMapfile(zone->thisZonesZoneLines[i]->target_zone)->FindBestZ(MAP_ROOT_NODE, me, &hit, &onhit);
+							best_z = ZoneLineLandingZ(zone->thisZonesZoneLines[i]->target_zone, me);
 						}
 
 						if (best_z == -999999.000000)
@@ -4113,7 +4133,7 @@ void Client::ScanForZoneLines()
 
 						if (best_z == 0)
 						{
-							best_z = zone->map->LoadMapfile(zone->thisZonesZoneLines[i]->target_zone)->FindBestZ(MAP_ROOT_NODE, me, &hit, &onhit);
+							best_z = ZoneLineLandingZ(zone->thisZonesZoneLines[i]->target_zone, me);
 						}
 
 						if (best_z == -999999.000000)
@@ -4187,7 +4207,7 @@ void Client::ScanForZoneLines()
 
 						if (best_z == 0)
 						{
-							best_z = zone->map->LoadMapfile(zone->thisZonesZoneLines[i]->target_zone)->FindBestZ(MAP_ROOT_NODE, me, &hit, &onhit);
+							best_z = ZoneLineLandingZ(zone->thisZonesZoneLines[i]->target_zone, me);
 						}
 
 						if (best_z == -999999.000000)

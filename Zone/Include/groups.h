@@ -19,8 +19,11 @@ class Group: public Entity
 {
 public:
 	char*			GetName()	{ return NULL; }
-	virtual bool	Process()	{ return true; }
+	// a disbanded group leaves the entity list at its next pass (removing it from inside
+	// EntityList::Process, as a member's destructor did, corrupted the list and hung the zone)
+	virtual bool	Process()	{ return !disbanded; }
 	virtual bool	IsGroup()	{ return true; }
+	bool			IsDisbanded()	{ return disbanded; }
 
 	Group::~Group() {}
 	Group::Group(Client* leader);
@@ -89,6 +92,7 @@ private:
 
 	};
 	bool					ignoreNextDisband;
+	bool					disbanded;
 	const static int8		MAX_NAME_SIZE = 15;
 	vector<TMember>			pvMembers;
 	//vector<TMember>*		pvMembersPtr;

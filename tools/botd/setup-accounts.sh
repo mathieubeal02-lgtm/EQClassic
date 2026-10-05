@@ -4,8 +4,8 @@
 # waypoint of a waypoints file in a zone. Safe to run again: existing accounts and characters are
 # kept, only their place is reset.
 # Usage: setup-accounts.sh <count> <zone> <waypoints file> [password, default botpass]
-# BOTD_FIRST: index of the first account (default 1). EQBOT_CLASS=warrior: troll warriors instead of
-# troll shamans (eqbot create).
+# BOTD_FIRST: index of the first account (default 1). EQBOT_CLASS=warrior|cleric|wizard: humans of that
+# class instead of troll shamans (eqbot create), casters with their starting spell.
 # Database: EQC_DB_USER/EQC_DB_PASS/EQC_DB_NAME (eqc/eqc/eqclassic). Servers must be up (characters
 # are created through World, like a player would).
 set -e
@@ -28,10 +28,15 @@ for i in $(seq "$FIRST" $((FIRST + COUNT - 1))); do
   "$EQBOT" create 127.0.0.1 "$account" "$PASS" "$name" > /dev/null 2>&1 || { echo "$account: could not create $name"; continue; }
   sleep 2	# one login at a time (World's active_accounts rows are matched by IP)
   $DB -e "UPDATE character_ SET profile = CONCAT(SUBSTRING(profile, 1, 2408), UNHEX('$POS'), RPAD('$ZONE', 15, '\0'), SUBSTRING(profile, 2440)) WHERE name = '$name'"
-  if [ "${EQBOT_CLASS:-}" = cleric ]; then
-    # Minor Healing (spell 200) in the spell book (int16[256] at 1878) and in gem 1 (int16[8] at 2390),
-    # as a player would scribe and memorize the starting scroll
-    $DB -e "UPDATE character_ SET profile = CONCAT(SUBSTRING(profile, 1, 1878), UNHEX('C800'), SUBSTRING(profile, 1881, 2390 - 1880), UNHEX('C800'), SUBSTRING(profile, 2393)) WHERE name = '$name'"
+  # The starting spell in the spell book (int16[256] at 1878) and in gem 1 (int16[8] at 2390), as a
+  # player would scribe and memorize the starting scroll: Minor Healing (200) or Frost Bolt (54)
+  case "${EQBOT_CLASS:-}" in
+    cleric) SPELL=C800 ;;
+    wizard) SPELL=3600 ;;
+    *) SPELL= ;;
+  esac
+  if [ -n "$SPELL" ]; then
+    $DB -e "UPDATE character_ SET profile = CONCAT(SUBSTRING(profile, 1, 1878), UNHEX('$SPELL'), SUBSTRING(profile, 1881, 2390 - 1880), UNHEX('$SPELL'), SUBSTRING(profile, 2393)) WHERE name = '$name'"
   fi
   echo "$account $PASS $name"
 done
