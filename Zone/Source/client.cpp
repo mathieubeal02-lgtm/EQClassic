@@ -258,9 +258,14 @@ Client::Client(int32 in_ip, int16 in_port, int in_send_socket)
 
 Client::~Client()
 {
-	if(!isZoning && !isZoningZP && this->IsGrouped()) {
-		Group* g = entity_list.GetGroupByClient(this);
-		if (g) g->DelMember(this->GetName(), false, true);
+	// No group may keep a pointer to this client once it is gone: a member that died (it is then
+	// "zoning" to its bind point) and dropped stayed in its group as this object, and the next group
+	// kill gave experience to freed memory (Group::SplitExp -> AddEXP: the zone crashed).
+	if (Group* g = entity_list.GetGroupByClient(this)) {
+		if(!isZoning && !isZoningZP && this->IsGrouped())
+			g->DelMember(this->GetName(), false, true);
+		else
+			g->MemberZonedOut(this);	// still a member, out of this zone
 	}
 
 	if(IsDueling() && GetDuelTarget() != 0)
