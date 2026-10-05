@@ -23,8 +23,12 @@
 #include <openssl/des.h>
 #include <stdint.h>
 #include <zlib.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/select.h>
+#include <sys/socket.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 #include <cmath>
 #include <cstdarg>
@@ -33,7 +37,10 @@
 #include <cstring>
 #include <set>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "EqSession.h"
@@ -1446,6 +1453,173 @@ namespace
 	}
 
 
+	// ---- chat (milestone 4): the bots ask tools/botd/chatd.py for their words ----
+	// One request at a time per bot, on its own thread: the game loop never waits for it, and an
+	// answer older than 10 s is dropped. CHATD_PORT (default 7780) on 127.0.0.1.
+
+	std::string JsonEscape(const std::string& in)
+	{
+		std::string out;
+		for (size_t i = 0; i < in.size(); i++)
+		{
+			unsigned char c = in[i];
+			if (c == '"' || c == '\\') { out += '\\'; out += c; }
+			else if (c < 0x20) { char b[8]; snprintf(b, sizeof(b), "\\u%04x", c); out += b; }
+			else if (c < 0x80) out += c;
+			else { out += (char)(0xc0 | (c >> 6)); out += (char)(0x80 | (c & 0x3f)); }	// game text is Latin-1
+		}
+		return out;
+	}
+
+	// The string value of "key" in a flat JSON object (enough for chatd's answers).
+	std::string JsonString(const std::string& json, const std::string& key)
+	{
+		size_t k = json.find("\"" + key + "\"");
+		if (k == std::string::npos) return "";
+		size_t q = json.find('"', json.find(':', k) + 1);
+		if (q == std::string::npos) return "";
+		std::string out;
+		for (size_t i = q + 1; i < json.size() && json[i] != '"'; i++)
+		{
+			if (json[i] == '\\' && i + 1 < json.size())
+			{
+				i++;
+				if (json[i] == 'u' && i + 4 < json.size())
+				{
+					int cp = (int)strtol(json.substr(i + 1, 4).c_str(), 0, 16);
+					out += cp < 256 ? (char)cp : '?';	// back to Latin-1 for the game
+					i += 4;
+				}
+				else out += json[i] == 'n' ? ' ' : json[i];
+			}
+			else if ((unsigned char)json[i] >= 0xc0 && i + 1 < json.size())
+			{
+				int cp = ((json[i] & 0x1f) << 6) | (json[i + 1] & 0x3f);
+				out += cp < 256 ? (char)cp : '?';
+				i++;
+			}
+			else out += json[i];
+		}
+		return out;
+	}
+
+	std::string HttpPost(const std::string& path, const std::string& body, int timeoutSec)
+	{
+		int port = getenv("CHATD_PORT") ? atoi(getenv("CHATD_PORT")) : 7780;
+		int fd = socket(AF_INET, SOCK_STREAM, 0);
+		if (fd < 0) return "";
+		struct timeval tv = { timeoutSec, 0 };
+		setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+		setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+		sockaddr_in a;
+		memset(&a, 0, sizeof(a));
+		a.sin_family = AF_INET;
+		a.sin_port = htons(port);
+		a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		std::string out;
+		if (connect(fd, (sockaddr*)&a, sizeof(a)) == 0)
+		{
+			char head[256];
+			snprintf(head, sizeof(head), "POST %s HTTP/1.0\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n",
+			         path.c_str(), (int)body.size());
+			std::string req = head + body;
+			if (send(fd, req.data(), req.size(), 0) == (ssize_t)req.size())
+			{
+				char buf[4096];
+				ssize_t n;
+				while ((n = recv(fd, buf, sizeof(buf), 0)) > 0)
+					out.append(buf, n);
+			}
+		}
+		close(fd);
+		size_t body0 = out.find("\r\n\r\n");
+		return body0 == std::string::npos ? "" : out.substr(body0 + 4);
+	}
+
+	struct ChatJob
+	{
+		std::mutex m;
+		bool done;
+		std::string answer;
+		ChatJob() : done(false) {}
+	};
+
+	struct ChatLine { std::string channel, to, text, source; long asked; };
+
+	class ChatClient
+	{
+	public:
+		ChatClient() : asked(0) {}
+		// starts a request unless one is pending; `channel`/`to` say where the answer goes
+		bool Ask(const std::string& path, const std::string& body, const std::string& channel, const std::string& to)
+		{
+			if (job) return false;
+			job.reset(new ChatJob());
+			std::shared_ptr<ChatJob> j = job;
+			std::thread([j, path, body]() {
+				std::string a = HttpPost(path, body, 10);
+				std::lock_guard<std::mutex> l(j->m);
+				j->answer = a;
+				j->done = true;
+			}).detach();
+			replyChannel = channel;
+			replyTo = to;
+			asked = NowMs();
+			return true;
+		}
+		// the answer when it came (empty text: nothing to say), false while pending
+		bool Take(ChatLine& line)
+		{
+			if (!job) return false;
+			std::string a;
+			{
+				std::lock_guard<std::mutex> l(job->m);
+				if (!job->done)
+				{
+					if (NowMs() - asked < 10000) return false;
+					a = "";	// too late: dropped (the thread ends on its own)
+				}
+				else a = job->answer;
+			}
+			job.reset();
+			line.channel = replyChannel;
+			line.to = replyTo;
+			line.text = JsonString(a, "text");
+			line.source = JsonString(a, "source");
+			line.asked = asked;
+			return true;
+		}
+	private:
+		std::shared_ptr<ChatJob> job;
+		std::string replyChannel, replyTo;
+		long asked;
+	};
+
+	// OP_ChannelMessage: target[32], sender[32], language at 64, channel at 66, text at 70
+	void SendChat(EqSession& z, const std::string& me, int channel, const std::string& to, const std::string& text)
+	{
+		std::vector<unsigned char> b(70 + text.size() + 1, 0);
+		strncpy((char*)&b[0], to.c_str(), 31);
+		strncpy((char*)&b[32], me.c_str(), 31);
+		b[66] = channel;
+		memcpy(&b[70], text.c_str(), text.size());
+		z.Send(kChannelMessage, &b[0], b.size());
+	}
+
+	const char* ClassName(int c)
+	{
+		static const char* n[] = { "?", "warrior", "cleric", "paladin", "ranger", "shadowknight", "druid", "monk", "bard",
+		                           "rogue", "shaman", "necromancer", "wizard", "magician", "enchanter" };
+		return c >= 0 && c < 15 ? n[c] : "?";
+	}
+
+	const char* RaceName(int r)
+	{
+		static const char* n[] = { "?", "human", "barbarian", "erudite", "wood elf", "high elf", "dark elf", "half elf", "dwarf",
+		                           "troll", "ogre", "halfling", "gnome" };
+		return r >= 0 && r < 13 ? n[r] : r == 128 ? "iksar" : "?";
+	}
+
 	// ---- hunt: a bot that hunts alone (bots milestone 2, docs/bots-design.md 9) ----
 	// A state machine, one decision line per change (as walk):
 	//   Seek     closest prey near the camp: "a_"/"an_" NPC, small enough, nobody on it, not a guard
@@ -1466,8 +1640,9 @@ namespace
 		float campX, campY, campZ;
 		std::set<std::string> emptiedCorpses;	// our own corpses already looted
 		std::vector<std::pair<float, float> > zoneLines;	// where the zone tried to send us elsewhere
+		bool sayDeath;	// died: say so to the group once back
 		HuntStats() : kills(0), loots(0), items(0), deaths(0), hitsDealt(0), damageDealt(0), hitsTaken(0), damageTaken(0),
-		              refused(0), recovered(0), equipped(0), assists(0), casts(0), expGained(0), campSet(false), campX(0), campY(0), campZ(0) {}
+		              refused(0), recovered(0), equipped(0), assists(0), casts(0), expGained(0), campSet(false), campX(0), campY(0), campZ(0), sayDeath(false) {}
 	};
 
 	// Items of the bulk inventory sent at zone-in: slot -> Item_Struct bytes.
@@ -1725,6 +1900,34 @@ namespace
 			if (!to.empty())
 				BotLog(charname, st.zone, "action=GSay text=%s", text.c_str());
 		};
+		// chat (milestone 4): who we are for chatd, what we heard, the one request in flight
+		ChatClient chat;
+		std::vector<std::string> heard;
+		const int myRace = pp.size() > 57 ? pp[56] : 0, myClass = pp.size() > 58 ? pp[58] : 0;
+		auto personaJson = [&]() {
+			char b[160];
+			snprintf(b, sizeof(b), "{\"race\":\"%s\",\"class\":\"%s\",\"level\":%d}", RaceName(myRace), ClassName(myClass), myLevel);
+			return std::string(b);
+		};
+		auto askLine = [&](const char* kind, const std::string& channel, const std::string& extraVars) {
+			char b[400];
+			snprintf(b, sizeof(b), "{\"bot\":\"%s\",\"kind\":\"%s\",\"channel\":\"%s\",\"vars\":{\"level\":%d,\"class\":\"%s\",\"zone\":\"%s\"%s}}",
+			         charname.c_str(), kind, channel.c_str(), myLevel, ClassName(myClass), st.zone.c_str(), extraVars.c_str());
+			return chat.Ask("/line", b, channel, "");
+		};
+		auto addressed = [&](const std::string& channel, const std::string& from, const std::string& text) {
+			std::string h = "[";
+			for (size_t k = 0; k < heard.size(); k++)
+				h += (k ? "," : "") + std::string("\"") + JsonEscape(heard[k]) + "\"";
+			h += "]";
+			std::string body = "{\"bot\":\"" + JsonEscape(charname) + "\",\"persona\":" + personaJson() + ",\"zone\":\"" + st.zone
+			                   + "\",\"channel\":\"" + channel + "\",\"from\":\"" + JsonEscape(from) + "\",\"text\":\"" + JsonEscape(text)
+			                   + "\",\"heard\":" + h + "}";
+			if (chat.Ask("/reply", body, channel, from))
+				BotLog(charname, st.zone, "action=Addressed channel=%s from=%s", channel.c_str(), from.c_str());
+		};
+		askLine("hello", "", "");	// chatd learns our name: bots never get LLM answers from bots
+		long lastLfg = 0;
 		auto attack = [&](bool on) {
 			uint32_t v = on ? 1 : 0;
 			z.Send(kAutoAttack, &v, sizeof(v));
@@ -1803,6 +2006,15 @@ namespace
 						if (m > myMana) lastManaRise = NowMs();
 						myMana = m;
 						maxMana = std::max(maxMana, m);
+					}
+					else if (p->opcode == kSpecialMesg && p->size > 4 && castUntil > NowMs()
+					         && (std::string((const char*)b + 4, strnlen((const char*)b + 4, p->size - 4)).find("out of range") != std::string::npos
+					             || std::string((const char*)b + 4, strnlen((const char*)b + 4, p->size - 4)).find("Insufficient mana") != std::string::npos))
+					{
+						// the zone refused our spell: wait before trying again (a healer kept recasting)
+						bool range = std::string((const char*)b + 4, strnlen((const char*)b + 4, p->size - 4)).find("range") != std::string::npos;
+						castUntil = NowMs() + 8000;
+						BotLog(charname, st.zone, "action=CastRefused why=%s", range ? "out_of_range" : "mana");
 					}
 					else if (p->opcode == kSpecialMesg && p->size > 4 && (state == Fight || state == Approach))
 					{
@@ -1895,11 +2107,37 @@ namespace
 						members.clear();
 						leaderName.clear();
 					}
+					else if (p->opcode == kChannelMessage && p->size > 70 && b[66] != 2)	// tell, say, ooc, shout...
+					{
+						int chan = b[66];
+						std::string from((const char*)b + 32, strnlen((const char*)b + 32, 32));
+						std::string text((const char*)b + 70, strnlen((const char*)b + 70, p->size - 70));
+						if (from != charname && !from.empty())
+						{
+							heard.push_back(from + ": " + text);
+							if (heard.size() > 5) heard.erase(heard.begin());
+							std::string low = text, me = charname;
+							for (size_t k = 0; k < low.size(); k++) low[k] = tolower(low[k]);
+							for (size_t k = 0; k < me.size(); k++) me[k] = tolower(me[k]);
+							if (chan == 7)
+								addressed("tell", from, text);
+							else if (chan == 8 && low.find(me) != std::string::npos)
+								addressed("say", from, text);
+						}
+					}
 					else if (p->opcode == kChannelMessage && p->size > 70 && b[66] == 2)	// group say
 					{
 						std::string from((const char*)b + 32, strnlen((const char*)b + 32, 32));
 						std::string text((const char*)b + 70, strnlen((const char*)b + 70, p->size - 70));
 						BotLog(charname, st.zone, "action=Heard from=%s text=%s", from.c_str(), text.c_str());
+						heard.push_back(from + ": " + text);
+						if (heard.size() > 5) heard.erase(heard.begin());
+						static const char* words[] = { "assist", "sit", "follow", "camp", "help", "ready" };
+						bool command = text.compare(0, 3, "oom") == 0;
+						for (size_t k = 0; k < sizeof(words) / sizeof(words[0]); k++)
+							command = command || text == words[k];
+						if (!command && from != charname)
+							addressed("group", from, text);	// chatd answers players only, never bots
 						if (text == "help" && !member && members.count(from) && state != Fight && state != Loot && state != Dead)
 						{
 							// a member is attacked: /assist it, and go for what it fights
@@ -2015,6 +2253,7 @@ namespace
 								hs.emptiedCorpses.insert(recovering);
 							}
 							BotLog(charname, st.zone, "action=Killed by=%s(%d)", mobs.count(killer) ? mobs[killer].name.c_str() : "?", killer);
+							hs.sayDeath = true;
 							setState(Dead, "killed");
 							died = true;
 						}
@@ -2051,6 +2290,25 @@ namespace
 			float step = speed * (now - lastTick) / 1000.0f;
 			lastTick = now;
 			bool underAttack = now - lastHitTaken < 6000;
+			// chat: an answer from chatd goes out where it was asked for
+			ChatLine said;
+			if (chat.Take(said) && !said.text.empty() && state != Dead)
+			{
+				if (said.channel == "tell") SendChat(z, charname, 7, said.to, said.text);
+				else if (said.channel == "say") SendChat(z, charname, 8, "", said.text);
+				else if (said.channel == "ooc") SendChat(z, charname, 5, "", said.text);
+				else if (said.channel == "group") gsay(said.text);
+				BotLog(charname, st.zone, "action=Chat channel=%s to=%s source=%s ms=%ld text=%s", said.channel.c_str(),
+				       said.to.empty() ? "-" : said.to.c_str(), said.source.c_str(), now - said.asked, said.text.c_str());
+			}
+			// EQBOT_LFG: a bot alone looks for a group on OOC (chatd keeps it to one line per interval)
+			if (getenv("EQBOT_LFG") && !grouped && invitees.empty() && now - lastLfg > 60000 && state != Dead)
+			{
+				if (askLine("lfg", "ooc", ""))
+					lastLfg = now;
+			}
+			if (hs.sayDeath && grouped && state != Dead && askLine("death", "group", ""))
+				hs.sayDeath = false;
 			// leader: invite who is missing (again after a death or a disconnect)
 			for (size_t k = 0; k < invitees.size(); k++)
 			{
@@ -2292,7 +2550,12 @@ namespace
 					fledThisFight = false;
 					setState(Fight, "in reach");
 					waitSince = 0;
-					if (!members.empty()) { gsay("assist"); lastAssistCall = NowMs(); }
+					if (!members.empty())
+					{
+						gsay("assist");
+						lastAssistCall = NowMs();
+						askLine("inc", "group", ",\"mob\":\"" + JsonEscape(m.name) + "\"");
+					}
 				}
 				break;
 			}
@@ -2489,6 +2752,38 @@ namespace
 		return 0;
 	}
 
+	// ---- tell: send a tell to a character and wait for its answer (milestone 4 check) ----
+	int Tell(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname,
+	         const std::string& to, const std::string& text, int waitSec)
+	{
+		EqSession z;
+		ZoneState st;
+		if (!EnterZone(host, user, pass, charname, z, st))
+			return 1;
+		std::vector<Packet*> early = z.Poll(1500);
+		DeleteAll(early);
+		long sent = NowMs();
+		SendChat(z, charname, 7, to, text);
+		std::string answer;
+		while (answer.empty() && NowMs() - sent < waitSec * 1000L)
+		{
+			std::vector<Packet*> got = z.Poll(200);
+			for (size_t i = 0; i < got.size(); i++)
+			{
+				const unsigned char* b = got[i]->pBuffer;
+				if (got[i]->opcode == kChannelMessage && got[i]->size > 70 && b[66] == 7
+				    && std::string((const char*)b + 32, strnlen((const char*)b + 32, 32)) == to)
+					answer = std::string((const char*)b + 70, strnlen((const char*)b + 70, got[i]->size - 70));
+			}
+			DeleteAll(got);
+		}
+		char d[200];
+		snprintf(d, sizeof(d), "%s answered after %ld ms: %s", to.c_str(), NowMs() - sent, answer.c_str());
+		Step(!answer.empty(), "tell", answer.empty() ? to + ": no answer" : d);
+		z.Disconnect();
+		return answer.empty() ? 1 : 0;
+	}
+
 	void Usage()
 	{
 		fprintf(stderr, "usage: eqbot login  <login-host> <user> <password> [port=5999]\n"
@@ -2497,7 +2792,8 @@ namespace
 		                "       eqbot test   <login-host> <user> <password> <character>\n"
 		                "       eqbot walk   <login-host> <user> <password> <character> <waypoints file> [seconds=60]\n"
 		                "       eqbot hunt   <login-host> <user> <password> <character> [seconds=300]\n"
-		                "       eqbot cast   <login-host> <user> <password> <character> <gem> <spell id>\n");
+		                "       eqbot cast   <login-host> <user> <password> <character> <gem> <spell id>\n"
+		                "       eqbot tell   <login-host> <user> <password> <character> <to> <text> [seconds=10]\n");
 	}
 }
 
@@ -2511,6 +2807,8 @@ int main(int argc, char** argv)
 		return Play(argv[2], argv[3], argv[4], argv[5]);
 	if (argc >= 6 && std::string(argv[1]) == "test")
 		return Test(argv[2], argv[3], argv[4], argv[5]);
+	if (argc >= 8 && std::string(argv[1]) == "tell")
+		return Tell(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argc > 8 ? atoi(argv[8]) : 10);
 	if (argc >= 8 && std::string(argv[1]) == "cast")
 		return Cast(argv[2], argv[3], argv[4], argv[5], atoi(argv[6]), atoi(argv[7]));
 	if (argc >= 6 && std::string(argv[1]) == "hunt")

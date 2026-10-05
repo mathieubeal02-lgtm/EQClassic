@@ -700,6 +700,14 @@ None of milestones 1–4 changes server code.
     per-hour cap is respected over a 10-minute burst.
   - A manual check with the real model is the only step not automated.
 
+- **Status (2026-10-05).** Done: `tools/botd/chatd.py` (one service for all bots, since each bot is
+  its own process and the limits are global), the chat inbox and `ChatAddressed` in `eqbot hunt`,
+  templates, filters, limits, budget, `llm = off` by default. `test_chatd.py` runs the stub-LLM
+  checks (a normal reply passes, a URL or a blocked word is dropped and logged `chat=filtered`, the
+  hourly cap holds over a burst, no answer to bots, budget and missing key fall back to templates)
+  in CI; `chat-test.sh` runs the in-game ones (a tell answered from a template in about 0.2 s, one
+  LFG line on OOC per interval). Not done: the manual check with the real model, which needs a key.
+
 ### Optional later milestones
 
 - **M5: going back to town and selling.** Bags full → walk to the zone's merchant (`merchantlist`),

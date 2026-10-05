@@ -1,0 +1,10 @@
+# One word per line, lower case: lines from the LLM holding one are dropped (chat=filtered).
+# The server's own name filter (name_filter table) is a good source of more.
+fuck
+shit
+cunt
+nigger
+faggot
+retard
+kill yourself
+kys

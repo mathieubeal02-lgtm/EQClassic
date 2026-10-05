@@ -1,0 +1,22 @@
+# kind|weight|text. Variables: {name} {race} {class} {level} {zone} {frm} {mob} and what a bot sends.
+# reply_<channel> answers a player (tell, say, group) when the LLM is off or rate limited.
+lfg|3|LFG {level} {class} in {zone}
+lfg|1|lvl {level} {class} lfg, {zone}
+lfg|1|{class} {level} looking for a group in {zone}
+inc|3|inc {mob}
+inc|1|incoming, {mob}
+death|2|ugh, died
+death|1|corpse run time...
+death|1|well that went badly
+thanks|2|thanks for the group
+thanks|1|ty all, gtg
+levelup|2|ding {level}!
+levelup|1|ding!
+reply_tell|3|sorry, busy hunting atm
+reply_tell|2|hey {frm}, cant talk much, fighting
+reply_tell|1|hi, im a {level} {class}, camping here in {zone}
+reply_say|2|hail {frm}
+reply_say|1|hey there
+reply_group|2|k
+reply_group|1|np
+reply|1|hi
