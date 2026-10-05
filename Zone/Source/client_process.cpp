@@ -2649,6 +2649,15 @@ void Client::ProcessOP_CastSpell(APPLAYER* pApp)
 	}
 	else
 	{
+		// A gem cast must be the spell memorized in that gem: the zone took any spell id from any
+		// client, scribed or not, for any class
+		if (castspell->slot >= 8 || pp.spell_memory[castspell->slot] != castspell->spell_id)
+		{
+			EQC::Common::Log(EQCLog::Error, CP_CLIENT, "%s cast spell %d from gem %d, which holds %d: refused", GetName(),
+				castspell->spell_id, castspell->slot, castspell->slot < 8 ? pp.spell_memory[castspell->slot] : -1);
+			EnableSpellBar(0);
+			return;
+		}
 		CastSpell(spells_handler.GetSpellPtr(castspell->spell_id), castspell->target_id, castspell->slot);
 	}
 }
@@ -2688,6 +2697,27 @@ void Client::ProcessOP_MemorizeSpell(APPLAYER* pApp)
 	MoveItem_Struct spellmoveitem; 
 
 	memcpy(&memspell, pApp->pBuffer, sizeof(MemorizeSpell_Struct)); 
+	// The slot indexes the spell book (256) or the gems (8) straight from the packet; a spell goes in a
+	// gem only from the book, and the book only gets what the class can use (GMs excepted)
+	Spell* spell = spells_handler.GetSpellPtr(memspell.spell_id);
+	bool bookHasIt = false;
+	for (int i = 0; i < 256 && memspell.scribing == 1; i++)
+		bookHasIt = bookHasIt || pp.spell_book[i] == memspell.spell_id;
+	const char* refused = 0;
+	if (memspell.scribing == 0 && (memspell.slot >= 256 || pp.inventory[0] == 0xFFFF))
+		refused = "no scroll on the cursor, or a bad book slot";
+	else if ((memspell.scribing == 1 || memspell.scribing == 2) && memspell.slot >= 8)
+		refused = "bad gem";
+	else if (memspell.scribing == 1 && !bookHasIt)
+		refused = "not in the spell book";
+	else if (memspell.scribing != 2 && admin < 100 && (!spell || !spell->CanUseSpell(GetClass(), GetLevel())))
+		refused = "not a spell of this class and level";
+	if (refused)
+	{
+		EQC::Common::Log(EQCLog::Error, CP_CLIENT, "%s memorize spell %d slot %d mode %d refused: %s", GetName(), memspell.spell_id,
+			memspell.slot, memspell.scribing, refused);
+		return;
+	}
 	QueuePacket(pApp); 
 	if(memspell.scribing == 0) 
 	{ 
@@ -2726,6 +2756,8 @@ void Client::ProcessOP_SwapSpell(APPLAYER* pApp){
 	short swapspelltemp; 
 
 	memcpy(&swapspell, pApp->pBuffer, sizeof(SwapSpell_Struct)); 
+	if (swapspell.from_slot >= 256 || swapspell.to_slot >= 256)	// straight from the packet into the book
+		return;
 
 	swapspelltemp = pp.spell_book[swapspell.from_slot]; 
 	pp.spell_book[swapspell.from_slot] = pp.spell_book[swapspell.to_slot]; 
