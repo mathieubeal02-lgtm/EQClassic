@@ -1,0 +1,22 @@
+# Copy to bots.ini (not in git). chatd.py reads [chat].
+[chat]
+# the kill switch: off = templates only
+llm = off
+port = 7780
+model = claude-haiku-4-5
+backend_url = https://api.anthropic.com/v1/messages
+# limits
+calls_per_hour = 60
+per_bot_seconds = 120
+ooc_seconds = 30
+lfg_seconds = 600
+# dollars per day, then templates only
+daily_budget = 1.00
+input_price = 1.0
+output_price = 5.0
+timeout = 8
+max_length = 120
+# comma-separated bot names that never talk
+muted =
+log = logs/chat.log
+# The API key is ANTHROPIC_API_KEY in the environment, never in this file.

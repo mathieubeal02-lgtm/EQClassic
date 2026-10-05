@@ -1,8 +1,8 @@
-# botd: player bots (milestones 1 to 3)
+# botd: player bots (milestones 1 to 4)
 
 Bots that log in like real players and live in the world, as designed in `docs/bots-design.md`:
 headless clients built on `tools/eqbot`, nothing in the servers. Milestone 1 is a fleet that connects
-and walks, milestone 2 bots hunt alone, milestone 3 bots hunt in groups; talking comes next.
+and walks, milestone 2 bots hunt alone, milestone 3 bots hunt in groups, milestone 4 bots talk.
 
 ## Pieces
 
@@ -11,6 +11,8 @@ and walks, milestone 2 bots hunt alone, milestone 3 bots hunt in groups; talking
 | `../eqbot` `walk` | One bot: logs in, enters its zone, walks a list of waypoints back and forth (about 15 units/s, a position every 250 ms, sits and stands at every third point), logs one line per action, logs out cleanly |
 | `../eqbot` `hunt` | One bot hunts alone around the place it logs in (its camp, 800 units): picks the closest small NPC (`a_`/`an_`, level up to its own + 1, nobody on it, no guard), considers it and never attacks one that cons amiable or better, walks to it, auto-attacks, loots every item of the corpse, sits until healed (it only pulls above 90 % HP), flees to the camp under 20 % HP, fights back whatever attacks it, strolls around the camp when nothing is up. Killed: logs, waits 15 s, logs in again, goes back to its corpse and loots it (the zone puts worn items back on), then hunts around its first camp again. A cleric casts Minor Healing on itself under 50 % HP in a fight and under 70 % before resting, and meditates until its mana is back |
 | `../eqbot` `hunt` in a group | `EQBOT_INVITE=Botca,Botcb` makes a hunter the leader: it targets and invites them (again after a death), pulls only when they are near, above 80 % HP and nobody said "oom", takes yellow prey too, and says `assist` on each pull, `sit` after the loot, `follow` when it moves on. `EQBOT_ROLE=member` makes a hunter that never pulls: it joins whoever invites it (a real player too), follows, answers `assist` with `/assist` on the leader (melee, or Frost Bolt from 30 units for a wizard), heals the lowest member under 60 % (cleric), says `oom, medding` and `ready`, obeys `sit`, `follow` and `camp` (stay) |
+| `chatd.py` | The chat service all bots share (milestone 4, `docs/bots-design.md` 7): on 127.0.0.1:7780, a bot asks it for a line (`/line`: lfg, inc, death...) or for an answer to a player who spoke to it (`/reply`: tell, say with its name, group). Templates (`chat/templates.txt`) unless `llm = on` in `bots.ini` and `ANTHROPIC_API_KEY` is set; then the model answers real players only, filtered (length, URLs, `chat/blocklist.txt`, out-of-game talk) and limited (calls per hour, per bot, one bot line on OOC per 30 s, a daily budget). Bots never get an answer to a bot. One log line per decision (`chat=template|llm|filtered|ratelimited|budget`), LLM lines with their prompt hash |
+| `../eqbot` `hunt`, chat | A hunter answers tells, says with its name and group chat through chatd, without waiting on it (an answer later than 10 s is dropped); `EQBOT_LFG=1` makes a lone member post LFG on OOC; a leader says `inc <mob>` on each pull, a bot back from a death says so to its group |
 | `setup-accounts.sh` | Creates the bot accounts `bot_001`... (status 0, never GM) and one character each (`Botaa`, `Botab`...), placed at the first waypoint. `BOTD_FIRST` picks the first index, `EQBOT_CLASS=warrior`, `cleric` or `wizard` makes humans of that class (default: troll shamans, which Qeynos guards kill on sight); casters get their starting spell scribed and memorized (Minor Healing, Frost Bolt), as a player would do with the scroll |
 | `fleet.sh` | Starts N bots (`walk` along a waypoints file, `hunt`, or `group`: the first bot leads the others) 2 s apart (one login at a time), samples the load every 10 s, summarises |
 | `load.py` | CPU (interval, from `/proc`) and RSS of the `zone.exe` processes and of the bots |
@@ -44,6 +46,18 @@ BOTD_FIRST=52 ./fleet.sh 3 group 1800                    # Botbz leads Botca and
 
 To group with them from the real client: target a member (`EQBOT_ROLE=member`, not grouped) and
 `/invite`; it follows you and assists when you say `assist` in `/gsay`.
+
+Chat (milestone 4):
+
+```sh
+python3 test_chatd.py                               # chatd against a stub LLM (no network); also in CI
+cp bots.ini.example bots.ini                        # llm = off: templates only
+./chat-test.sh 54 bot bot Qbottwo                   # in game: LFG on OOC, a tell answered within 5 s
+```
+
+To try the model: `llm = on` in `bots.ini`, `ANTHROPIC_API_KEY` in the environment of `chatd.py`,
+then send a bot a tell from the real client. `curl 127.0.0.1:7780/health` shows the calls of the
+last hour and the money spent today.
 
 A waypoint file from another grid:
 
