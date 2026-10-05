@@ -1465,6 +1465,7 @@ namespace
 		bool campSet;	// the camp is where the first life began: the bot goes back there after a death
 		float campX, campY, campZ;
 		std::set<std::string> emptiedCorpses;	// our own corpses already looted
+		std::vector<std::pair<float, float> > zoneLines;	// where the zone tried to send us elsewhere
 		HuntStats() : kills(0), loots(0), items(0), deaths(0), hitsDealt(0), damageDealt(0), hitsTaken(0), damageTaken(0),
 		              refused(0), recovered(0), equipped(0), assists(0), casts(0), expGained(0), campSet(false), campX(0), campY(0), campZ(0) {}
 	};
@@ -1630,8 +1631,16 @@ namespace
 		const char* names[] = { "Seek", "Consider", "Approach", "Fight", "Loot", "Rest", "Flee", "Dead", "Recover" };
 		float fleeX = 0, fleeY = 0;
 		long recoverSentAt = 0;
+		std::vector<std::pair<float, float> >& zoneLines = hs.zoneLines;
+		auto nearZoneLine = [&](float x, float y) {
+			for (size_t k = 0; k < zoneLines.size(); k++)
+				if (fabsf(zoneLines[k].first - x) < 80 && fabsf(zoneLines[k].second - y) < 80)
+					return true;
+			return false;
+		};
+		std::string recovering;	// the corpse we are going back to
 		bool fledThisFight = false;
-		long lastAssistCall = 0, lastMeleeMsg = 0;
+		long lastAssistCall = 0, lastMeleeMsg = 0, waitSince = 0;
 		unsigned moveTick = 0;
 		int tooFar = 0, cantSee = 0;
 		bool closeIn = false, backOff = false;
@@ -1643,7 +1652,7 @@ namespace
 		std::set<int> attackers;
 		bool sitting = false;
 		int lootedItems = 0, fightHits = 0;
-		uint8_t lastHeading = 0;
+		uint8_t lastHeading = 0, headingOffset = 0;
 		long lastHitDealt = 0;
 		auto setState = [&](State s, const char* why) {
 			if (s == state) return;
@@ -1661,7 +1670,8 @@ namespace
 			// right on top of it, the direction means nothing: keep the last heading
 			if ((tx - meX) * (tx - meX) + (ty - meY) * (ty - meY) > 0.25f)
 				lastHeading = HeadingTowards(meX, meY, tx, ty);
-			u[3] = lastHeading;
+			// standing: plus the turn we are trying, if the zone says we do not face the target
+			u[3] = walking ? lastHeading : (uint8_t)(lastHeading + headingOffset);
 			memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
 			// The zone passes a player's update on only when its deltas change (else every 10 s): a
 			// walking bot flips the lowest delta_y bit, which the zone divides away (delta / 125) before
@@ -1806,6 +1816,30 @@ namespace
 							lastMeleeMsg = NowMs();
 						}
 					}
+					else if (p->opcode == (int16)0x4d21 && p->size >= 44)	// TeleportPC: zone[16], ..., y, x, z at 32
+					{
+						std::string to((const char*)b, strnlen((const char*)b, 16));
+						float ty, tx, tz;
+						memcpy(&ty, b + 32, 4); memcpy(&tx, b + 36, 4); memcpy(&tz, b + 40, 4);
+						if (to == st.zone)
+						{
+							// moved within the zone (a GM summon, a teleport pad)
+							meX = tx; meY = ty; meZ = tz;
+							BotLog(charname, st.zone, "action=Teleported pos=%.0f,%.0f,%.0f", meX, meY, meZ);
+						}
+						else if (zoneLines.empty() || fabsf(zoneLines.back().first - meX) + fabsf(zoneLines.back().second - meY) > 20)
+						{
+							// a zone line: bots do not change zones yet, so step back and keep away from it
+							// (the zone would send this at every update spent in the line)
+							zoneLines.push_back(std::make_pair(meX, meY));
+							BotLog(charname, st.zone, "action=ZoneLine to=%s at=%.0f,%.0f", to.c_str(), meX, meY);
+							float dx = campX - meX, dy = campY - meY, d = sqrtf(dx * dx + dy * dy) + 0.01f;
+							meX += dx / d * 40;
+							meY += dy / d * 40;
+							sendPos(campX, campY, false);
+							if (state == Approach || state == Recover) { skip.insert(target); state = Seek; }
+						}
+					}
 					else if (p->opcode == (int16)0x4020 && p->size >= 60)	// GroupInvite: invited[30], inviter[30]
 					{
 						std::string invited((const char*)b, strnlen((const char*)b, 30)), inviter((const char*)b + 30, strnlen((const char*)b + 30, 30));
@@ -1932,7 +1966,7 @@ namespace
 					{
 						int to = b[0] | (b[1] << 8), from = b[4] | (b[5] << 8);
 						int dmg = b[12] | (b[13] << 8) | (b[14] << 16) | (b[15] << 24);
-						if (from == st.myId && to == target && dmg > 0) { hs.hitsDealt++; hs.damageDealt += dmg; fightHits++; lastHitDealt = NowMs(); }
+						if (from == st.myId && to == target && dmg > 0) { hs.hitsDealt++; hs.damageDealt += dmg; fightHits++; lastHitDealt = NowMs(); headingOffset = 0; }
 						if (to == st.myId && from != st.myId && mobs.count(from))
 						{
 							hs.hitsTaken++;
@@ -1956,6 +1990,12 @@ namespace
 						if (id == st.myId)
 						{
 							hs.deaths++;
+							if (!recovering.empty())
+							{
+								// killed while going back to a corpse: something camps it, give it up
+								BotLog(charname, st.zone, "action=AbandonCorpse corpse=%s", recovering.c_str());
+								hs.emptiedCorpses.insert(recovering);
+							}
 							BotLog(charname, st.zone, "action=Killed by=%s(%d)", mobs.count(killer) ? mobs[killer].name.c_str() : "?", killer);
 							setState(Dead, "killed");
 							died = true;
@@ -2050,6 +2090,7 @@ namespace
 				if (!myCorpses.empty() && !underAttack)
 				{
 					target = myCorpses.begin()->first;
+					recovering = myCorpses[target].name;
 					lootedItems = 0;
 					setState(Recover, "our corpse is here");
 					break;
@@ -2081,7 +2122,11 @@ namespace
 						else if (players[id].hp < 80) why = invitees[k] + "_hurt";
 					}
 					if (why.empty() && !medding.empty()) why = *medding.begin() + "_medding";
-					if (!why.empty() && now - stateSince < 180000)	// 3 minutes at most, then hunt anyway
+					if (why.empty())
+						waitSince = 0;
+					else if (!waitSince)
+						waitSince = now;
+					if (!why.empty() && now - waitSince < 180000)	// 3 minutes at most, then hunt anyway
 					{
 						if (now - lastNoPrey > 30000) { BotLog(charname, st.zone, "action=Wait why=%s", why.c_str()); lastNoPrey = now; }
 						break;
@@ -2094,7 +2139,7 @@ namespace
 					if (!m.alive || m.hp < 100 || skip.count(it->first) || m.level > maxPrey || !IsPreyName(m.name))
 						continue;
 					float fromCamp = sqrtf((m.x - campX) * (m.x - campX) + (m.y - campY) * (m.y - campY));
-					if (fromCamp > campRadius)
+					if (fromCamp > campRadius || nearZoneLine(m.x, m.y))
 						continue;
 					// close to us and to the camp (near the zone-in, guards help against what roams)
 					float d = sqrtf((m.x - meX) * (m.x - meX) + (m.y - meY) * (m.y - meY)) + fromCamp;
@@ -2123,6 +2168,7 @@ namespace
 						float a = (rand() % 360) * 3.14159f / 180, r = 30 + rand() % 120;
 						roamX = campX + r * cosf(a);
 						roamY = campY + r * sinf(a);
+						if (nearZoneLine(roamX, roamY)) { roamX = campX; roamY = campY; }
 						if (now - lastNoPrey > 30000)
 							BotLog(charname, st.zone, "action=NoPrey roam=%.0f,%.0f", roamX, roamY);
 						lastNoPrey = now;
@@ -2159,11 +2205,12 @@ namespace
 				if (state == Fight && now - std::max(stateSince, lastHitDealt) > 30000 && !(member && nukeGem >= 0)) { attack(false); skip.insert(target); setState(Seek, "no hit in 30 s"); break; }
 				if (member && nukeGem >= 0)
 				{
-					// a wizard stays back and nukes
+					// a wizard stays back and nukes, once the tank holds the mob (hurt, or 5 s into the fight)
 					if (walkTo(m.x, m.y, m.z, step, 30))
 					{
 						if (state == Approach) { fightHits = 0; setState(Fight, "in range"); }
-						cast(nukeGem, kFrostBolt, kFrostBoltMana, target, "Frost_Bolt", m.name, "assist");
+						if (m.hp < 95 || now - stateSince > 5000)
+							cast(nukeGem, kFrostBolt, kFrostBoltMana, target, "Frost_Bolt", m.name, "assist");
 					}
 					break;
 				}
@@ -2193,12 +2240,19 @@ namespace
 				}
 				if (backOff)
 				{
-					// the zone says we do not face it (we stand on it, or it moved): step back, face it
+					// the zone says we do not face it. Its position we know may be old (the zone sends
+					// an NPC's moves rarely, a client extrapolates them): turn a quarter more each time,
+					// and step back first if we stand right on it
 					backOff = false;
 					float dx = meX - m.x, dy = meY - m.y, d = sqrtf(dx * dx + dy * dy);
-					if (d < 0.5f) { dx = 1; dy = 0; d = 1; }
-					meX = m.x + dx / d * 3;
-					meY = m.y + dy / d * 3;
+					if (d < 1)
+					{
+						if (d < 0.01f) { dx = 1; dy = 0; d = 1; }
+						meX = m.x + dx / d * 3;
+						meY = m.y + dy / d * 3;
+					}
+					else
+						headingOffset += 64;
 					sendPos(m.x, m.y, false);
 					break;
 				}
@@ -2208,8 +2262,10 @@ namespace
 					z.Send(kClientTarget, t, sizeof(t));
 					attack(true);
 					fightHits = 0;
+					headingOffset = 0;
 					fledThisFight = false;
 					setState(Fight, "in reach");
+					waitSince = 0;
 					if (!members.empty()) { gsay("assist"); lastAssistCall = NowMs(); }
 				}
 				break;
@@ -2267,6 +2323,7 @@ namespace
 			case Recover:
 			{
 				Mobile& c = myCorpses[target];
+				if (nearZoneLine(c.x, c.y)) { hs.emptiedCorpses.insert(c.name); myCorpses.erase(target); recovering.clear(); setState(Seek, "corpse by a zone line"); break; }
 				if (now - stateSince > 120000) { hs.emptiedCorpses.insert(c.name); myCorpses.erase(target); setState(Seek, "corpse out of reach"); break; }
 				if (!walkTo(c.x, c.y, c.z, step, 2))
 					break;
@@ -2279,6 +2336,7 @@ namespace
 						BotLog(charname, st.zone, "action=Recovered corpse=%s items=%d", c.name.c_str(), lootedItems);
 						hs.recovered++;
 						hs.emptiedCorpses.insert(c.name);
+						recovering.clear();
 						myCorpses.erase(target);
 						target = 0;
 						// the zone puts worn items back in their slots; what went to the packs is put on
