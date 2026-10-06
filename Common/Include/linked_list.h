@@ -6,6 +6,7 @@
 //
 // ***************************************************************
 
+#include <cstdio>
 #include <vector>
 using std::vector;
 #include "config.h"
@@ -483,9 +484,10 @@ private:
   LinkedList<TYPE>&   list;
   ListElement<TYPE>*	current_element;
   direction           dir;
+  unsigned long       steps;	// a walk this long means the list loops: see Advance
  
 public:
-  LinkedListIterator(LinkedList<TYPE>& l,direction d = FORWARD) : list(l), dir(d) {};
+  LinkedListIterator(LinkedList<TYPE>& l,direction d = FORWARD) : list(l), dir(d), steps(0) {};
 
   void Advance();
   const TYPE& GetData();
@@ -517,6 +519,15 @@ void LinkedListIterator<TYPE>::Advance()
 {
 	if (current_element == 0)
 	{
+		return;
+	}
+	// No list here holds a million elements: one walked this far has become a loop (an entity
+	// removed from inside another's removal). End the walk and say so, rather than hang the zone.
+	if (++steps > 1000000)
+	{
+		fprintf(stderr, "Error: linked list cycle (entity list corrupted?): walk stopped after %lu steps\n", steps);
+		fflush(stderr);
+		current_element = 0;
 		return;
 	}
 	if (dir == FORWARD)
@@ -662,6 +673,7 @@ void LinkedListIterator<TYPE>::Replace(const TYPE& new_data)
 template<class TYPE>
 void LinkedListIterator<TYPE>::Reset()
 {
+	steps = 0;
 	if (!(&list))
 	{
 	  current_element=0;

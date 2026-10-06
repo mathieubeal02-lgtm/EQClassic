@@ -95,28 +95,36 @@ class Watchdog:
             if 'Unhandled' in chunk:
                 self.emit(zone, 'zone_crash', where=self.backtrace_from_log(chunk) or 'no_backtrace', log=os.path.basename(f))
             for line in chunk.splitlines():
+                if 'linked list cycle' in line:
+                    self.emit(zone, 'list_cycle', log=os.path.basename(f))
+                    continue
                 if WATCH.search(line) and not NOISE.search(line) and 'Unhandled' not in line:
                     self.emit(zone, 'zone_log', text=re.sub(r'\d+', 'N', line.strip())[:120], log=os.path.basename(f))
 
     def winedbg_stack(self, port):
-        """The busiest zone thread's stack, read with winedbg (attach, bt, detach)."""
+        """The zone main thread's stack (the one under ProcessLoop), via winedbg."""
         env = dict(os.environ, WINEPREFIX=os.path.expanduser('~/.wine-eqc'), WINEDEBUG='-all')
+        run = lambda cmds: subprocess.run(['winedbg'], input=cmds, env=env, capture_output=True, text=True, timeout=90).stdout
         try:
             procs = subprocess.run(['winedbg', '--command', 'info proc'], env=env, capture_output=True, text=True, timeout=30).stdout
         except (OSError, subprocess.TimeoutExpired):
             return None
-        wpids = re.findall(r'^\s*([0-9a-f]{8})\s+\d+\s+.*zone\.exe', procs, re.M)
-        best = None
-        for wpid in wpids:
+        best, best_depth = None, -2
+        for wpid in re.findall(r'^\s*([0-9a-f]{8})\s+\d+\s+.*zone\.exe', procs, re.M):
             try:
-                r = subprocess.run(['winedbg'], input='attach 0x%s\ninfo thread\nbt\ndetach\nquit\n' % wpid, env=env,
-                                   capture_output=True, text=True, timeout=60).stdout
+                threads = run('attach 0x%s\ninfo thread\ndetach\nquit\n' % wpid)
+                tids = re.findall(r'^\t([0-9a-f]{8})', threads.split(wpid, 1)[-1].split("'", 1)[-1], re.M)[:8]
+                for tid in tids:
+                    frames = re.findall(r'\d+ 0x[0-9a-f]+ ([A-Za-z_:~<>0-9]+)\+0x', run('attach 0x%s\nbt 0x%s\ndetach\nquit\n' % (wpid, tid)))
+                    frames = [f for f in frames if f not in ('Advance', 'MoreElements', 'GetData')] or frames
+                    # the zone's main loop is the thread that matters (Process, packets, entities)
+                    # (an idle one sleeps right under ProcessLoop; the busy one is deep below it)
+                    depth = frames.index('ProcessLoop') if 'ProcessLoop' in frames else -1
+                    if frames and (best is None or depth > best_depth):
+                        best, best_depth = frames, depth
             except (OSError, subprocess.TimeoutExpired):
                 continue
-            frames = re.findall(r'\d+ 0x[0-9a-f]+ ([A-Za-z_:~<>0-9]+)\+0x', r)
-            if frames and (best is None or len(frames) > len(best)):
-                best = frames
-        return ' < '.join(best[:5]) if best else None
+        return ' < '.join(best[:6]) if best else None
 
     def tick(self):
         now = zones()
