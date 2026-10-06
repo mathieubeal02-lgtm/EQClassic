@@ -1,0 +1,3 @@
+# Signatures from bugreport.py already looked at (one per line): they go to "Already known".
+# zone_line: bots do not change zones yet (milestone 6)
+zone_line to=qeynos2
