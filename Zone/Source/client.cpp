@@ -500,27 +500,13 @@ void Client::QueuePacket(APPLAYER* app, bool ack_req)
 	*/
 
 
-	while(packet_manager.IsTooMuchPending())
-	{ 
-		// Check if the Yeahlights Break out Counter is greather than 100
-		if( breakOutCounter > 100) // YeahLight's Breakout Counter Check
-		{
-			break; // if it is, break out of the loop
-		}
-
-		if(client_state != CLIENT_DISCONNECTED)
-		{
-			// Merkur experimental testcode
-			MPacketManager.lock();				// will this slow down the whole zone if someone has lag? it should and seems not, but it needs to be tested out :)
-			packet_manager.CheckTimers();
-			MPacketManager.unlock();
-			
-			breakOutCounter++; // YeahLight's breakout Counter Check - Increase it by 1
-			
-			Sleep(5);
-		}
-	}
-
+	// It waited here while the client's outbound queue was over its threshold: up to 100 x 5 ms per packet
+	// for a slow client (every packet to it stalled the whole zone), and forever, at full CPU, for a
+	// disconnected one (the loop then neither slept nor counted). A client that had just dropped and was
+	// sent a neighbour's position hung the zone (seen twice with the bots: QueuePacket < IsTooMuchPending,
+	// under QueueCloseClients). Nothing waits now: a disconnected client gets nothing, a slow one queues.
+	if (client_state == CLIENT_DISCONNECTED)
+		return;
 
 	ack_req = true;	// It's broke right now, dont delete this line till fix it. =P
 	if (app != 0)
