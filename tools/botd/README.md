@@ -13,6 +13,8 @@ and walks, milestone 2 bots hunt alone, milestone 3 bots hunt in groups, milesto
 | `../eqbot` `hunt` in a group | `EQBOT_INVITE=Botca,Botcb` makes a hunter the leader: it targets and invites them (again after a death), pulls only when they are near, above 80 % HP and nobody said "oom", takes yellow prey too, and says `assist` on each pull, `sit` after the loot, `follow` when it moves on. `EQBOT_ROLE=member` makes a hunter that never pulls: it joins whoever invites it (a real player too), follows, answers `assist` with `/assist` on the leader (melee, or Frost Bolt from 30 units for a wizard), heals the lowest member under 60 % (cleric), says `oom, medding` and `ready`, obeys `sit`, `follow` and `camp` (stay) |
 | `chatd.py` | The chat service all bots share (milestone 4, `docs/bots-design.md` 7): on 127.0.0.1:7780, a bot asks it for a line (`/line`: lfg, inc, death...) or for an answer to a player who spoke to it (`/reply`: tell, say with its name, group). Templates (`chat/templates.txt`) unless `llm = on` in `bots.ini` and `ANTHROPIC_API_KEY` is set; then the model answers real players only, filtered (length, URLs, `chat/blocklist.txt`, out-of-game talk) and limited (calls per hour, per bot, one bot line on OOC per 30 s, a daily budget). Bots never get an answer to a bot. One log line per decision (`chat=template|llm|filtered|ratelimited|budget`), LLM lines with their prompt hash |
 | `../eqbot` `hunt`, chat | A hunter answers tells, says with its name and group chat through chatd, without waiting on it (an answer later than 10 s is dropped); `EQBOT_LFG=1` makes a lone member post LFG on OOC; a leader says `inc <mob>` on each pull, a bot back from a death says so to its group |
+| `../eqbot` `travel` | A bot changes zones (milestone 6): it walks to the next zone's line (`paths/zonelines.tsv`), the zone sends `OP_TeleportPC`, the bot asks `OP_ZoneChange`, the zone confirms with the new zone's name, the bot goes back to World with the ticket of its login (no new login, as the real client) and enters the world again into the new zone. Each change is logged (`action=Zoned from= to= ms=`) |
+| `zonelines.sh` | Writes `paths/zonelines.tsv` from `zone_points`: a point and its range, or an X/Y line crossed past a trigger within bounds (the zone's `ScanForZoneLines` rules) |
 | `setup-accounts.sh` | Creates the bot accounts `bot_001`... (status 0, never GM) and one character each (`Botaa`, `Botab`...), placed at the first waypoint. `BOTD_FIRST` picks the first index, `EQBOT_CLASS=warrior`, `cleric` or `wizard` makes humans of that class (default: troll shamans, which Qeynos guards kill on sight); casters get their starting spell scribed and memorized (Minor Healing, Frost Bolt), as a player would do with the scroll |
 | `fleet.sh` | Starts N bots (`walk` along a waypoints file, `hunt`, or `group`: the first bot leads the others) 2 s apart (one login at a time), samples the load every 10 s, summarises |
 | `load.py` | CPU (interval, from `/proc`) and RSS of the `zone.exe` processes and of the bots |
@@ -58,6 +60,15 @@ cp bots.ini.example bots.ini                        # llm = off: templates only
 To try the model: `llm = on` in `bots.ini`, `ANTHROPIC_API_KEY` in the environment of `chatd.py`,
 then send a bot a tell from the real client. `curl 127.0.0.1:7780/health` shows the calls of the
 last hour and the money spent today.
+
+Zoning (milestone 6):
+
+```sh
+./travel-test.sh          # North Qeynos -> Qeynos Hills -> Blackburrow -> Qeynos Hills -> North Qeynos
+```
+
+Bots walk straight to a zone line: the zone takes a client's positions as they come (no collision
+check), so walls are no obstacle for them.
 
 ## Bug hunting
 
