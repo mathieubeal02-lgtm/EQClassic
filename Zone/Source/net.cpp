@@ -1,4 +1,5 @@
 //#include "quests.h"
+#include <vector>
 
 #include <iostream>
 #include <cstring>
@@ -57,6 +58,12 @@ void Shutdown();
 void LoadSPDat();
 
 Mutex MNetLoop;
+// New clients, from the net loop (main thread) to the process loop. The process loop walks and changes
+// entity_list without MNetLoop; the net loop inserted new clients into it at the same time, and a
+// client arriving while an entity was being removed could leave the list looping (a zone found at full
+// CPU in an entity walk). Now only the process loop touches entity_list: it takes them from here.
+Mutex MNewClients;
+std::vector<Client*> newClients;
 
 
 
@@ -173,8 +180,7 @@ int main(int argc, char** argv)
 		}
 		if (InterserverTimer.Check()) {
 			InterserverTimer.Start();
-			Database::Instance()->PingMySQL();
-			entity_list.UpdateWho();
+			Database::Instance()->PingMySQL();	// (the who list walks entity_list: the process loop does it)
 		}
 		MNetLoop.unlock();
 		Sleep(1);
@@ -297,7 +303,9 @@ void NetConnection::ListenNewClients()
 				EQC::Common::PrintF(CP_CLIENT, "New client from %s:%i\n", inet_ntoa(in), ntohs(port));
 				client = new Client(in.s_addr, port, listening_socket);
 				client->ReceiveData(buffer, status);
-				entity_list.AddClient(client);
+				MNewClients.lock();
+				newClients.push_back(client);	// into entity_list by the process loop
+				MNewClients.unlock();
 				client_list.Add(client);
 				numclients++;
 			}
@@ -381,7 +389,19 @@ void *ProcessLoop(void *tmp) {
 	srand(time(NULL));
 	bool worldwasconnected = worldserver.Connected();
 	ProcessLoopRunning = true;
+	Timer whoTimer(INTERSERVER_TIMER);
 	while(RunLoops) {
+		// clients the net loop accepted since the last pass
+		MNewClients.lock();
+		std::vector<Client*> arrived;
+		arrived.swap(newClients);
+		MNewClients.unlock();
+		for (size_t i = 0; i < arrived.size(); i++)
+			entity_list.AddClient(arrived[i]);
+		if (whoTimer.Check()) {
+			whoTimer.Start();
+			entity_list.UpdateWho();
+		}
 		if (worldserver.Connected()) {
 			worldserver.Process();
 			worldwasconnected = true;
