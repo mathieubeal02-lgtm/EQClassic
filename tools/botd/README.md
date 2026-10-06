@@ -59,6 +59,40 @@ To try the model: `llm = on` in `bots.ini`, `ANTHROPIC_API_KEY` in the environme
 then send a bot a tell from the real client. `curl 127.0.0.1:7780/health` shows the calls of the
 last hour and the money spent today.
 
+## Bug hunting
+
+The bots also report what a player would find wrong. `eqbot hunt` writes `action=Anomaly kind=...`
+lines (at most one per kind and bot per minute, with the repeats it stood for):
+
+| kind | when |
+|---|---|
+| `no_profile` | the zone took the bot in and never sent its profile |
+| `zone_silent` | no packet from the zone for 30 s |
+| `bad_spawn` | a spawn with a size outside -1..100, a level 0 or over 100 NPC, an absurd position |
+| `npc_data` | an NPC sent with size -1 (1339 `npc_types` rows: probably the import's "race default") |
+| `exp_missing` | the bot's own kill of a non-green NPC gave no experience within 5 s |
+| `consider_timeout` | `/consider` got no answer |
+| `no_hit` | 30 s of melee without a hit (with the zone's "too far" / "can't see" counts) |
+| `cast_refused` | five refused spells in a row |
+| `unreachable` | a target not reached in 60 s (pathing) |
+| `zone_line` | the zone tried to send the bot through a zone line (bots do not zone yet) |
+| `login_refused` | three refused logins in a row |
+| `death_loop` | three deaths in 10 minutes |
+
+`watchdog.py` adds the server's side every 10 s: `zone_crash` (with the first frames of the backtrace
+Wine prints, named from `zone.pdb`), `zone_hang` (a zone above 90 % of a core for 30 s, with a
+`winedbg` stack), `zone_gone`, and `zone_log` (zone log lines about errors, refusals, wrong packet
+sizes). It never restarts or kills anything.
+
+`bugreport.py <run dir> [--known known-issues.txt]` groups all of it by kind and signature (numbers and
+spawn suffixes left out), ranks by severity and count, keeps three sample lines per group, and writes
+`report.md`; signatures listed in `known-issues.txt` go to "Already known".
+
+```sh
+./night.sh 6          # 6 hours: 16 troll shamans alone in Innothule, a group in the Qeynos Hills
+                      # -> logs/night-<date>/report.md
+```
+
 A waypoint file from another grid:
 
 ```sh

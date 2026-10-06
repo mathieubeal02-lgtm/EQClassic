@@ -1454,6 +1454,37 @@ namespace
 	}
 
 
+	// ---- sensors: what a player would find wrong, one line each (tools/botd/bugreport.py groups them) ----
+	// action=Anomaly kind=<kind> ...; the same kind from the same bot at most once a minute, with the
+	// number of repeats it stood for.
+	void Anomaly(const std::string& bot, const std::string& zone, const char* kind, const char* fmt, ...)
+	{
+		static std::map<std::string, std::pair<long, int> > last;	// kind -> (time, repeats since)
+		std::pair<long, int>& l = last[kind];
+		long now = NowMs();
+		if (l.first && now - l.first < 60000) { l.second++; return; }
+		char detail[400];
+		va_list ap;
+		va_start(ap, fmt);
+		vsnprintf(detail, sizeof(detail), fmt, ap);
+		va_end(ap);
+		BotLog(bot, zone, "action=Anomaly kind=%s %s repeats=%d", kind, detail, l.second);
+		l = std::make_pair(now, 0);
+	}
+
+	// A spawn the client could not make sense of (a corpse 1e22 big took every click)
+	void CheckSpawn(const std::string& bot, const std::string& zone, const SpawnInfo& si)
+	{
+		if (!(si.size >= -1 && si.size <= 100))
+			Anomaly(bot, zone, "bad_spawn", "spawn=%s(%d) why=size size=%g", si.name.c_str(), si.id, si.size);
+		else if (si.size < 0)	// 1339 npc_types rows hold -1 (the import's "race default"?): data to look at
+			Anomaly(bot, zone, "npc_data", "spawn=%s(%d) why=negative_size size=%g", si.name.c_str(), si.id, si.size);
+		else if (si.npc == 1 && (si.level == 0 || si.level > 100))
+			Anomaly(bot, zone, "bad_spawn", "spawn=%s(%d) why=level level=%d", si.name.c_str(), si.id, si.level);
+		else if (fabsf(si.x) > 30000 || fabsf(si.y) > 30000 || si.name.empty())
+			Anomaly(bot, zone, "bad_spawn", "spawn=%s(%d) why=position pos=%.0f,%.0f", si.name.c_str(), si.id, si.x, si.y);
+	}
+
 	// ---- chat (milestone 4): the bots ask tools/botd/chatd.py for their words ----
 	// One request at a time per bot, on its own thread: the game loop never waits for it, and an
 	// answer older than 10 s is dropped. CHATD_PORT (default 7780) on 127.0.0.1.
@@ -1766,9 +1797,12 @@ namespace
 				if (it->second.name == si.name) { players.erase(it); break; }	// logged in again: a new id
 			players[si.id] = Mobile{ si.name, si.level, si.x, si.y, si.z, 100, true };
 		};
+		if (pp.empty())
+			Anomaly(charname, st.zone, "no_profile", "why=zone_sent_no_player_profile");
 		for (size_t i = 0; i < spawns.size(); i++)
 		{
 			const SpawnInfo& si = spawns[i];
+			CheckSpawn(charname, st.zone, si);
 			if (si.npc == 1)
 				mobs[si.id] = Mobile{ si.name, si.level, si.x, si.y, si.z, 100, true };
 			else if (si.name.compare(0, charname.size() + 2, charname + "'s") == 0 && !hs.emptiedCorpses.count(si.name))
@@ -1820,6 +1854,10 @@ namespace
 		std::string recovering;	// the corpse we are going back to
 		bool fledThisFight = false;
 		long lastAssistCall = 0, lastMeleeMsg = 0, waitSince = 0;
+		int castRefusals = 0;
+		long expectExpBy = 0, lastPacket = NowMs();	// a kill that should give experience; the zone's last word
+		std::string expectExpFrom;
+		int expectExpLevel = 0;
 		bool helpPending = false;	// leader: asked the zone what a member in trouble fights
 		unsigned moveTick = 0;
 		int tooFar = 0, cantSee = 0;
@@ -1952,6 +1990,7 @@ namespace
 			while (NowMs() < tickEnd)
 			{
 				std::vector<Packet*> got = z.Poll((int)(tickEnd - NowMs()));
+				if (!got.empty()) lastPacket = NowMs();
 				for (size_t i = 0; i < got.size(); i++)
 				{
 					const Packet* p = got[i];
@@ -1985,6 +2024,7 @@ namespace
 						for (size_t k = 0; k < fresh.size(); k++)
 						{
 							const SpawnInfo& si = fresh[k];
+							CheckSpawn(charname, st.zone, si);
 							if (si.npc != 1)
 							{
 								addPlayer(si);
@@ -2019,6 +2059,8 @@ namespace
 						bool range = std::string((const char*)b + 4, strnlen((const char*)b + 4, p->size - 4)).find("range") != std::string::npos;
 						castUntil = NowMs() + 8000;
 						BotLog(charname, st.zone, "action=CastRefused why=%s", range ? "out_of_range" : "mana");
+						if (++castRefusals >= 5)
+							Anomaly(charname, st.zone, "cast_refused", "why=%s in_a_row=%d", range ? "out_of_range" : "mana", castRefusals);
 					}
 					else if (p->opcode == kSpecialMesg && p->size > 4 && (state == Fight || state == Approach))
 					{
@@ -2050,6 +2092,7 @@ namespace
 							// (the zone would send this at every update spent in the line)
 							zoneLines.push_back(std::make_pair(meX, meY));
 							BotLog(charname, st.zone, "action=ZoneLine to=%s at=%.0f,%.0f", to.c_str(), meX, meY);
+							Anomaly(charname, st.zone, "zone_line", "to=%s at=%.0f,%.0f", to.c_str(), meX, meY);
 							float dx = campX - meX, dy = campY - meY, d = sqrtf(dx * dx + dy * dy) + 0.01f;
 							meX += dx / d * 40;
 							meY += dy / d * 40;
@@ -2197,6 +2240,7 @@ namespace
 					else if (p->opcode == (int16)0x9921 && p->size >= 4)	// ExpUpdate: uint32 exp
 					{
 						long e = (long)(b[0] | (b[1] << 8) | (b[2] << 16) | ((unsigned long)b[3] << 24));
+						expectExpBy = 0;
 						if (myExp >= 0 && e != myExp)
 						{
 							hs.expGained += e - myExp;
@@ -2276,6 +2320,13 @@ namespace
 							else if (id == target && state != Dead)
 							{
 								hs.kills++;
+								// ours (the death names us) and not green: experience must follow
+								if (killer == st.myId && mobs[id].level >= myLevel - 2 && myLevel < 50)
+								{
+									expectExpBy = NowMs() + 5000;
+									expectExpFrom = mobs[id].name;
+									expectExpLevel = mobs[id].level;
+								}
 								BotLog(charname, st.zone, "action=Kill target=%s(%d) level=%d hits=%d hp=%d%%", mobs[id].name.c_str(), id, mobs[id].level, fightHits, myHp);
 								attack(false);
 								uint32_t corpse = target;	// an NPC's corpse keeps its id
@@ -2294,6 +2345,16 @@ namespace
 			float step = speed * (now - lastTick) / 1000.0f;
 			lastTick = now;
 			bool underAttack = now - lastHitTaken < 6000;
+			if (expectExpBy && now > expectExpBy)
+			{
+				Anomaly(charname, st.zone, "exp_missing", "kill=%s level=%d my_level=%d grouped=%d", expectExpFrom.c_str(), expectExpLevel, myLevel, grouped ? 1 : 0);
+				expectExpBy = 0;
+			}
+			if (now - lastPacket > 30000 && state != Dead)
+			{
+				Anomaly(charname, st.zone, "zone_silent", "seconds=%ld state=%s", (now - lastPacket) / 1000, names[state]);
+				lastPacket = now;
+			}
 			// chat: an answer from chatd goes out where it was asked for
 			ChatLine said;
 			if (chat.Take(said) && !said.text.empty() && state != Dead)
@@ -2481,6 +2542,7 @@ namespace
 				else if (now - stateSince > 3000)
 				{
 					skip.insert(target);
+					Anomaly(charname, st.zone, "consider_timeout", "target=%s(%d) level=%d", mobs[target].name.c_str(), target, mobs[target].level);
 					setState(Seek, "no consider answer");
 				}
 				break;
@@ -2489,8 +2551,17 @@ namespace
 			{
 				if (!mobs.count(target) || !mobs[target].alive) { attack(false); setState(Seek, "prey gone"); break; }
 				Mobile& m = mobs[target];
-				if (state == Approach && now - stateSince > 60000) { skip.insert(target); setState(Seek, "too long to reach"); break; }
-				if (state == Fight && now - std::max(stateSince, lastHitDealt) > 30000 && !(member && nukeGem >= 0)) { attack(false); skip.insert(target); setState(Seek, "no hit in 30 s"); break; }
+				if (state == Approach && now - stateSince > 60000)
+				{
+					Anomaly(charname, st.zone, "unreachable", "target=%s(%d) at=%.0f,%.0f me=%.0f,%.0f", m.name.c_str(), target, m.x, m.y, meX, meY);
+					skip.insert(target); setState(Seek, "too long to reach"); break;
+				}
+				if (state == Fight && now - std::max(stateSince, lastHitDealt) > 30000 && !(member && nukeGem >= 0))
+				{
+					Anomaly(charname, st.zone, "no_hit", "target=%s(%d) level=%d dist=%.1f too_far=%d cant_see=%d",
+					        m.name.c_str(), target, m.level, sqrtf((m.x - meX) * (m.x - meX) + (m.y - meY) * (m.y - meY)), tooFar, cantSee);
+					attack(false); skip.insert(target); setState(Seek, "no hit in 30 s"); break;
+				}
 				if (member && nukeGem >= 0)
 				{
 					// a wizard stays back and nukes, once the tank holds the mob (hurt, or 5 s into the fight)
@@ -2666,6 +2737,7 @@ namespace
 		long start = NowMs(), deadline = start + seconds * 1000L;
 		HuntStats hs;
 		int lives = 0;
+		std::vector<long> deaths;
 		while (NowMs() < deadline)
 		{
 			bool died = false, relog = false, in = false;
@@ -2675,6 +2747,8 @@ namespace
 				if (attempt)
 				{
 					BotLog(charname, "-", "action=LoginRetry attempt=%d wait=15", attempt);
+					if (attempt >= 3)
+						Anomaly(charname, "-", "login_refused", "attempts=%d", attempt);
 					long until = NowMs() + 15000;
 					while (NowMs() < until && NowMs() < deadline)
 					{
@@ -2694,6 +2768,10 @@ namespace
 			}
 			if (!died)
 				break;
+			deaths.push_back(NowMs());
+			while (!deaths.empty() && NowMs() - deaths.front() > 600000) deaths.erase(deaths.begin());
+			if (deaths.size() >= 3)
+				Anomaly(charname, "-", "death_loop", "deaths_in_10_min=%d", (int)deaths.size());
 			// the zone moves the dead to their bind point; a new login finds them there
 			BotLog(charname, "-", "action=Respawn wait=15");
 			long until = NowMs() + 15000;
