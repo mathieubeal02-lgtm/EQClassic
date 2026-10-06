@@ -411,7 +411,7 @@ struct Spawn_Struct
 /*068*/ sint16	cur_hp;					// Comment: Current hp's of Spawn
 /*070*/ uint16	GuildID;				// Comment: GuildID - previously Current hp's of Spawn
 /*072*/ int8	race;					// Comment: Race
-/*073*/ int8	NPC;					// Comment: NPC type: 0=Player, 1=NPC, 2=Player Corpse, 3=Monster Corpse, 4=???, 5=Unknown Spawn,10=Self
+/*073*/ int8	NPC;					// Comment: 0=Player, 1=NPC, 2=NPC corpse, 3=player corpse (what Corpse::FillSpawnStruct sends and the client takes, as EQMacEmu does; the common "2=Player Corpse" label is wrong)
 /*074*/ int8	class_;                 // Comment: Class
 /*075*/ int8	gender;                 // Comment: Gender Flag, 0 = Male, 1 = Female, 2 = Other
 /*076*/ int8	level;                  // Comment: Level of spawn (might be one sint8)
