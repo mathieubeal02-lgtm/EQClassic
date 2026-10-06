@@ -88,6 +88,7 @@ public:
 
 	void	SetTakenID(int16 id) { takenIDs[id] = 1; }
 	void	FreeTakenID(int16 id) { takenIDs[id] = 0; }
+	bool	IDHeldByAnother(int16 id, Entity* except);
 
 	void	PetFaceClosestEntity(NPC* pet);
 

@@ -47,7 +47,10 @@ Entity::Entity()
 Entity::~Entity()
 {
 	//Yeahlight: Free the ID number from the entity taken list
-	entity_list.FreeTakenID(this->GetID());
+	// ... unless another entity still holds it: a dead player's corpse takes the player's id, and the
+	// player's leaving freed it under the corpse, so a new spawn got the corpse's id (two entities, one id)
+	if (this->GetID() && !entity_list.IDHeldByAnother(this->GetID(), this))
+		entity_list.FreeTakenID(this->GetID());
 }
 
 void Entity::SetID(int16 set_id)

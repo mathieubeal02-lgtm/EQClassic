@@ -199,6 +199,15 @@ Mob* EntityList::GetMob(const char* name) {
 	}
 	return 0;
 }
+bool EntityList::IDHeldByAnother(int16 id, Entity* except)
+{
+	LinkedListIterator<Entity*> iterator(list);
+	for (iterator.Reset(); iterator.MoreElements(); iterator.Advance())
+		if (iterator.GetData() && iterator.GetData() != except && iterator.GetData()->GetID() == id)
+			return true;
+	return false;
+}
+
 int16 EntityList::GetFreeID()
 {
 	//Yeahlight: Iterate through the possible list of IDs

@@ -21,6 +21,7 @@ LINE = re.compile(r'^t=(\S+) bot=(\S+) zone=(\S+) action=(\S+)(.*)$')
 KINDS = {
     'zone_crash':       (1, 'A zone process crashed', ['where']),
     'zone_hang':        (1, 'A zone process spins at full CPU', ['stack']),
+    'list_cycle':       (1, 'The entity list turned into a loop (the zone would have hung)', []),
     'zone_gone':        (2, 'A zone process went away', []),
     'no_profile':       (1, 'A zone took a player in and never sent its profile', []),
     'bad_spawn':        (2, 'A spawn the client cannot make sense of', ['why', 'spawn']),
