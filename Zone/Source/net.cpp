@@ -382,6 +382,12 @@ void *ProcessLoop(void *tmp) {
 	bool worldwasconnected = worldserver.Connected();
 	ProcessLoopRunning = true;
 	while(RunLoops) {
+		// The main thread (net loop) takes new clients in, inserting them into entity_list, and reads
+		// their packets, under MNetLoop. This thread walked and changed the same list without it: a
+		// client arriving while an entity was being removed could leave the list looping (zones at
+		// full CPU, hung in an entity walk). Both hold MNetLoop now; each lets go during its 1 ms sleep.
+		// (A CRITICAL_SECTION is reentrant: Zone::Shutdown can take it again from here.)
+		MNetLoop.lock();
 		if (worldserver.Connected()) {
 			worldserver.Process();
 			worldwasconnected = true;
@@ -400,6 +406,7 @@ void *ProcessLoop(void *tmp) {
 				Zone::Shutdown();
 			}
 		}
+		MNetLoop.unlock();
 		Sleep(1);
 	}
 	ProcessLoopRunning = false;
