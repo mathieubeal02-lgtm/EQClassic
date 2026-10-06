@@ -692,7 +692,7 @@ namespace
 		return Inflate(d, 20000);
 	}
 
-	struct SpawnInfo { int id; std::string name; int npc; int level; int cls; float x, y, z; };
+	struct SpawnInfo { int id; std::string name; int npc; int level; int cls; float x, y, z, size; };
 
 	// NewSpawn_Struct[] of the zone's spawn packets (EncryptZoneSpawnPacket + DeflatePacket):
 	// 168 bytes each, the Spawn_Struct after a 4-byte placeholder.
@@ -704,6 +704,7 @@ namespace
 		si.npc = sp[73];
 		si.level = sp[76];
 		si.cls = sp[74];
+		memcpy(&si.size, sp, 4);	// Spawn_Struct: float size at 0 (0: the race's)
 		si.y = (short)(sp[51] | (sp[52] << 8));
 		si.x = (short)(sp[53] | (sp[54] << 8));
 		// z on the wire: NPCs x10, players x1000 (Mob::FillSpawnStruct); kept in real units here
@@ -1771,7 +1772,10 @@ namespace
 			if (si.npc == 1)
 				mobs[si.id] = Mobile{ si.name, si.level, si.x, si.y, si.z, 100, true };
 			else if (si.name.compare(0, charname.size() + 2, charname + "'s") == 0 && !hs.emptiedCorpses.count(si.name))
+			{
 				myCorpses[si.id] = Mobile{ si.name, si.level, si.x, si.y, si.z, 100, true };
+				BotLog(charname, "-", "action=SeeCorpse name=%s size=%g npc=%d", si.name.c_str(), si.size, si.npc);
+			}
 			else
 				addPlayer(si);
 		}

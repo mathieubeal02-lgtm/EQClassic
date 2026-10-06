@@ -52,7 +52,9 @@ Corpse* Corpse::LoadFromDBData(int32 in_dbid, int32 in_charid, char* in_charname
 		memcpy(tmp, &dbpc->items[i], sizeof(ServerLootItem_Struct));
 		itemlist->Append(tmp);
 	}
-	Corpse* pc = new Corpse(in_dbid, in_charid, in_charname, itemlist, dbpc->copper, dbpc->silver, dbpc->gold, dbpc->plat, in_x, in_y, in_z, in_heading, dbpc->size, dbpc->gender, dbpc->race, dbpc->class_, dbpc->deity, dbpc->level, dbpc->texture, dbpc->helmtexture, rezed, in_rotTime, in_accountid, in_rezExp);
+	// corpses saved before the size was written hold garbage there: 0 lets the client use the race's size
+	float corpseSize = dbpc->size >= 0 && dbpc->size <= 20 ? dbpc->size : 0;
+	Corpse* pc = new Corpse(in_dbid, in_charid, in_charname, itemlist, dbpc->copper, dbpc->silver, dbpc->gold, dbpc->plat, in_x, in_y, in_z, in_heading, corpseSize, dbpc->gender, dbpc->race, dbpc->class_, dbpc->deity, dbpc->level, dbpc->texture, dbpc->helmtexture, rezed, in_rotTime, in_accountid, in_rezExp);
 	//Tazadar No rez for u if you dont have anything?? :)
 	//Yeahlight: TODO: This is crashing the zone; is this really needed?
 	if(false)//pc->IsEmpty() && pc->IsRezzed()) 
@@ -274,7 +276,11 @@ bool Corpse::Save()
 	int32 tmpsize = sizeof(DBPlayerCorpse_Struct) + (tmp * sizeof(ServerLootItem_Struct));
 	int32 rotTime = 0;
 	DBPlayerCorpse_Struct* dbpc = (DBPlayerCorpse_Struct*) new uchar[tmpsize];
+	memset(dbpc, 0, tmpsize);
 	dbpc->itemcount = tmp;
+	// size was never written: the corpse came back from the database with whatever the heap held
+	// (1e22 seen), a hit box covering the zone that took every click and Tab
+	dbpc->size = this->size;
 	dbpc->copper = this->copper;
 	dbpc->silver = this->silver;
 	dbpc->gold = this->gold;
