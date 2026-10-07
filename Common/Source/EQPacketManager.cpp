@@ -39,6 +39,7 @@ namespace EQC
 				pm_state = PM_ACTIVE;
 				dwLastCACK = 0;
 				dwFragSeq  = 0;
+				seq_started = false;
 			    
 				no_ack_received_timer = new Timer(500);
 				no_ack_sent_timer = new Timer(500);
@@ -488,8 +489,9 @@ namespace EQC
 				{
 					EQC::Common::Network::EQPacket *pack = new EQC::Common::Network::EQPacket;
 
-					if(!SACK.dwGSQ)
+					if(!seq_started)
 					{
+						seq_started = true;
 			//          pack->HDR.a5_SEQStart   = 1; // Agz: hmmm, yes commenting this makes the client connect to zone
 													 //      server work and the world server doent seem to care either way
 						SACK.dwARQ              = rand()%0x3FFF;//Current request ack
@@ -535,8 +537,9 @@ namespace EQC
 						EQC::Common::Network::EQPacket *pack = new EQC::Common::Network::EQPacket;
 						MySendPacketStruct *p = new MySendPacketStruct;
 			    
-						if(!SACK.dwGSQ)
+						if(!seq_started)
 						{
+							seq_started = true;
 							pack->HDR.a5_SEQStart   = 1;
 							SACK.dwARQ              = rand()%0x3FFF;//Current request ack
 							SACK.dbASQ_high         = 1;            //Current sequence number

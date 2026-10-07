@@ -23,7 +23,7 @@ namespace EqBot
 		return tv.tv_sec * 1000L + tv.tv_usec / 1000;
 	}
 
-	EqSession::EqSession() : sock(-1), manager(0)
+	EqSession::EqSession() : sock(-1), manager(0), recentNext(0)
 	{
 		memset(peer_addr, 0, sizeof(peer_addr));
 	}
@@ -52,6 +52,9 @@ namespace EqBot
 			return false;
 		peer_name = host + ":" + portstr;
 		manager = new EQPacketManager();
+		// EQBOT_NETDEBUG=1: the protocol layer prints buffered packets, resends and drops
+		if (getenv("EQBOT_NETDEBUG"))
+			manager->SetDebugLevel((int8)atoi(getenv("EQBOT_NETDEBUG")));
 		return true;
 	}
 
@@ -79,6 +82,7 @@ namespace EqBot
 		while ((p = manager->SendQueue.pop()))
 		{
 			sendto(sock, p->buffer, p->size, 0, (sockaddr*)peer_addr, sizeof(sockaddr_in));
+			Remember(false, p->buffer, p->size);
 			delete[] p->buffer;
 			delete p;
 		}
@@ -131,7 +135,10 @@ namespace EqBot
 				// 8-byte datagrams are the login server's keep-alives (flags, sequence, CRC): nothing
 				// to ack or deliver, and EQPacket rejects anything under 10 bytes loudly.
 				if (n >= 10)
+				{
+					Remember(true, buf, (size_t)n);
 					manager->ParceEQPacket((int16)n, buf);
+				}
 			}
 		}
 	}
@@ -156,6 +163,35 @@ namespace EqBot
 				return found;
 		}
 		return 0;
+	}
+
+	void EqSession::Remember(bool in, const unsigned char* data, size_t size)
+	{
+		if (!getenv("EQBOT_NETDEBUG"))
+			return;
+		Seen s;
+		s.ms = NowMs();
+		s.in = in;
+		s.size = (unsigned short)size;
+		memset(s.head, 0, sizeof(s.head));
+		memcpy(s.head, data, size < sizeof(s.head) ? size : sizeof(s.head));
+		if (recent.size() < 6000)
+			recent.push_back(s);
+		else
+			recent[recentNext] = s;
+		recentNext = (recentNext + 1) % 6000;
+	}
+
+	void EqSession::DumpRecent() const
+	{
+		size_t n = recent.size();
+		for (size_t i = 0; i < n; i++)
+		{
+			const Seen& s = recent[(recentNext + i) % n];
+			printf("net t=%ld.%03ld %s %4d %s\n", s.ms / 1000, s.ms % 1000, s.in ? "in " : "out", (int)s.size,
+				HexDump(s.head, s.size < 24 ? s.size : 24, 24).c_str());
+		}
+		fflush(stdout);
 	}
 
 	std::string HexDump(const unsigned char* data, size_t size, size_t max)

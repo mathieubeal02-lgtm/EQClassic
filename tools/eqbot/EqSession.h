@@ -38,14 +38,26 @@ namespace EqBot
 		Packet* WaitFor(int16 opcode, int ms, std::vector<Packet*>* others = 0);
 
 		const std::string& Peer() const { return peer_name; }
+		// Our packets the peer has not acked yet, and whether our side of the protocol still runs
+		// (it gives up, like the servers, after 15 resends of one packet).
+		int Pending() const { return manager ? manager->PacketsPending() : 0; }
+		bool Active() const { return manager && manager->CheckActive(); }
+
+		// The last datagrams in and out (time, direction, first bytes: the protocol header), printed
+		// when the session ends without us closing it, to see whose acks went missing.
+		void DumpRecent() const;
 
 	private:
 		void Flush();
+		void Remember(bool in, const unsigned char* data, size_t size);
 
 		int sock;
 		std::string peer_name;
 		unsigned char peer_addr[16];	// sockaddr_in, kept opaque here
 		EQC::Common::Network::EQPacketManager* manager;
+		struct Seen { long ms; bool in; unsigned short size; unsigned char head[24]; };
+		std::vector<Seen> recent;
+		size_t recentNext;
 	};
 
 	// Helpers

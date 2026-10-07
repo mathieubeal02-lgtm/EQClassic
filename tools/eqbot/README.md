@@ -24,7 +24,9 @@ Without CMake, `tools/eqbot/build.sh` compiles it with g++ alone (needs libssl-d
 retrying while World still holds the previous session (Error 1018).
 
 The output has one `[ OK ]`/`[FAIL]` line per step, and the exit code is 0 only when every step passed.
-`EQBOT_VERBOSE=1` lists the zone packets and `EQBOT_RAW=1` dumps every datagram.
+`EQBOT_VERBOSE=1` lists the zone packets and `EQBOT_RAW=1` dumps every datagram. `EQBOT_NETDEBUG=1`
+prints the protocol layer's resends and drops and, when the zone goes silent, the headers of the last
+6000 datagrams in and out (sequence, ack request, ack response): what found the sequence-wrap drop.
 
 The creation payload (`charcreate_template.inc`) is a packet captured from the real client, a troll
 shaman, with its name zeroed. The world server sets the starting items and zone itself.

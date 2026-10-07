@@ -15,7 +15,8 @@
 //         clean disconnect.
 // walk, hunt: player bots (tools/botd, docs/bots-design.md), one decision line per action.
 // Exit code 0 when every step succeeded. Output is one line per step, for CI logs.
-// EQBOT_VERBOSE=1 lists the zone packets, EQBOT_RAW=1 dumps every datagram received.
+// EQBOT_VERBOSE=1 lists the zone packets, EQBOT_RAW=1 dumps every datagram received, EQBOT_NETDEBUG=1
+// prints the protocol layer's resends and drops and, when the zone goes silent, the last 6000 datagrams.
 // EQBOT_STAY=<seconds> keeps `play` in the zone and checks the height of moving mobs.
 // EQBOT_CLASS=warrior|cleric|wizard makes `create` build a human of that class instead of a troll shaman.
 // EQBOT_INVITE=Name,Name makes a hunter lead a group (invites them); EQBOT_ROLE=member makes it
@@ -2372,7 +2373,10 @@ namespace
 			}
 			if (now - lastPacket > 30000 && state != Dead && !silentSince)
 			{
-				Anomaly(charname, st.zone, "zone_silent", "seconds=%ld state=%s", (now - lastPacket) / 1000, names[state]);
+				Anomaly(charname, st.zone, "zone_silent", "seconds=%ld state=%s pending=%d our_side=%s", (now - lastPacket) / 1000, names[state],
+					z.Pending(), z.Active() ? "up" : "gave_up");
+				if (getenv("EQBOT_NETDEBUG"))
+					z.DumpRecent();
 				silentSince = lastPacket;
 			}
 			if (silentSince && lastPacket > silentSince)
