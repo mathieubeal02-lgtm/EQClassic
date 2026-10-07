@@ -238,6 +238,8 @@ public:
 	Faction**		faction_array;
 
 	void AddLootTableToNPC(int32 loottable_id, ItemList* itemlist, int32* copper, int32* silver, int32* gold, int32* plat, int8 EquipmentList[], int32 EquipmentColorList[]);
+	// #lootchance: one line per loot drop and per item, with the odds AddLootTableToNPC rolls
+	void DescribeLootTable(int32 loottable_id, std::vector<std::string>& lines);
 	bool UpdateZoneSafeCoords(char* zonename, float x, float y, float z);
 	bool UpdateNpcSpawnLocation(int32 spawngroupid, float x, float y, float z, float heading); // maalanar: used to move a spawn location in spawn2
 	bool DeleteNpcSpawnLocation(int32 spawngroupid); // maalanar: used to delete spawn info from spawn2
