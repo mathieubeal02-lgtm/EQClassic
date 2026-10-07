@@ -26,6 +26,7 @@ KINDS = {
     'no_profile':       (1, 'A zone took a player in and never sent its profile', []),
     'bad_spawn':        (2, 'A spawn the client cannot make sense of', ['why', 'spawn']),
     'exp_missing':      (2, 'A kill that should give experience gave none', ['grouped']),
+    'session_lost':     (2, 'The zone dropped a bot (an unacked packet) and the bot logged in again', []),
     'zone_silent':      (2, 'The zone stopped talking to a player for 30 s', []),
     'login_refused':    (2, 'Logins refused again and again', []),
     'npc_data':         (3, 'NPC data that looks wrong', ['why', 'spawn']),
