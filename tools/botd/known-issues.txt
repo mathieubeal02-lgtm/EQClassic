@@ -4,3 +4,5 @@ zone_line to=qeynos2
 # post-Velious items (ids over 33000, absent from Quarm) in classic NPCs' loot tables: they cannot load
 # (SharedMemory MAXITEMID) and should not drop on a Trilogy server; the zone logs each one
 zone_log text=Error_in_AddLootDropToNPC:_dbitem=N,_item#=N,_lootdrop_id=N
+# a spawn controller (race 127 invisible man, body type 66, not drawn): its size -1 shows nowhere
+npc_data why=negative_size spawn=JPEGnollSpawner
