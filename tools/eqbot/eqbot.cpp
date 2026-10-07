@@ -283,12 +283,29 @@ namespace
 	}
 
 	// Login server, then world: returns the character names, or false on failure.
+	// The login server's session ticket of each account: changing zones, a client goes back to World with
+	// it (no new login), as the real client does.
+	struct WorldTicket { std::string account, key, world; };
+	std::map<std::string, WorldTicket> worldTickets;
+	bool reuseWorldTicket = false;	// set while zoning
+
 	bool EnterWorldServer(EqSession& w, const std::string& host, const std::string& user, const std::string& pass,
 	                      std::vector<std::string>* names)
 	{
 		std::string account, key, world;
-		if (Login(host, 5999, user, pass, &account, &key, &world) != 0)
-			return false;
+		if (reuseWorldTicket && worldTickets.count(user))
+		{
+			account = worldTickets[user].account;
+			key = worldTickets[user].key;
+			world = worldTickets[user].world;
+			Step(true, "world ticket", "kept from the login: " + account);
+		}
+		else
+		{
+			if (Login(host, 5999, user, pass, &account, &key, &world) != 0)
+				return false;
+			worldTickets[user] = WorldTicket{ account, key, world };
+		}
 		w.Open(world, WORLD_PORT);
 		std::vector<unsigned char> li(account.begin(), account.end());
 		li.push_back(0);
@@ -2866,6 +2883,206 @@ namespace
 		return answer.empty() ? 1 : 0;
 	}
 
+	// ---- travel: bots change zones (milestone 6) ----
+	// Zone lines come from tools/botd/paths/zonelines.tsv (zonelines.sh): a point and its range, or an X/Y
+	// line. The bot walks to the next zone's line; the zone answers OP_TeleportPC (another zone), the bot
+	// asks OP_ZoneChange, the zone confirms with OP_ZoneChange and the zone's name, the bot goes back to
+	// World with its login ticket, enters the world again and lands in the new zone.
+
+	struct ZoneLine { std::string zone, target; float x, y, z, range, minv, maxv; int mode; };
+
+	std::vector<ZoneLine> LoadZoneLines(const std::string& path)
+	{
+		std::vector<ZoneLine> out;
+		FILE* f = fopen(path.c_str(), "r");
+		if (!f) return out;
+		char zone[64], target[64];
+		ZoneLine l;
+		while (fscanf(f, "%63s %f %f %f %f %d %f %f %63s", zone, &l.x, &l.y, &l.z, &l.range, &l.mode, &l.minv, &l.maxv, target) == 9)
+		{
+			l.zone = zone;
+			l.target = target;
+			out.push_back(l);
+		}
+		fclose(f);
+		return out;
+	}
+
+	// Where to stand to cross a line, from where we are.
+	void ZoneLineGoal(const ZoneLine& l, float meX, float meY, float& gx, float& gy)
+	{
+		float lo = l.minv ? l.minv + 5 : -1e9f, hi = l.maxv ? l.maxv - 5 : 1e9f;
+		if (l.mode == 1)	// X line: x past the trigger, y within the bounds
+		{
+			gx = l.x + (l.x >= 0 ? 10 : -10);
+			gy = std::min(std::max(meY, lo), hi);
+		}
+		else if (l.mode == 2)	// Y line
+		{
+			gy = l.y + (l.y >= 0 ? 10 : -10);
+			gx = std::min(std::max(meX, lo), hi);
+		}
+		else
+		{
+			gx = l.x;
+			gy = l.y;
+		}
+	}
+
+	const int16 kZoneChange = (int16)0xa320;	// ZoneChange_Struct: char name[32], zone name[16], 20 bytes
+
+	int Travel(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname,
+	           const std::string& route, const std::string& linesFile)
+	{
+		std::vector<ZoneLine> lines = LoadZoneLines(linesFile);
+		if (lines.empty()) { Step(false, "zone lines", "none in " + linesFile); return 1; }
+		std::vector<std::string> legs;
+		for (size_t a = 0, b; a < route.size(); a = b + 1)
+		{
+			b = route.find(',', a);
+			if (b == std::string::npos) b = route.size();
+			if (b > a) legs.push_back(route.substr(a, b - a));
+		}
+		EqSession* z = new EqSession();
+		ZoneState st;
+		if (!EnterZone(host, user, pass, charname, *z, st)) { BotLog(charname, "-", "action=Login result=failed"); return 1; }
+		int ok = 0;
+		for (size_t leg = 0; leg < legs.size(); leg++)
+		{
+			const std::string& to = legs[leg];
+			std::vector<unsigned char> pp = DecodeProfile(st.profile);
+			float meX = 0, meY = 0, meZ = 0;
+			if (pp.size() >= 2420) { memcpy(&meY, &pp[2408], 4); memcpy(&meX, &pp[2412], 4); memcpy(&meZ, &pp[2416], 4); }
+			int myId = st.myId;
+			const ZoneLine* line = 0;
+			float best = 1e30f;
+			for (size_t i = 0; i < lines.size(); i++)
+				if (lines[i].zone == st.zone && lines[i].target == to)
+				{
+					float gx, gy;
+					ZoneLineGoal(lines[i], meX, meY, gx, gy);
+					float d = (gx - meX) * (gx - meX) + (gy - meY) * (gy - meY);
+					if (d < best) { best = d; line = &lines[i]; }
+				}
+			if (!line)
+			{
+				BotLog(charname, st.zone, "action=Travel result=no_line to=%s", to.c_str());
+				break;
+			}
+			float gx, gy;
+			ZoneLineGoal(*line, meX, meY, gx, gy);
+			BotLog(charname, st.zone, "action=TravelTo to=%s line=%.0f,%.0f goal=%.0f,%.0f from=%.0f,%.0f dist=%.0f", to.c_str(), line->x, line->y,
+			       gx, gy, meX, meY, sqrtf(best));
+			long start = NowMs(), last = start, asked = 0;
+			unsigned tick = 0;
+			std::string confirmed;
+			bool teleported = false;
+			while (NowMs() - start < 600000 && confirmed.empty())
+			{
+				std::vector<Packet*> got = z->Poll(250);
+				for (size_t i = 0; i < got.size(); i++)
+				{
+					const Packet* p = got[i];
+					const unsigned char* b = p->pBuffer;
+					if (p->opcode == (int16)0xf520 && p->size >= 12 && (b[4] | (b[5] << 8)) == 16 && myId == 0)
+						myId = b[8] | (b[9] << 8);
+					else if (p->opcode == (int16)0x4d21 && p->size >= 44)	// TeleportPC: the zone sends us elsewhere
+					{
+						std::string dest((const char*)b, strnlen((const char*)b, 16));
+						if (dest != st.zone && !teleported)
+						{
+							teleported = true;
+							BotLog(charname, st.zone, "action=ZoneLine to=%s at=%.0f,%.0f", dest.c_str(), meX, meY);
+							unsigned char zc[68];
+							memset(zc, 0, sizeof(zc));
+							strncpy((char*)zc, charname.c_str(), 31);
+							strncpy((char*)zc + 32, dest.c_str(), 15);
+							z->Send(kZoneChange, zc, sizeof(zc));
+							asked = NowMs();
+						}
+					}
+					else if (p->opcode == kZoneChange && p->size >= 48)	// the zone's answer: where we go, or nothing
+					{
+						std::string dest((const char*)b + 32, strnlen((const char*)b + 32, 16));
+						if (dest.empty())
+						{
+							BotLog(charname, st.zone, "action=ZoneChange result=refused");
+							teleported = false;
+						}
+						else
+							confirmed = dest;
+					}
+				}
+				DeleteAll(got);
+				long now = NowMs();
+				float step = 20.0f * (now - last) / 1000.0f;
+				last = now;
+				if (!teleported)
+				{
+					float dx = gx - meX, dy = gy - meY, d = sqrtf(dx * dx + dy * dy);
+					bool walking = d > 1;
+					if (walking)
+					{
+						float s2 = std::min(step, d);
+						meX += dx / d * s2;
+						meY += dy / d * s2;
+						if (line->mode == 0) meZ = line->z;
+					}
+					else
+					{
+						// on the spot and nothing came: step around inside the range
+						float a = (rand() % 360) * 3.14159f / 180;
+						gx = (line->mode == 0 ? line->x : gx) + cosf(a) * std::max(1.0f, line->range * 0.5f);
+						gy = (line->mode == 0 ? line->y : gy) + sinf(a) * std::max(1.0f, line->range * 0.5f);
+					}
+					unsigned char u[15];
+					memset(u, 0, sizeof(u));
+					short y = (short)meY, x = (short)meX, zz = (short)(meZ * 10);
+					u[0] = myId & 0xff; u[1] = myId >> 8;
+					u[2] = walking ? 22 : 0;
+					u[3] = HeadingTowards(meX, meY, gx, gy);
+					memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
+					u[11] = walking ? ((++tick & 1) ? 1 : 2) : 0;
+					z->Send(kClientUpdate, u, sizeof(u));
+				}
+				else if (now - asked > 15000)
+				{
+					BotLog(charname, st.zone, "action=ZoneChange result=no_answer");
+					teleported = false;
+				}
+			}
+			if (confirmed.empty())
+			{
+				BotLog(charname, st.zone, "action=Travel result=timeout to=%s pos=%.0f,%.0f", to.c_str(), meX, meY);
+				break;
+			}
+			// back to World with the ticket, into the new zone
+			std::string from = st.zone;
+			long t0 = NowMs();
+			z->Disconnect();
+			delete z;
+			z = new EqSession();
+			st = ZoneState();
+			reuseWorldTicket = true;
+			bool in = EnterZone(host, user, pass, charname, *z, st);
+			reuseWorldTicket = false;
+			if (!in || st.zone != confirmed)
+			{
+				BotLog(charname, "-", "action=Zoned result=failed from=%s to=%s landed=%s", from.c_str(), confirmed.c_str(), st.zone.c_str());
+				break;
+			}
+			std::vector<unsigned char> npp = DecodeProfile(st.profile);
+			float nx = 0, ny = 0;
+			if (npp.size() >= 2420) { memcpy(&ny, &npp[2408], 4); memcpy(&nx, &npp[2412], 4); }
+			BotLog(charname, st.zone, "action=Zoned from=%s to=%s ms=%ld pos=%.0f,%.0f", from.c_str(), st.zone.c_str(), NowMs() - t0, nx, ny);
+			ok++;
+		}
+		BotLog(charname, st.zone, "action=Done legs=%d of=%d", ok, (int)legs.size());
+		z->Disconnect();
+		delete z;
+		return ok == (int)legs.size() ? 0 : 1;
+	}
+
 	void Usage()
 	{
 		fprintf(stderr, "usage: eqbot login  <login-host> <user> <password> [port=5999]\n"
@@ -2875,7 +3092,8 @@ namespace
 		                "       eqbot walk   <login-host> <user> <password> <character> <waypoints file> [seconds=60]\n"
 		                "       eqbot hunt   <login-host> <user> <password> <character> [seconds=300]\n"
 		                "       eqbot cast   <login-host> <user> <password> <character> <gem> <spell id>\n"
-		                "       eqbot tell   <login-host> <user> <password> <character> <to> <text> [seconds=10]\n");
+		                "       eqbot tell   <login-host> <user> <password> <character> <to> <text> [seconds=10]\n"
+		                "       eqbot travel <login-host> <user> <password> <character> <zone,zone,...> [zonelines.tsv]\n");
 	}
 }
 
@@ -2889,6 +3107,8 @@ int main(int argc, char** argv)
 		return Play(argv[2], argv[3], argv[4], argv[5]);
 	if (argc >= 6 && std::string(argv[1]) == "test")
 		return Test(argv[2], argv[3], argv[4], argv[5]);
+	if (argc >= 7 && std::string(argv[1]) == "travel")
+		return Travel(argv[2], argv[3], argv[4], argv[5], argv[6], argc > 7 ? argv[7] : "../botd/paths/zonelines.tsv");
 	if (argc >= 8 && std::string(argv[1]) == "tell")
 		return Tell(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argc > 8 ? atoi(argv[8]) : 10);
 	if (argc >= 8 && std::string(argv[1]) == "cast")
