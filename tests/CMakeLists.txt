@@ -19,3 +19,19 @@ add_test(NAME combat COMMAND combat_test)
 # 16-bit sequence/ack ordering across the wrap (SequenceMath.h, used by EQPacketManager).
 add_executable(sequence_test sequence_test.cpp)
 add_test(NAME sequence COMMAND sequence_test)
+
+# Two packet managers back to back across the 16-bit sequence wrap (EQPacketManager.cpp).
+add_executable(packet_manager_test packet_manager_test.cpp
+    ../Common/Source/EQPacket.cpp
+    ../Common/Source/EQPacketManager.cpp
+    ../Common/Source/Fragment.cpp
+    ../Common/Source/FragmentGroup.cpp
+    ../Common/Source/FragmentGroupList.cpp
+    ../Common/Source/timer.cpp
+    ../Common/Source/packet_dump.cpp)
+target_include_directories(packet_manager_test PRIVATE ../Common/Include ../EQC/Include)
+target_compile_definitions(packet_manager_test PRIVATE ZONE_FREEZE_DEBUG=0)
+if(WIN32)
+  target_link_libraries(packet_manager_test PRIVATE ws2_32)
+endif()
+add_test(NAME packet_manager COMMAND packet_manager_test)

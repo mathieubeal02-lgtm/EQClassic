@@ -140,6 +140,11 @@ namespace EQC
 				ACK_INFO    SACK; //Server -> client info.
 				ACK_INFO    CACK; //Client -> server info.
 				int16       dwLastCACK;
+				// The first packet starts the sequence (random first ack number, SEQStart flag). The
+				// sequence number then wraps from 65535 to 0 without starting over: doing it again there
+				// renumbered the acks while packets of the old numbering waited in the resend queue,
+				// where no ack could ever match them, and the session dropped 15 resends later.
+				bool        seq_started;
 
 				Timer* no_ack_received_timer;
 				Timer* no_ack_sent_timer;
