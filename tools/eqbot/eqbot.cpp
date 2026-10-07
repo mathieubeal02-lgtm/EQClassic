@@ -1680,7 +1680,7 @@ namespace
 	// A bot that is hit fights back whatever it was doing. Killed: it logs, waits, and logs in again
 	// (the zone sends it to its bind point). Spells: Minor Healing on self when a gem holds it.
 
-	struct Mobile { std::string name; int level; float x, y, z; int hp; bool alive; };
+	struct Mobile { std::string name; int level; float x, y, z; int hp; bool alive; bool touched = false; };	// touched: a player other than us hit it
 
 	struct HuntStats
 	{
@@ -2286,6 +2286,8 @@ namespace
 						int to = b[0] | (b[1] << 8), from = b[4] | (b[5] << 8);
 						int dmg = b[12] | (b[13] << 8) | (b[14] << 16) | (b[15] << 24);
 						if (from == st.myId && to == target && dmg > 0) { hs.hitsDealt++; hs.damageDealt += dmg; fightHits++; lastHitDealt = NowMs(); headingOffset = 0; }
+						if (from != st.myId && players.count(from) && mobs.count(to))
+							mobs[to].touched = true;
 						if (to == target && from != st.myId && players.count(from))
 							sharedTarget = true;	// another player hit it: the experience may go to them
 						if (to == st.myId && from != st.myId && mobs.count(from))
@@ -2656,7 +2658,9 @@ namespace
 					attack(true);
 					fightHits = 0;
 					headingOffset = 0;
-					sharedTarget = false;
+					// hurt before we came (another bot hit it, then fled or died): whoever did the most damage
+					// is still on its hate list and gets the experience, as in classic EQ
+					sharedTarget = mobs[target].touched || mobs[target].hp < 100;
 					fledThisFight = false;
 					setState(Fight, "in reach");
 					waitSince = 0;
