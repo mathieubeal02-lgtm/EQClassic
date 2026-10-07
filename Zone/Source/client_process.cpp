@@ -564,11 +564,8 @@ bool Client::Process()
 		//The 6 second tic timer. Still need to add mana regen to the DoRegen();
 		if(mana_timer->Check())
 		{
-			//If you are not very thirsty/hungry
-			if(pp.hungerlevel != 0 && pp.thirstlevel != 0)
-			{
-				this->DoManaRegen();
-			}
+			// famished, only the bonuses (spells, items) still count: DoManaRegen sees to it
+			this->DoManaRegen();
 		}
 
 		//Endurace check

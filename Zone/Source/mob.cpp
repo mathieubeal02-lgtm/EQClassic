@@ -2400,6 +2400,13 @@ void Mob::DoHPRegen(int32 expected_new_hp)
 	const sint32	current_HP		= GetHP();
 	const sint32	max_HP			= GetMaxHP();
 	int32           base_regen		= GetLevelRegen();
+	// A player regenerates what the client computes (Combat::ClientHPRegen), or the bars jump
+	if(IsClient())
+	{
+		Client* c = CastToClient();
+		base_regen = Combat::ClientHPRegen(GetLevel(), appearance == SittingAppearance, GetClass() == MONK && c->GetFeigned(),
+			c->Famished(), GetBaseRace() == TROLL || GetBaseRace() == IKSAR);
+	}
 	//Yeahlight: The NPC has a higher predetermined regen rate in the DB
 	if(IsNPC() && CastToNPC()->GetMyRegenRate() > base_regen)
 		base_regen = CastToNPC()->GetMyRegenRate();
@@ -2624,6 +2631,18 @@ void Mob::DoManaRegen() {
 	int32 level=GetLevel();
 	int32 oldmana=GetMana();
 	int32 newmana=0;
+	// A player regenerates what the client computes (Combat::ClientManaRegen): 1 standing, not 2 + level / 5
+	if (IsClient()) {
+		Client* c = CastToClient();
+		if (GetMaxMana() == 0 || GetMana() >= GetMaxMana())
+			return;
+		bool sitting = GetAppearance() == SittingAppearance;
+		int16 meditate = c->GetSkill(MEDITATE);
+		SetMana(oldmana + Combat::ClientManaRegen(sitting, c->Famished(), GetClass() == BARD, meditate) + spellbonuses.ManaRegen + itembonuses.ManaRegen);
+		if (sitting && GetClass() != BARD && meditate > 0 && !c->Famished())
+			c->CheckAddSkill(MEDITATE);
+		return;
+	}
 	if (GetMana() < max_mana) {
 		if (GetAppearance() == SittingAppearance) {
 			int16 meditate_skill = IsClient() ? CastToClient()->GetSkill(MEDITATE) : GetLevel()*5;

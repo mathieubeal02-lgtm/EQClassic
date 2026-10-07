@@ -243,6 +243,8 @@ public:
 
 	void	SetFeigned(bool in_feigned);
 	inline bool GetFeigned() { return feigned; }
+	// food or drink at 0: the client stops natural HP/mana regen (level bonuses still count)
+	bool	Famished() { return pp.hungerlevel == 0 || pp.thirstlevel == 0; }
 	void	SetHide(bool bHidden);
 	inline bool GetHide() { return bHide; }
 	inline void SetSneaking(bool bSneaking) { sneaking = bSneaking; }  

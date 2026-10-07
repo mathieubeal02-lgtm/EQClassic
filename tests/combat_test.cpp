@@ -128,6 +128,23 @@ int main()
 	EXPECT_EQ(FizzleManaCost(100, 2000), 40);
 	EXPECT_EQ(FizzleManaCost(400, 800), 100);	// capped at an eighth of the pool
 
+	// natural regen per tick
+	EXPECT_EQ(ClientHPRegen(1, false, false, false, false), 1);
+	EXPECT_EQ(ClientHPRegen(1, true, false, false, false), 2);
+	EXPECT_EQ(ClientHPRegen(20, true, false, false, false), 3);
+	EXPECT_EQ(ClientHPRegen(50, true, false, false, false), 4);
+	EXPECT_EQ(ClientHPRegen(60, true, false, false, false), 7);	// 4 + 51, 56, 60
+	EXPECT_EQ(ClientHPRegen(60, false, false, true, false), 3);	// famished: level bonuses only
+	EXPECT_EQ(ClientHPRegen(55, false, true, false, false), 3);	// monk feigning above 50: 1 + 1 + 51
+	EXPECT_EQ(ClientHPRegen(10, true, false, false, true), 4);	// troll sitting: 2 x 2
+	EXPECT_EQ(ClientHPRegen(60, true, false, false, true), 18);	// (7 + 2) x 2
+	EXPECT_EQ(ClientManaRegen(false, false, false, 200), 1);
+	EXPECT_EQ(ClientManaRegen(true, false, false, 0), 2);	// no Meditate
+	EXPECT_EQ(ClientManaRegen(true, false, true, 100), 2);	// bards cannot meditate
+	EXPECT_EQ(ClientManaRegen(true, false, false, 1), 3);
+	EXPECT_EQ(ClientManaRegen(true, false, false, 235), 19);	// 4 + 235 / 15
+	EXPECT_EQ(ClientManaRegen(true, true, false, 235), 0);
+
 	if (failures == 0)
 		printf("combat_test: all tests passed\n");
 	return failures == 0 ? 0 : 1;
