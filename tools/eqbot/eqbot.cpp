@@ -1872,9 +1872,10 @@ namespace
 		bool fledThisFight = false;
 		long lastAssistCall = 0, lastMeleeMsg = 0, waitSince = 0;
 		int castRefusals = 0;
-		long expectExpBy = 0, lastPacket = NowMs();	// a kill that should give experience; the zone's last word
+		long expectExpBy = 0, lastPacket = NowMs(), silentSince = 0;	// a kill that should give experience; the zone's last word
 		std::string expectExpFrom;
 		int expectExpLevel = 0;
+		bool sharedTarget = false;	// another player hit our target
 		bool helpPending = false;	// leader: asked the zone what a member in trouble fights
 		unsigned moveTick = 0;
 		int tooFar = 0, cantSee = 0;
@@ -2284,6 +2285,8 @@ namespace
 						int to = b[0] | (b[1] << 8), from = b[4] | (b[5] << 8);
 						int dmg = b[12] | (b[13] << 8) | (b[14] << 16) | (b[15] << 24);
 						if (from == st.myId && to == target && dmg > 0) { hs.hitsDealt++; hs.damageDealt += dmg; fightHits++; lastHitDealt = NowMs(); headingOffset = 0; }
+						if (to == target && from != st.myId && players.count(from))
+							sharedTarget = true;	// another player hit it: the experience may go to them
 						if (to == st.myId && from != st.myId && mobs.count(from))
 						{
 							hs.hitsTaken++;
@@ -2338,7 +2341,7 @@ namespace
 							{
 								hs.kills++;
 								// ours (the death names us) and not green: experience must follow
-								if (killer == st.myId && mobs[id].level >= myLevel - 2 && myLevel < 50)
+								if (killer == st.myId && !sharedTarget && mobs[id].level >= myLevel - 2 && myLevel < 50)
 								{
 									expectExpBy = NowMs() + 5000;
 									expectExpFrom = mobs[id].name;
@@ -2367,10 +2370,20 @@ namespace
 				Anomaly(charname, st.zone, "exp_missing", "kill=%s level=%d my_level=%d grouped=%d", expectExpFrom.c_str(), expectExpLevel, myLevel, grouped ? 1 : 0);
 				expectExpBy = 0;
 			}
-			if (now - lastPacket > 30000 && state != Dead)
+			if (now - lastPacket > 30000 && state != Dead && !silentSince)
 			{
 				Anomaly(charname, st.zone, "zone_silent", "seconds=%ld state=%s", (now - lastPacket) / 1000, names[state]);
-				lastPacket = now;
+				silentSince = lastPacket;
+			}
+			if (silentSince && lastPacket > silentSince)
+				silentSince = 0;	// it talks again
+			if (silentSince && now - silentSince > 60000 && state != Dead)
+			{
+				// The zone dropped us (it does after 15 resends of a packet we did not ack) and says nothing
+				// more: log in again rather than walk alone for hours
+				Anomaly(charname, st.zone, "session_lost", "silent_seconds=%ld state=%s", (now - silentSince) / 1000, names[state]);
+				relog = true;
+				state = Dead;
 			}
 			// chat: an answer from chatd goes out where it was asked for
 			ChatLine said;
@@ -2639,6 +2652,7 @@ namespace
 					attack(true);
 					fightHits = 0;
 					headingOffset = 0;
+					sharedTarget = false;
 					fledThisFight = false;
 					setState(Fight, "in reach");
 					waitSince = 0;

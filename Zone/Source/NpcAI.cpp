@@ -500,8 +500,9 @@ int32 GetLevelCon(int8 PlayerLevel, int8 NPCLevel)
 	}
 	else if (PlayerLevel >= 25 && PlayerLevel <= 40)
 	{
+								// -10..-1 is blue (it said -10..-8: mobs 1 to 7 levels below fell through to red)
 								conlevel =  (tmp <= -11) ? 0x02:
-	(tmp >=-10 && tmp <= -8) ? 0x04:
+	(tmp >=-10 && tmp <= -1) ? 0x04:
 	(tmp == 0) ? 0x00:
 	(tmp >= 1 && tmp <= 2) ?0x0F:
 	0x0D;
