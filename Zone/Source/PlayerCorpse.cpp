@@ -307,8 +307,19 @@ bool Corpse::Save()
 	}
 	if (dbid == 0)
 		dbid = Database::Instance()->CreatePlayerCorpse(charid, orgname, zone->GetShortName(), (uchar*) dbpc, tmpsize, x_pos, y_pos, z_pos, heading, IsRezzed(), rotTime, accountid, rezzexp);
-	else
-		dbid = Database::Instance()->UpdatePlayerCorpse(dbid, charid, orgname, zone->GetShortName(), (uchar*) dbpc, tmpsize, x_pos, y_pos, z_pos, heading, IsRezzed(), GetRezExp());
+	else if (!Database::Instance()->UpdatePlayerCorpse(dbid, charid, orgname, zone->GetShortName(), (uchar*) dbpc, tmpsize, x_pos, y_pos, z_pos, heading, IsRezzed(), GetRezExp()))
+	{
+		safe_delete(dbpc);
+		// the row is gone: World rotted the corpse (DecrementCorpseRotTimer). It used to zero dbid, and
+		// the next save created the corpse again; it rots here too
+		if (Database::Instance()->GetPCCorpseRotTime(dbid) == 0)
+		{
+			cout << "Player corpse '" << this->GetName() << "' rotted" << endl;
+			dbid = 0;
+			p_depop = true;
+		}
+		return false;
+	}
 	safe_delete(dbpc);
 	if (dbid == 0) {
 		cout << "Error: Failed to save player corpse '" << this->GetName() << "'" << endl;
