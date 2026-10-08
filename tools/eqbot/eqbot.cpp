@@ -1693,6 +1693,7 @@ namespace
 		std::set<std::string> emptiedCorpses;	// our own corpses already looted
 		std::vector<std::pair<float, float> > zoneLines;	// where the zone tried to send us elsewhere
 		bool sayDeath;	// died: say so to the group once back
+		std::map<int, int> corpseFood, corpseDrink;	// the food and drink left on our last corpse that had some
 		HuntStats() : kills(0), loots(0), items(0), deaths(0), hitsDealt(0), damageDealt(0), hitsTaken(0), damageTaken(0),
 		              refused(0), recovered(0), equipped(0), assists(0), casts(0), expGained(0), campSet(false), campX(0), campY(0), campZ(0), sayDeath(false) {}
 	};
@@ -2405,6 +2406,11 @@ namespace
 								BotLog(charname, st.zone, "action=AbandonCorpse corpse=%s", recovering.c_str());
 								hs.emptiedCorpses.insert(recovering);
 							}
+							if (!food.empty() || !drink.empty())
+							{
+								hs.corpseFood = food;	// what we carried stays on the corpse
+								hs.corpseDrink = drink;
+							}
 							BotLog(charname, st.zone, "action=Killed by=%s(%d)", mobs.count(killer) ? mobs[killer].name.c_str() : "?", killer);
 							hs.sayDeath = true;
 							setState(Dead, "killed");
@@ -2862,6 +2868,13 @@ namespace
 						uint32_t corpse = target;
 						z.Send(0x4f20, &corpse, sizeof(corpse));	// OP_EndLootRequest
 						BotLog(charname, st.zone, "action=Recovered corpse=%s items=%d", c.name.c_str(), lootedItems);
+						if (lootedItems && (!hs.corpseFood.empty() || !hs.corpseDrink.empty()))
+						{
+							// the rations came back with the rest (the inventory packet is only sent at zone-in)
+							food = hs.corpseFood; drink = hs.corpseDrink;
+							hs.corpseFood.clear(); hs.corpseDrink.clear();
+							saidHungry = false;
+						}
 						hs.recovered++;
 						hs.emptiedCorpses.insert(c.name);
 						recovering.clear();
