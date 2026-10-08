@@ -1677,6 +1677,7 @@ namespace
 	//   Approach walk to it; Fight: target + auto-attack; Loot: every item of its corpse
 	//   Rest     sit until healed (under 90 % HP before a pull, and a short sit after each fight); stand on aggro
 	//   Flee     back to the camp under 20 % HP while the prey is still healthy
+//   Avoid    (Seek/Rest) a named 3+ levels above us within 70: walk away; prey near one is left alone
 	// A bot that is hit fights back whatever it was doing. Killed: it logs, waits, and logs in again
 	// (the zone sends it to its bind point). Spells: Minor Healing on self when a gem holds it.
 
@@ -1994,6 +1995,25 @@ namespace
 			z.Send(kAutoAttack, &v, sizeof(v));
 		};
 		// walks toward a point, stops `stop` units short; true when there
+		long lastAvoid = 0;
+		// NPCs we keep away from: 3 levels above us or more, neither a guard nor known to like us
+		auto isDanger = [&](int id) {
+			const Mobile& m = mobs[id];
+			if (!m.alive || m.level < myLevel + 3)
+				return false;
+			std::string l = m.name;
+			for (size_t i = 0; i < l.size(); i++)
+				l[i] = tolower(l[i]);
+			if (l.find("guard") != std::string::npos || l.find("merchant") != std::string::npos)
+				return false;
+			return !(faction.count(id) && faction[id] > 0);
+		};
+		auto nearDanger = [&](float x, float y) {
+			for (std::map<int, Mobile>::iterator it = mobs.begin(); it != mobs.end(); ++it)
+				if (fabsf(it->second.x - x) < 60 && fabsf(it->second.y - y) < 60 && isDanger(it->first))
+					return true;
+			return false;
+		};
 		auto walkTo = [&](float tx, float ty, float tz, float step, float stop) {
 			float dx = tx - meX, dy = ty - meY, dist = sqrtf(dx * dx + dy * dy);
 			if (dist <= stop + 1) { sendPos(tx, ty, false); return true; }
@@ -2307,7 +2327,22 @@ namespace
 								sit(false);
 								target = from;
 								state = Seek;	// so that the change is logged
-								setState(Approach, "attacked");
+								if (!member && isDanger(from))
+								{
+									// a named far above us: no fight to win, run to the camp (its guards), or
+									// straight away from it when we are already there
+									fleeX = campX; fleeY = campY;
+									if (fabsf(meX - campX) + fabsf(meY - campY) < 40)
+									{
+										float dx = meX - mobs[from].x, dy = meY - mobs[from].y, d = sqrtf(dx * dx + dy * dy) + 0.01f;
+										fleeX = meX + dx / d * 150; fleeY = meY + dy / d * 150;
+									}
+									if (nearZoneLine(fleeX, fleeY)) { fleeX = campX; fleeY = campY; }
+									attack(false);
+									setState(Flee, "attacked by a named");
+								}
+								else
+									setState(Approach, "attacked");
 							}
 						}
 					}
@@ -2453,7 +2488,39 @@ namespace
 				if (!oom && myMana * 100 < maxMana * 30) { medding.insert(charname); gsay("oom, medding"); }
 				else if (oom && myMana * 100 >= maxMana * 90) { medding.erase(charname); gsay("ready"); }
 			}
-			switch (state)
+			// a dangerous NPC roams close (3 levels above us or more, not a guard, not known friendly):
+			// step away before it notices us, as a player keeping an eye on a named that wanders
+			bool avoided = false;
+			if (!member && !underAttack && (state == Seek || state == Rest))
+			{
+				int dangerId = 0;
+				float nearest = 70;
+				for (std::map<int, Mobile>::iterator it = mobs.begin(); it != mobs.end(); ++it)
+				{
+					float d = sqrtf((it->second.x - meX) * (it->second.x - meX) + (it->second.y - meY) * (it->second.y - meY));
+					if (d < nearest && isDanger(it->first)) { nearest = d; dangerId = it->first; }
+				}
+				if (dangerId)
+				{
+					const Mobile& m = mobs[dangerId];
+					float ax = meX - m.x, ay = meY - m.y, len = sqrtf(ax * ax + ay * ay);
+					if (len < 1) { ax = meX - campX; ay = meY - campY; len = sqrtf(ax * ax + ay * ay); }
+					if (len < 1) { ax = 1; ay = 0; len = 1; }
+					float tx = meX + ax / len * 40, ty = meY + ay / len * 40;
+					if (nearZoneLine(tx, ty)) { tx = campX; ty = campY; }
+					if (now - lastAvoid > 10000)
+					{
+						BotLog(charname, st.zone, "action=Avoid target=%s(%d) level=%d dist=%.0f", m.name.c_str(), dangerId, m.level, nearest);
+						lastAvoid = now;
+					}
+					sit(false);
+					walkTo(tx, ty, meZ, step, 0);
+					if (state == Rest)
+						setState(Seek, "danger near");
+					avoided = true;
+				}
+			}
+			if (!avoided) switch (state)
 			{
 			case Seek:
 			{
@@ -2463,13 +2530,16 @@ namespace
 					setState(Rest, "hurt");
 					break;
 				}
+				if (myMaxHp && myHp < 50 && underAttack && !attackers.empty())
+					break;	// hurt and hit: the attacker gets fought back (above), no new prey on top of it
 				float best = 1e30f;
 				int corpseId = 0;
 				for (std::map<int, Mobile>::iterator it = myCorpses.begin(); it != myCorpses.end() && !corpseId; ++it)
 				{
 					// grouped, only a corpse near the leader: nobody goes alone across the zone
 					int lid = member && grouped ? playerByName(leaderName) : 0;
-					if (!lid || fabsf(players[lid].x - it->second.x) + fabsf(players[lid].y - it->second.y) < 150)
+					if ((!lid || fabsf(players[lid].x - it->second.x) + fabsf(players[lid].y - it->second.y) < 150) &&
+					    !nearDanger(it->second.x, it->second.y))	// not while what killed us stands by it
 						corpseId = it->first;
 				}
 				if (corpseId && !underAttack)
@@ -2523,6 +2593,8 @@ namespace
 					const Mobile& m = it->second;
 					if (!m.alive || m.hp < 100 || skip.count(it->first) || m.level > maxPrey || !IsPreyName(m.name))
 						continue;
+					if (nearDanger(m.x, m.y))
+						continue;	// it would bring us next to a named that kills us
 					float fromCamp = sqrtf((m.x - campX) * (m.x - campX) + (m.y - campY) * (m.y - campY));
 					if (fromCamp > campRadius || nearZoneLine(m.x, m.y))
 						continue;
