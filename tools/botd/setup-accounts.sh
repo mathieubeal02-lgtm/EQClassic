@@ -38,5 +38,9 @@ for i in $(seq "$FIRST" $((FIRST + COUNT - 1))); do
   if [ -n "$SPELL" ]; then
     $DB -e "UPDATE character_ SET profile = CONCAT(SUBSTRING(profile, 1, 1878), UNHEX('$SPELL'), SUBSTRING(profile, 1881, 2390 - 1880), UNHEX('$SPELL'), SUBSTRING(profile, 2393)) WHERE name = '$name'"
   fi
+  # A stack of 20 Iron Rations (13005) and 20 Water Flasks (13006) in the first two pack slots (item ids:
+  # uint16[30] at 168; charges: byte 2 of the 10-byte properties at 348): a famished player regenerates
+  # nothing, and until the bots buy their own food (milestone 5) this is where it comes from.
+  $DB -e "UPDATE character_ SET profile = CONCAT(SUBSTRING(profile, 1, 212), UNHEX('CD32CE32'), SUBSTRING(profile, 217, 570 - 216), UNHEX('14'), SUBSTRING(profile, 572, 9), UNHEX('14'), SUBSTRING(profile, 582)) WHERE name = '$name'"
   echo "$account $PASS $name"
 done

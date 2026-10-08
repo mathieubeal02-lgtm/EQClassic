@@ -1678,6 +1678,7 @@ namespace
 	//   Rest     sit until healed (under 90 % HP before a pull, and a short sit after each fight); stand on aggro
 	//   Flee     back to the camp under 20 % HP while the prey is still healthy
 //   Avoid    (Seek/Rest) a named 3+ levels above us within 70: walk away; prey near one is left alone
+//   It eats and drinks from its packs when the zone says it is getting hungry (a famished player heals nothing).
 	// A bot that is hit fights back whatever it was doing. Killed: it logs, waits, and logs in again
 	// (the zone sends it to its bind point). Spells: Minor Healing on self when a gem holds it.
 
@@ -1692,6 +1693,7 @@ namespace
 		std::set<std::string> emptiedCorpses;	// our own corpses already looted
 		std::vector<std::pair<float, float> > zoneLines;	// where the zone tried to send us elsewhere
 		bool sayDeath;	// died: say so to the group once back
+		std::map<int, int> corpseFood, corpseDrink;	// the food and drink left on our last corpse that had some
 		HuntStats() : kills(0), loots(0), items(0), deaths(0), hitsDealt(0), damageDealt(0), hitsTaken(0), damageTaken(0),
 		              refused(0), recovered(0), equipped(0), assists(0), casts(0), expGained(0), campSet(false), campX(0), campY(0), campZ(0), sayDeath(false) {}
 	};
@@ -1857,6 +1859,43 @@ namespace
 		BotLog(charname, st.zone, "action=EnterZone id=%d level=%d npcs=%d corpses=%d items=%d camp=%.0f,%.0f,%.0f", st.myId, myLevel, (int)mobs.size(),
 		       (int)myCorpses.size(), (int)InventoryItems(st.inventory).size(), campX, campY, campZ);
 		int equipped = EquipFromPacks(z, charname, st.zone, st.inventory);
+		// food and drink in the inventory (item type 14 / 15): slot -> what is left of the stack. The real
+		// client eats and drinks by itself when it gets hungry; famished, a player regenerates nothing
+		std::map<int, int> food, drink;
+		{
+			std::map<int, std::vector<unsigned char> > items = InventoryItems(st.inventory);
+			for (std::map<int, std::vector<unsigned char> >::iterator i = items.begin(); i != items.end(); ++i)
+			{
+				if (i->second.size() < 220 || i->first <= 0)
+					continue;
+				int type = i->second[194], left = (signed char)i->second[218];
+				if (type == 14 && left > 0) food[i->first] = left;
+				if (type == 15 && left > 0) drink[i->first] = left;
+			}
+		}
+		long lastConsume = 0;
+		bool saidHungry = false;
+		auto consume = [&](std::map<int, int>& stock, int type, const char* what, int level) {
+			if (stock.empty())
+			{
+				if (!saidHungry)
+					BotLog(charname, st.zone, "action=Hungry why=no_%s level=%d", what, level);
+				saidHungry = true;
+				return;
+			}
+			unsigned char b[16];	// Consume_Struct: slot, 0xffffffff (the client did it by itself), 4 bytes, type
+			memset(b, 0, sizeof(b));
+			int slot = stock.begin()->first;
+			b[0] = slot & 0xff; b[1] = (slot >> 8) & 0xff;
+			b[4] = b[5] = b[6] = b[7] = 0xff;
+			b[12] = (unsigned char)type;
+			z.Send((int16)0x5621, b, sizeof(b));	// OP_ConsumeFoodDrink
+			int left = --stock.begin()->second;
+			BotLog(charname, st.zone, "action=Consume what=%s slot=%d left=%d level=%d", what, slot, left, level);
+			if (left <= 0)
+				stock.erase(stock.begin());
+			lastConsume = NowMs();
+		};
 		hs.equipped += equipped;
 
 		enum State { Seek, Consider, Approach, Fight, Loot, Rest, Flee, Dead, Recover } state = Seek;
@@ -2082,6 +2121,15 @@ namespace
 						if (id == st.myId && max > 0) { myHp = cur * 100 / max; myMaxHp = max; }
 						else if (mobs.count(id)) mobs[id].hp = max > 0 ? cur * 100 / max : cur;
 						else if (players.count(id)) players[id].hp = max > 0 ? cur * 100 / max : cur;
+					}
+					else if (p->opcode == (int16)0x5721 && p->size >= 4)	// Stamina: food, water (6000 full, 0 famished)
+					{
+						int foodLevel = (short)(b[0] | (b[1] << 8)), waterLevel = (short)(b[2] | (b[3] << 8));
+						if (NowMs() - lastConsume > 3000)
+						{
+							if (foodLevel < 2000) consume(food, 1, "food", foodLevel);
+							else if (waterLevel < 2000) consume(drink, 2, "drink", waterLevel);
+						}
 					}
 					else if (p->opcode == (int16)0x7f21 && p->size >= 2)	// ManaChange: new mana, spell
 					{
@@ -2357,6 +2405,11 @@ namespace
 								// killed while going back to a corpse: something camps it, give it up
 								BotLog(charname, st.zone, "action=AbandonCorpse corpse=%s", recovering.c_str());
 								hs.emptiedCorpses.insert(recovering);
+							}
+							if (!food.empty() || !drink.empty())
+							{
+								hs.corpseFood = food;	// what we carried stays on the corpse
+								hs.corpseDrink = drink;
 							}
 							BotLog(charname, st.zone, "action=Killed by=%s(%d)", mobs.count(killer) ? mobs[killer].name.c_str() : "?", killer);
 							hs.sayDeath = true;
@@ -2815,6 +2868,13 @@ namespace
 						uint32_t corpse = target;
 						z.Send(0x4f20, &corpse, sizeof(corpse));	// OP_EndLootRequest
 						BotLog(charname, st.zone, "action=Recovered corpse=%s items=%d", c.name.c_str(), lootedItems);
+						if (lootedItems && (!hs.corpseFood.empty() || !hs.corpseDrink.empty()))
+						{
+							// the rations came back with the rest (the inventory packet is only sent at zone-in)
+							food = hs.corpseFood; drink = hs.corpseDrink;
+							hs.corpseFood.clear(); hs.corpseDrink.clear();
+							saidHungry = false;
+						}
 						hs.recovered++;
 						hs.emptiedCorpses.insert(c.name);
 						recovering.clear();
