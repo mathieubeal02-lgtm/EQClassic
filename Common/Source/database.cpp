@@ -4037,63 +4037,28 @@ queue<int32> Database::GetCorpseAccounts()
 //o--------------------------------------------------------------
 bool Database::DecrementCorpseRotTimer(int32 accountid)
 {
+	// Every corpse of the account below the minimum rots (it read only the first row, so an account's
+	// other corpses never rotted, and crashed World when the account had none left); the others lose
+	// one decay step. A zone that still holds a rotted corpse finds its row gone at the next save.
 	char errbuf[MYSQL_ERRMSG_SIZE];
-    char *query = 0;
-    MYSQL_RES *result;
-    MYSQL_ROW row;
-	//Yeahlight: See if this account is currently logged in
-	if(RunQuery(query, MakeAnyLenString(&query, "SELECT id FROM active_accounts WHERE lsaccount = %i", accountid), errbuf, &result))
-	{
-		char errbuf2[MYSQL_ERRMSG_SIZE];
-		char *query2 = 0;
-		safe_delete_array(query);
-		//Yeahlight: This account is logged in, so accelerate their corpse timers beyond normal rot time and decrement the rez timer at the standard rate
-		/*if(mysql_num_rows(result) > 0)
-		{
-			if(!RunQuery(query2, MakeAnyLenString(&query2, "UPDATE player_corpses SET time = time - %i, reztime = reztime - %i WHERE accountid = %i", PC_CORPSE_INCREMENT_DECAY_TIMER, (PC_CORPSE_INCREMENT_DECAY_TIMER/7), accountid), errbuf2))
-			{
-				cerr << "Error in DecrementCorpseRotTimer(2) query '" << query2 << "' " << errbuf2 << endl;
-				safe_delete_array(query2);
-				mysql_free_result(result);
-				return false;
-			}
-		}
-		//Yeahlight: This account is not logged, so decrement their corpse timers at the standard rate
-		else
-		{*/
-		if (RunQuery(query2, MakeAnyLenString(&query2, "SELECT id,time FROM player_corpses WHERE accountid = %i", accountid), errbuf2, &result)){
-			row = mysql_fetch_row(result);
-			if (atoi(row[1]) < 2142){ //newage: check if the corpse is below the minimum. If so, delete it.
-				if (!RunQuery(query2, MakeAnyLenString(&query2, "DELETE from player_corpses WHERE id='%i'", atoi(row[0])), errbuf2)) {
-					cerr << "Error deleting corpse '" << query2 << "' " << errbuf2 << endl;
-					safe_delete_array(query2);
-					mysql_free_result(result);
-					return false;
-				}
-				else {
-					EQC::Common::Log(EQCLog::Status, CP_DATABASE, "Deleting corpse from DB where ID = %i", atoi(row[0]));
-				}
-			}
-			else {
-				if (!RunQuery(query2, MakeAnyLenString(&query2, "UPDATE player_corpses SET time = time - %i WHERE accountid = %i", (PC_CORPSE_INCREMENT_DECAY_TIMER / 7), accountid), errbuf2))
-				{
-					cerr << "Error in DecrementCorpseRotTimer(3) query '" << query2 << "' " << errbuf2 << endl;
-					safe_delete_array(query2);
-					mysql_free_result(result);
-					return false;
-				}
-			}
-		}
-		safe_delete_array(query2);
-		mysql_free_result(result);
-	}
-	//Yeahlight: Query was not successful
-	else
+	char *query = 0;
+	int32 rotted = 0;
+	if (!RunQuery(query, MakeAnyLenString(&query, "DELETE FROM player_corpses WHERE accountid = %i AND time < 2142", accountid), errbuf, 0, &rotted))
 	{
 		cerr << "Error in DecrementCorpseRotTimer query '" << query << "' " << errbuf << endl;
 		safe_delete_array(query);
 		return false;
 	}
+	safe_delete_array(query);
+	if (rotted)
+		EQC::Common::Log(EQCLog::Status, CP_DATABASE, "%i rotted corpse(s) deleted for account %i", rotted, accountid);
+	if (!RunQuery(query, MakeAnyLenString(&query, "UPDATE player_corpses SET time = time - %i WHERE accountid = %i", (PC_CORPSE_INCREMENT_DECAY_TIMER / 7), accountid), errbuf))
+	{
+		cerr << "Error in DecrementCorpseRotTimer(3) query '" << query << "' " << errbuf << endl;
+		safe_delete_array(query);
+		return false;
+	}
+	safe_delete_array(query);
 	return true;
 }
 
