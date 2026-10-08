@@ -64,6 +64,7 @@ def main():
     era = "(%s = -1 OR %s <= 2) AND (%s = -1 OR %s >= 2)"	# there at Velious
     s2era = era % (('s.min_expansion',) * 2 + ('s.max_expansion',) * 2)
     seera = era % (('e.min_expansion',) * 2 + ('e.max_expansion',) * 2)
+    seera += " AND e.npcID < 1000000"	# ids from 1,000,000: NPCs of the Quarm server itself (Agent of Druzzil), not the era's
     points = rows("SELECT s.id, s.spawngroupID, s.x, s.y, s.z, s.heading, s.respawntime, s.variance, s.pathgrid "
                   "FROM %s.spawn2 s WHERE s.zone = %s AND s.enabled = 1 AND %s ORDER BY s.id" % (QUARM, q(zone), s2era))
     inlist = ','.join(sorted({p[1] for p in points}, key=int))
