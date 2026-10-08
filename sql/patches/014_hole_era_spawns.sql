@@ -4,8 +4,8 @@
 -- (regenerate rather than edit): 367 spawn points, 58 spawn groups, 96 entries from the Quarm database,
 -- ids + 1000000. NPCs are ours, matched by name; headings are Quarm's / 1.0198.
 -- Level, HP, damage and AC taken from Quarm: an_elemental_crusader: ours 39009 was level 41, Quarm has 45
--- Imported from Quarm (basic stats, no loot table): a_mimic as npc_types 39097
--- Imported from Quarm (basic stats, no loot table):  as npc_types 39368
+-- Imported from Quarm (basic stats, loot table, faction list when we have none for the name): a_mimic as npc_types 39097
+-- Imported from Quarm (basic stats, loot table, faction list when we have none for the name):  as npc_types 39368
 --
 -- Our rows are kept in spawn2_before_era, spawngroup_before_era, spawnentry_before_era, grid_before_era and
 -- grid_entries_before_era. To restore: delete the zone's rows with id >= 1000000 (spawn2, and spawngroup /
@@ -31,9 +31,54 @@ DROP TEMPORARY TABLE era_groups;
 DELETE FROM grid_entries WHERE zoneid = 39;
 DELETE FROM grid WHERE zoneid = 39;
 
-REPLACE INTO npc_types (id, name, lastname, level, race, class, bodytype, hp, gender, texture, helmtexture, size, hp_regen_rate, mana_regen_rate, mindmg, maxdmg, aggroradius, face, runspeed, MR, CR, DR, FR, PR, see_invis, see_invis_undead, AC, npc_aggro, STR, STA, DEX, AGI, _INT, WIS, CHA, ATK, Accuracy) VALUES
-(39097, 'a_mimic', '', 43, 52, 1, 24, 5835, 0, 0, 0, 5, 175, 0, 30, 133, 45, 255, 1.25, 80, 35, 25, 35, 25, 0, 1, 161, 0, 145, 145, 145, 145, 145, 145, 145, 0, 0),
-(39368, '___', '', 50, 127, 1, 28, 1, 0, 0, 0, 6, 0, 0, 0, 4, 0, 0, 1.25, 35, 35, 25, 35, 25, 0, 1, 190, 0, 75, 75, 75, 75, 75, 75, 75, 0, 0);
+REPLACE INTO npc_types (id, loottable_id, name, lastname, level, race, class, bodytype, hp, gender, texture, helmtexture, size, hp_regen_rate, mana_regen_rate, mindmg, maxdmg, aggroradius, face, runspeed, MR, CR, DR, FR, PR, see_invis, see_invis_undead, AC, npc_aggro, STR, STA, DEX, AGI, _INT, WIS, CHA, ATK, Accuracy) VALUES
+(39097, 1091864, 'a_mimic', '', 43, 52, 1, 24, 5835, 0, 0, 0, 5, 175, 0, 30, 133, 45, 255, 1.25, 80, 35, 25, 35, 25, 0, 1, 161, 0, 145, 145, 145, 145, 145, 145, 145, 0, 0),
+(39368, 0, '___', '', 50, 127, 1, 28, 1, 0, 0, 0, 6, 0, 0, 0, 4, 0, 0, 1.25, 35, 35, 25, 35, 25, 0, 1, 190, 0, 75, 75, 75, 75, 75, 75, 75, 0, 0);
+REPLACE INTO npc_types_without (id, loottable_id, name, lastname, level, race, class, bodytype, hp, gender, texture, helmtexture, size, hp_regen_rate, mana_regen_rate, mindmg, maxdmg, aggroradius, face, runspeed, MR, CR, DR, FR, PR, see_invis, see_invis_undead, AC, npc_aggro, STR, STA, DEX, AGI, _INT, WIS, CHA, ATK, Accuracy) VALUES
+(39097, 1091864, 'a_mimic', '', 43, 52, 1, 24, 5835, 0, 0, 0, 5, 175, 0, 30, 133, 45, 255, 1.25, 80, 35, 25, 35, 25, 0, 1, 161, 0, 145, 145, 145, 145, 145, 145, 145, 0, 0),
+(39368, 0, '___', '', 50, 127, 1, 28, 1, 0, 0, 0, 6, 0, 0, 0, 4, 0, 0, 1.25, 35, 35, 25, 35, 25, 0, 1, 190, 0, 75, 75, 75, 75, 75, 75, 75, 0, 0);
+
+REPLACE INTO loottable (id, name, mincash, maxcash, avgcoin) VALUES
+(1091864, '91864_a_mimic_MAGELO-GEN', 44, 4400, 0);
+REPLACE INTO loottable_entries (loottable_id, lootdrop_id, multiplier, probability) VALUES
+(1091864, 1098116, 1, 100),
+(1091864, 1105878, 1, 100),
+(1091864, 1106034, 1, 75);
+REPLACE INTO lootdrop (id, name) VALUES
+(1098116, '98116_a_mimic_MAGELO-GEN'),
+(1105878, 'level_44_Research'),
+(1106034, 'Level 40+ Gems - Fire Opal etc. Base Rate');
+REPLACE INTO lootdrop_entries (lootdrop_id, item_id, item_charges, equip_item, chance) VALUES
+(1098116, 14373, 1, 0, 25),
+(1105878, 11722, 1, 0, 1),
+(1105878, 11723, 1, 0, 1),
+(1105878, 11724, 1, 0, 1),
+(1105878, 11725, 1, 0, 1),
+(1105878, 11726, 1, 0, 1),
+(1105878, 11727, 1, 0, 1),
+(1105878, 11728, 1, 0, 1),
+(1105878, 11729, 1, 0, 1),
+(1105878, 11776, 1, 0, 1),
+(1105878, 11777, 1, 0, 1),
+(1105878, 11778, 1, 0, 1),
+(1105878, 11802, 1, 0, 1),
+(1105878, 11804, 1, 0, 2),
+(1105878, 11805, 1, 0, 1),
+(1105878, 11806, 1, 0, 2),
+(1105878, 11861, 1, 0, 1),
+(1105878, 11862, 1, 0, 1),
+(1105878, 11863, 1, 0, 1),
+(1105878, 11864, 1, 0, 1),
+(1106034, 10001, 1, 1, 2),
+(1106034, 10031, 1, 0, 3),
+(1106034, 10032, 1, 0, 2),
+(1106034, 10033, 1, 0, 1),
+(1106034, 10034, 1, 0, 1),
+(1106034, 10045, 1, 1, 2),
+(1106034, 10046, 1, 1, 2),
+(1106034, 10047, 1, 1, 2),
+(1106034, 16976, 1, 0, 15);
+
 
 CREATE TABLE IF NOT EXISTS npc_types_before_era LIKE npc_types;
 INSERT IGNORE INTO npc_types_before_era SELECT * FROM npc_types WHERE id IN (39009);

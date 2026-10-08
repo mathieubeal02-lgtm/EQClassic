@@ -11,7 +11,8 @@ NPCs stay ours: each Quarm NPC is matched to one of our npc_types by name ('#', 
 '_' ignored; one of the zone's, else one elsewhere within 3 levels), so stats, loot, factions and
 quests keep working. One of ours more than 3 levels off takes Quarm's level, HP, damage and AC
 (the old row goes to npc_types_before_era). A Quarm NPC we do not have is imported with its basic
-stats and no loot. Both are listed in the patch header. Headings: Quarm's are ours x 1.0198 (seen on the spawn points both have).
+stats, its loot table (drops there at Velious, items the server can load) and, when we have none for
+its name, its faction list. Both are listed in the patch header. Headings: Quarm's are ours x 1.0198 (seen on the spawn points both have).
 
 Usage: gen_zone_from_quarm.py <zone short name> <patch number> > sql/patches/NNN_<zone>_era_spawns.sql
 Environment: EQC_DB_USER, EQC_DB_PASS, EQC_DB_NAME (eqc / eqc / eqclassic), QUARM_DB (quarm_ref).
@@ -65,6 +66,10 @@ def main():
     seera = era % (('e.min_expansion',) * 2 + ('e.max_expansion',) * 2)
     points = rows("SELECT s.id, s.spawngroupID, s.x, s.y, s.z, s.heading, s.respawntime, s.variance, s.pathgrid "
                   "FROM %s.spawn2 s WHERE s.zone = %s AND s.enabled = 1 AND %s ORDER BY s.id" % (QUARM, q(zone), s2era))
+    inlist = ','.join(sorted({p[1] for p in points}, key=int))
+    # a point whose group has no entry there at Velious spawns nothing: left out
+    filled = {r[0] for r in rows("SELECT DISTINCT e.spawngroupID FROM %s.spawnentry e WHERE e.spawngroupID IN (%s) AND %s" % (QUARM, inlist, seera))}
+    points = [p for p in points if p[1] in filled]
     groups = sorted({p[1] for p in points}, key=int)
     inlist = ','.join(groups)
     group_rows = rows("SELECT id, name, spawn_limit FROM %s.spawngroup WHERE id IN (%s) ORDER BY id" % (QUARM, inlist))
@@ -112,7 +117,7 @@ def main():
     for n in notes:
         w('-- Level, HP, damage and AC taken from Quarm: ' + n)
     for key, new_id in imported.items():
-        w('-- Imported from Quarm (basic stats, no loot table): %s as npc_types %d' % (key, new_id))
+        w('-- Imported from Quarm (basic stats, loot table, faction list when we have none for the name): %s as npc_types %d' % (key, new_id))
     w('--')
     w('-- Our rows are kept in spawn2_before_era, spawngroup_before_era, spawnentry_before_era, grid_before_era and')
     w('-- grid_entries_before_era. To restore: delete the zone\'s rows with id >= %d (spawn2, and spawngroup /' % ID_OFFSET)
@@ -145,15 +150,52 @@ def main():
                 'hp_regen_rate', 'mana_regen_rate', 'mindmg', 'maxdmg', 'aggroradius', 'face', 'runspeed', 'MR', 'CR', 'DR', 'FR', 'PR',
                 'see_invis', 'see_invis_undead', 'AC', 'npc_aggro', 'STR', 'STA', 'DEX', 'AGI', '_INT', 'WIS', 'CHA', 'ATK', 'Accuracy']
         done = set()
-        data = []
-        for r in rows("SELECT id, %s FROM %s.npc_types WHERE id IN (%s) ORDER BY id" % (', '.join(cols), QUARM, ids)):
+        data, loot, factions = [], {}, []
+        for r in rows("SELECT id, loottable_id, npc_faction_id, %s FROM %s.npc_types WHERE id IN (%s) ORDER BY id" % (', '.join(cols), QUARM, ids)):
             new_id = mapping[r[0]]
             if new_id in done:
                 continue
             done.add(new_id)
-            vals = [new_id] + [q(v) if c in ('name', 'lastname') else v for c, v in zip(cols, r[1:])]
+            if int(r[1]):
+                loot[r[1]] = int(r[1]) + ID_OFFSET
+            if int(r[2]):
+                factions.append((r[3].lstrip('#'), r[2]))	# npc_faction names carry no '#'
+            vals = [new_id, loot.get(r[1], 0)] + [q(v) if c in ('name', 'lastname') else v for c, v in zip(cols, r[3:])]
             data.append(vals)
-        out += values('npc_types', ['id'] + cols, data)
+        # npc_types_without is the copy the zone reads an NPC's name from to find its faction (npc_faction, by name)
+        out += values('npc_types', ['id', 'loottable_id'] + cols, data)
+        out += values('npc_types_without', ['id', 'loottable_id'] + cols, data)
+        w('')
+        if loot:
+            # Their loot tables, ids + 1,000,000: the drops there at Velious, items the server can load (ids up to 33000)
+            lt = ','.join(loot)
+            out += values('loottable', ['id', 'name', 'mincash', 'maxcash', 'avgcoin'],
+                          [(int(r[0]) + ID_OFFSET, q(r[1]), r[2], r[3], min(int(r[4]), 32767)) for r in
+                           rows("SELECT id, name, mincash, maxcash, avgcoin FROM %s.loottable WHERE id IN (%s) ORDER BY id" % (QUARM, lt))])
+            entries_ = rows("SELECT loottable_id, lootdrop_id, multiplier, probability FROM %s.loottable_entries WHERE loottable_id IN (%s) ORDER BY 1, 2" % (QUARM, lt))
+            drops = sorted({e[1] for e in entries_}, key=int)
+            items = rows("SELECT e.lootdrop_id, e.item_id, e.item_charges, e.equip_item, e.chance FROM %s.lootdrop_entries e "
+                         "WHERE e.lootdrop_id IN (%s) AND (e.min_expansion = -1 OR e.min_expansion <= 2) AND (e.max_expansion = -1 OR e.max_expansion >= 2) "
+                         "AND e.item_id <= 33000 AND e.item_id IN (SELECT id FROM items_axclassic) ORDER BY 1, 2" % (QUARM, ','.join(drops))) if drops else []
+            kept = {i[0] for i in items}
+            out += values('loottable_entries', ['loottable_id', 'lootdrop_id', 'multiplier', 'probability'],
+                          [(int(e[0]) + ID_OFFSET, int(e[1]) + ID_OFFSET, e[2], e[3]) for e in entries_ if e[1] in kept])
+            if kept:
+                out += values('lootdrop', ['id', 'name'], [(int(r[0]) + ID_OFFSET, q(r[1])) for r in
+                              rows("SELECT id, name FROM %s.lootdrop WHERE id IN (%s) ORDER BY id" % (QUARM, ','.join(sorted(kept, key=int))))])
+                out += values('lootdrop_entries', ['lootdrop_id', 'item_id', 'item_charges', 'equip_item', 'chance'],
+                              [(int(i[0]) + ID_OFFSET, i[1], min(int(i[2]), 127), i[3], max(1, min(100, round(float(i[4]))))) for i in items])
+            w('')
+        for name, qf in factions:
+            # a faction list for the name, unless we have one: Quarm's, with our faction ids (same faction names)
+            if rows("SELECT 1 FROM npc_faction WHERE name = %s" % q(name)):
+                continue
+            prim = rows("SELECT o.id FROM %s.npc_faction f JOIN %s.faction_list qf ON qf.id = f.primaryfaction JOIN faction_list o ON o.name = qf.name WHERE f.id = %s" % (QUARM, QUARM, qf))
+            w("INSERT INTO npc_faction (name, primaryfaction, ignore_primary_assist) SELECT %s, %s, 0 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM npc_faction WHERE name = %s);"
+              % (q(name), prim[0][0] if prim else 0, q(name)))
+            for fid, value, npc_value in rows("SELECT o.id, e.value, e.npc_value FROM %s.npc_faction_entries e JOIN %s.faction_list qf ON qf.id = e.faction_id "
+                                              "JOIN faction_list o ON o.name = qf.name WHERE e.npc_faction_id = %s ORDER BY o.id" % (QUARM, QUARM, qf)):
+                w("INSERT IGNORE INTO npc_faction_entries (npc_faction_id, faction_id, value, npc_value) SELECT id, %s, %s, %s FROM npc_faction WHERE name = %s;" % (fid, value, npc_value, q(name)))
         w('')
 
     if restat:
