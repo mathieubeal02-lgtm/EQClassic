@@ -2379,7 +2379,13 @@ namespace
 							{
 								hs.kills++;
 								// ours (the death names us) and not green: experience must follow
-								if (killer == st.myId && !sharedTarget && mobs[id].level >= myLevel - 2 && myLevel < 50)
+								// another player standing by it was on it too (two bots often pick the same closest
+								// prey): the zone gives the experience to whoever did the most damage, as in classic
+								bool playerNear = false;
+								for (std::map<int, Mobile>::iterator pl = players.begin(); pl != players.end() && !playerNear; ++pl)
+									playerNear = pl->first != st.myId && pl->second.alive &&
+										fabsf(pl->second.x - mobs[id].x) < 25 && fabsf(pl->second.y - mobs[id].y) < 25;
+								if (killer == st.myId && !sharedTarget && !playerNear && mobs[id].level >= myLevel - 2 && myLevel < 50)
 								{
 									expectExpBy = NowMs() + 5000;
 									expectExpFrom = mobs[id].name;
