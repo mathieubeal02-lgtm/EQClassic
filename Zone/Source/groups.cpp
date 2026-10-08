@@ -1,6 +1,7 @@
 //////////////////////////////////////////////////////////////////////
 #include "CombatFormulas.h"
 #include "groups.h"
+#include "NpcAI.h"
 #include "entity.h"
 #include "client.h"
 #include "packet_functions.h"
@@ -538,6 +539,10 @@ void Group::RefreshPlayerProfiles() {
 void Group::SplitExp(sint16 NPCLevel, int16 zoneExpModifier)
 {
 	//Yeahlight: Pulling below calculations from http://strategywiki.org/wiki/EverQuest/Frequently_Asked_Questions
+	// a mob green to the group's highest member gives nobody experience, as it gives none solo:
+	// a high level could otherwise feed a low one the kills of mobs it slays at no risk
+	if (GetLevelCon(this->GetMaxLevel(), NPCLevel) == CON_GREEN)
+		return;
 	TNumMember NumMembers = this->GetMembersInZone();
 	int16 totalGroupLevel = this->GetTotalLevel();
 	int32 baseMobExp = NPCLevel * NPCLevel * zoneExpModifier;
