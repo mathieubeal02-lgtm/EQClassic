@@ -2327,7 +2327,22 @@ namespace
 								sit(false);
 								target = from;
 								state = Seek;	// so that the change is logged
-								setState(Approach, "attacked");
+								if (!member && isDanger(from))
+								{
+									// a named far above us: no fight to win, run to the camp (its guards), or
+									// straight away from it when we are already there
+									fleeX = campX; fleeY = campY;
+									if (fabsf(meX - campX) + fabsf(meY - campY) < 40)
+									{
+										float dx = meX - mobs[from].x, dy = meY - mobs[from].y, d = sqrtf(dx * dx + dy * dy) + 0.01f;
+										fleeX = meX + dx / d * 150; fleeY = meY + dy / d * 150;
+									}
+									if (nearZoneLine(fleeX, fleeY)) { fleeX = campX; fleeY = campY; }
+									attack(false);
+									setState(Flee, "attacked by a named");
+								}
+								else
+									setState(Approach, "attacked");
 							}
 						}
 					}
@@ -2515,13 +2530,16 @@ namespace
 					setState(Rest, "hurt");
 					break;
 				}
+				if (myMaxHp && myHp < 50 && underAttack && !attackers.empty())
+					break;	// hurt and hit: the attacker gets fought back (above), no new prey on top of it
 				float best = 1e30f;
 				int corpseId = 0;
 				for (std::map<int, Mobile>::iterator it = myCorpses.begin(); it != myCorpses.end() && !corpseId; ++it)
 				{
 					// grouped, only a corpse near the leader: nobody goes alone across the zone
 					int lid = member && grouped ? playerByName(leaderName) : 0;
-					if (!lid || fabsf(players[lid].x - it->second.x) + fabsf(players[lid].y - it->second.y) < 150)
+					if ((!lid || fabsf(players[lid].x - it->second.x) + fabsf(players[lid].y - it->second.y) < 150) &&
+					    !nearDanger(it->second.x, it->second.y))	// not while what killed us stands by it
 						corpseId = it->first;
 				}
 				if (corpseId && !underAttack)
