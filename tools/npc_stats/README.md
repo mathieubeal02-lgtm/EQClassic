@@ -33,4 +33,4 @@ Patches 013-018: Skyshrine, The Hole, Sleeper's Tomb, Nurga, Droga, Plane of Mis
 Generate a zone's patch before applying it: the generator reads our tables, and once a patch is in,
 the NPCs it imported look like ours (a regenerated patch would no longer carry them).
 `test_zone_patch.sh <patch> <zone> <zone id>` applies a patch twice to copies of the tables and counts
-what would dangle. Zones where they are missing
+what would dangle. It refuses to run when a patch writes a table it does not copy.
