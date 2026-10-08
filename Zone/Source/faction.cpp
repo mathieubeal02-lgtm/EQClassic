@@ -28,6 +28,7 @@
 #include "../include/client.h"
 #include "../include/zone.h"
 #include "SQLEscape.h"
+#include "MiscFunctions.h"
 
 extern Zone* zone;
 
@@ -553,8 +554,10 @@ int32 Database::GetNPCFactionID(int32 npc_id){
 	if (RunQuery(query2, MakeAnyLenString(&query2, "SELECT name FROM npc_types_without where id = %i", npc_id), errbuf2, &result2)) {
 		safe_delete_array(query2);//delete[] query2;
 		row2 = mysql_fetch_row(result2);
+		// npc_faction names carry no '#': the 2,209 NPCs named '#...' (the nameds) found no faction list
 		if(row2)
-			strcpy(tempName, row2[0]);
+			strn0cpy(tempName, row2[0][0] == '#' ? row2[0] + 1 : row2[0], sizeof(tempName));
+		mysql_free_result(result2);
 	}
 
 	char errbuf[MYSQL_ERRMSG_SIZE];
@@ -564,10 +567,10 @@ int32 Database::GetNPCFactionID(int32 npc_id){
 	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id FROM npc_faction where name = '%s'", SQLEscape(tempName).c_str()), errbuf, &result)) {
 		safe_delete_array(query);//delete[] query;
 		row = mysql_fetch_row(result);
-		if(row)
-			return atoi(row[0]);
+		int32 id = row ? atoi(row[0]) : 0;
+		mysql_free_result(result);
+		return id;
 	}
-	//Yeahlight: TODO: This may crash the zone, need to handle it better on the receiving end
 	return 0;
 }
 
@@ -581,11 +584,14 @@ int32 Database::GetPrimaryFaction(char* name){
     char *query2 = 0;
     MYSQL_RES *result2;
     MYSQL_ROW row2;
+	if (name[0] == '#')	// npc_faction names carry no '#'
+		name++;
 	if (RunQuery(query2, MakeAnyLenString(&query2, "SELECT primaryfaction FROM npc_faction where name = '%s'", SQLEscape(name).c_str()), errbuf2, &result2)) {
 		safe_delete_array(query2);//delete[] query2;
 		row2 = mysql_fetch_row(result2);
-		if(row2)
-			return atoi(row2[0]);
+		int32 faction = row2 ? atoi(row2[0]) : 0;
+		mysql_free_result(result2);
+		return faction;
 	}
 	return 0;
 }
