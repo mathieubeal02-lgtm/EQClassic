@@ -471,4 +471,33 @@ namespace Combat
 			membersInZone = 6;
 		return 2 * (membersInZone - 1);
 	}
+
+	int ClientHPRegen(int level, bool sitting, bool monkFeigned, bool famished, bool racialRegen)
+	{
+		int regen = 1;
+		if (sitting)
+			regen += 1 + (level >= 20 ? 1 : 0) + (level >= 50 ? 1 : 0);
+		if (monkFeigned && level > 50)
+			regen += 1;
+		if (famished)
+			regen = 0;
+		regen += (level >= 51 ? 1 : 0) + (level >= 56 ? 1 : 0) + (level >= 60 ? 1 : 0);
+		if (racialRegen)
+		{
+			regen += (level >= 51 ? 1 : 0) + (level >= 56 ? 1 : 0);
+			regen *= 2;
+		}
+		return regen;
+	}
+
+	int ClientManaRegen(bool sitting, bool famished, bool bard, int meditateSkill)
+	{
+		if (famished)
+			return 0;
+		if (!sitting)
+			return 1;
+		if (bard || meditateSkill <= 0)
+			return 2;
+		return meditateSkill > 1 ? 4 + meditateSkill / 15 : 3;
+	}
 }

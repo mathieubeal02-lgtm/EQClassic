@@ -91,6 +91,18 @@ namespace Combat
 	                      int primeStat, int randomPenalty, int specializeSkill);
 	// Mana a fizzle costs: 40% of the spell's, at most an eighth of the caster's pool.
 	int FizzleManaCost(int manaCost, int maxMana);
+
+	// ---- regeneration (per 6 s tick) -----------------------------------------------------------
+	// What the client computes and shows, so its bars do not jump back at each server update (TAKP's
+	// reading of the client: LevelRegen, CalcManaRegen). Spell and item regen are added on top.
+
+	// A player's natural HP regen: 1, +1 sitting (+1 more from level 20, +1 from 50), a monk feigning
+	// above 50 +1; nothing of that while famished (food or drink at 0); then +1 at 51, 56 and 60.
+	// Trolls and Iksar (racial regen) get +1 at 51 and 56 and the total doubled.
+	int ClientHPRegen(int level, bool sitting, bool monkFeigned, bool famished, bool racialRegen);
+	// A player's natural mana regen: 0 famished, 1 standing, 2 sitting; sitting with Meditate (not
+	// bards) 3, or 4 + skill / 15 once the skill is above 1.
+	int ClientManaRegen(bool sitting, bool famished, bool bard, int meditateSkill);
 }
 
 #endif
