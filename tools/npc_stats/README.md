@@ -26,6 +26,11 @@ The Hole 59% (most other zones are above 85%).
 
 `gen_zone_from_quarm.py <zone> <number>` writes a patch that replaces a zone's spawn points, spawn
 groups, entries and path grids with Quarm's (plain rows: applying it needs no Quarm database), keeps
-our rows in `*_before_era` tables, and keeps our NPCs, matched by name. It suits a zone whose era
-NPCs we already have (Skyshrine: 185 of 186; `sql/patches/013`). Zones where they are missing
-(Sleeper's Tomb, Nurga, Droga, Mischief) would also need their loot, factions and spells imported.
+our rows in `*_before_era` tables, and keeps our NPCs, matched by name: nearly all the era's NPCs are
+still in our npc_types, only their spawns were replaced. The few we lack are imported with basic
+stats, their loot table and a faction list (Sleeper's Tomb: the four warders and The Sleeper).
+Patches 013-018: Skyshrine, The Hole, Sleeper's Tomb, Nurga, Droga, Plane of Mischief.
+Generate a zone's patch before applying it: the generator reads our tables, and once a patch is in,
+the NPCs it imported look like ours (a regenerated patch would no longer carry them).
+`test_zone_patch.sh <patch> <zone> <zone id>` applies a patch twice to copies of the tables and counts
+what would dangle. It refuses to run when a patch writes a table it does not copy.

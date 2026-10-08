@@ -51,6 +51,9 @@ DELETE FROM grid WHERE zoneid = 114;
 
 REPLACE INTO npc_types (id, name, lastname, level, race, class, bodytype, hp, gender, texture, helmtexture, size, hp_regen_rate, mana_regen_rate, mindmg, maxdmg, aggroradius, face, runspeed, MR, CR, DR, FR, PR, see_invis, see_invis_undead, AC, npc_aggro, STR, STA, DEX, AGI, _INT, WIS, CHA, ATK, Accuracy) VALUES
 (114630, 'a_Huge_Golem_Sentry', '', 66, 17, 2, 5, 85000, 0, 0, 0, 25, 2550, 83, 45, 210, 55, 0, 1.25, 240, 240, 240, 240, 240, 0, 1, 200, 0, 75, 75, 75, 75, 80, 75, 75, 0, 0);
+-- (added by hand: the zone reads the name from npc_types_without to find the faction list)
+REPLACE INTO npc_types_without (id, name, lastname, level, race, class, bodytype, hp, gender, texture, helmtexture, size, hp_regen_rate, mana_regen_rate, mindmg, maxdmg, aggroradius, face, runspeed, MR, CR, DR, FR, PR, see_invis, see_invis_undead, AC, npc_aggro, STR, STA, DEX, AGI, _INT, WIS, CHA, ATK, Accuracy) VALUES
+(114630, 'a_Huge_Golem_Sentry', '', 66, 17, 2, 5, 85000, 0, 0, 0, 25, 2550, 83, 45, 210, 55, 0, 1.25, 240, 240, 240, 240, 240, 0, 1, 200, 0, 75, 75, 75, 75, 80, 75, 75, 0, 0);
 
 CREATE TABLE IF NOT EXISTS npc_types_before_era LIKE npc_types;
 INSERT IGNORE INTO npc_types_before_era SELECT * FROM npc_types WHERE id IN (114165,114166,114167,114168,114261,114262,114263,114264,114265,114266,114267,114269,114270,114271,114272,114274,114275,114343,114432,114482);
