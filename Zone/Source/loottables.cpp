@@ -92,6 +92,71 @@ void Database::AddLootTableToNPC(int32 loottable_id, ItemList* itemlist, int32* 
 	return;
 }
 
+// The odds behind AddLootTableToNPC, for #lootchance: each loottable entry rolls `multiplier` times
+// against `probability` percent; each roll that passes gives one item of the loot drop, picked by
+// weight (chance / sum of the drop's chances). Per kill, an item drops at least once with
+// 1 - (1 - probability * weight) ^ multiplier.
+void Database::DescribeLootTable(int32 loottable_id, std::vector<std::string>& lines)
+{
+	char errbuf[MYSQL_ERRMSG_SIZE];
+	char *query = 0;
+	MYSQL_RES *result;
+	MYSQL_ROW row;
+	char line[256];
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT mincash, maxcash FROM loottable WHERE id=%i", loottable_id), errbuf, &result)) {
+		safe_delete_array(query);
+		if ((row = mysql_fetch_row(result))) {
+			snprintf(line, sizeof(line), "loot table %u: coin %s to %s copper", loottable_id, row[0], row[1]);
+			lines.push_back(line);
+		}
+		mysql_free_result(result);
+	}
+	else
+		safe_delete_array(query);
+	if (!RunQuery(query, MakeAnyLenString(&query, "SELECT lootdrop_id, multiplier, probability FROM loottable_entries WHERE loottable_id=%i", loottable_id), errbuf, &result)) {
+		safe_delete_array(query);
+		return;
+	}
+	safe_delete_array(query);
+	std::vector<std::vector<int> > drops;
+	while ((row = mysql_fetch_row(result))) {
+		std::vector<int> d;
+		d.push_back(atoi(row[0]));
+		d.push_back(atoi(row[1]));
+		d.push_back(atoi(row[2]));
+		drops.push_back(d);
+	}
+	mysql_free_result(result);
+	for (size_t i = 0; i < drops.size(); i++) {
+		int dropId = drops[i][0], multiplier = drops[i][1], probability = drops[i][2];
+		snprintf(line, sizeof(line), "drop %i: %i roll(s) at %i%%", dropId, multiplier, probability);
+		lines.push_back(line);
+		MYSQL_RES *items;
+		if (!RunQuery(query, MakeAnyLenString(&query, "SELECT item_id, chance FROM lootdrop_entries WHERE lootdrop_id=%i ORDER BY chance DESC", dropId), errbuf, &items)) {
+			safe_delete_array(query);
+			continue;
+		}
+		safe_delete_array(query);
+		int total = 0;
+		while ((row = mysql_fetch_row(items)))
+			total += atoi(row[1]);
+		mysql_data_seek(items, 0);
+		while ((row = mysql_fetch_row(items))) {
+			int itemId = atoi(row[0]);
+			double weight = total > 0 ? atof(row[1]) / total : 0;
+			double perRoll = probability / 100.0 * weight;
+			double perKill = 1.0;
+			for (int k = 0; k < multiplier; k++)
+				perKill *= 1.0 - perRoll;
+			perKill = 1.0 - perKill;
+			Item_Struct* item = GetItem(itemId);
+			snprintf(line, sizeof(line), "  %i %s: %.1f%% a kill", itemId, item ? item->name : "(not loaded: never drops)", perKill * 100.0);
+			lines.push_back(line);
+		}
+		mysql_free_result(items);
+	}
+}
+
 // Called by AddLootTableToNPC
 // maxdrops = size of the array npcd
 void Database::AddLootDropToNPC(int32 lootdrop_id, ItemList* itemlist, int8 EquipmentList[], int32 EquipmentColorList[]) {

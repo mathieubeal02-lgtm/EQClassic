@@ -175,6 +175,8 @@ int command_init(void) {
 		command_add("npcstats","- Show stats about target NPC",GM_MANAGEMENT_ACESSS,command_npcstats) ||
 		command_add("showfaction","- How the targeted NPC regards you and why, and the faction hits for killing it",EQC_Alpha_Tester,command_showfaction) ||
 		command_add("questhelp","- What the targeted NPC's quest reacts to: phrases and items",EQC_Alpha_Tester,command_questhelp) ||
+		command_add("lootchance","- The targeted NPC's loot table: each drop's rolls and each item's chance a kill",EQC_Alpha_Tester,command_lootchance) ||
+		command_add("mrange","- Melee range between you and your target, the distance, and whether a swing reaches",EQC_Alpha_Tester,command_mrange) ||
 		command_add("diffinv","- Compares the inventory the client uploaded last (OP_Save) with the server's",GM_MANAGEMENT_ACESSS,command_diffinv) ||
 		command_add("probespawn","[id] - Sends a position update for a spawn id nobody has, next to you (finds the client's answer to an unknown spawn)",GM_MANAGEMENT_ACESSS,command_probespawn) ||
 
@@ -920,6 +922,44 @@ void command_questhelp(Client *c, const Seperator *sep)
 	c->Message(BLACK, "%s (%s):", npc->GetName(), path);
 	c->Message(BLACK, "  says: %s", text.empty() ? "nothing" : text.c_str());
 	c->Message(BLACK, "  items: %s", items.empty() ? "none" : items.c_str());
+}
+
+// #lootchance (Harakiri's #lootchance): the odds of the targeted NPC's loot table, as
+// Database::AddLootTableToNPC rolls them when the NPC spawns.
+void command_lootchance(Client *c, const Seperator *sep)
+{
+	if (!c->GetTarget() || !c->GetTarget()->IsNPC())
+	{
+		c->Message(RED, "Target an NPC first.");
+		return;
+	}
+	NPC* npc = c->GetTarget()->CastToNPC();
+	if (npc->GetLoottableID() == 0)
+	{
+		c->Message(BLACK, "%s has no loot table.", npc->GetName());
+		return;
+	}
+	std::vector<std::string> lines;
+	Database::Instance()->DescribeLootTable(npc->GetLoottableID(), lines);
+	c->Message(BLACK, "%s:", npc->GetName());
+	for (size_t i = 0; i < lines.size(); i++)
+		c->Message(BLACK, "%s", lines[i].c_str());
+}
+
+// #mrange (Harakiri's #mrange): the melee range the zone checks between you and your target (both
+// bounding radii, Mob::GetMeleeReach), the distance on the ground, and whether a swing reaches.
+void command_mrange(Client *c, const Seperator *sep)
+{
+	Mob* t = c->GetTarget();
+	if (!t || t == c)
+	{
+		c->Message(RED, "Target something first.");
+		return;
+	}
+	float range = c->GetMeleeReach(t);
+	float dist = fdistance(t->GetX(), t->GetY(), c->GetX(), c->GetY());
+	c->Message(BLACK, "%s (race %i, size %.1f): melee range %.1f, distance %.1f, %s.", t->GetName(), (int)t->GetRace(),
+		t->GetSize(), range, dist, dist <= range ? "in reach" : "too far");
 }
 
 void command_showfaction(Client *c, const Seperator *sep)
