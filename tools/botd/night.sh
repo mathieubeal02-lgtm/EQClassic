@@ -31,7 +31,8 @@ fi
 python3 watchdog.py "$LOGS/watchdog.log" > /dev/null 2>&1 &
 watchdog=$!
 
-EQBOT_LFG=1 BOTD_LOGS="$LOGS/solo" ./fleet.sh "$SOLO" hunt "$SECS" > "$LOGS/solo/fleet.txt" 2>&1 &
+# the trolls shop in Grobb, next door (milestone 5): Ootok sells bread and milk
+EQBOT_TOWN=grobb EQBOT_TOWN_NPC=Ootok EQBOT_LFG=1 BOTD_LOGS="$LOGS/solo" ./fleet.sh "$SOLO" hunt "$SECS" > "$LOGS/solo/fleet.txt" 2>&1 &
 solo=$!
 sleep $((2 * SOLO + 5))	# one login at a time
 BOTD_FIRST=52 BOTD_LOGS="$LOGS/group" ./fleet.sh 3 group "$SECS" > "$LOGS/group/fleet.txt" 2>&1 &

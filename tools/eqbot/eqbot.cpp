@@ -31,6 +31,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -1679,6 +1680,8 @@ namespace
 	//   Flee     back to the camp under 20 % HP while the prey is still healthy
 //   Avoid    (Seek/Rest) a named 3+ levels above us within 70: walk away; prey near one is left alone
 //   It eats and drinks from its packs when the zone says it is getting hungry (a famished player heals nothing).
+//   Out of food or drink (or every EQBOT_TOWN_EVERY minutes), with EQBOT_TOWN set: a trip to town between two
+//   lives (TownTrip, milestone 5): sell the packs, buy drink and food, come back.
 	// A bot that is hit fights back whatever it was doing. Killed: it logs, waits, and logs in again
 	// (the zone sends it to its bind point). Spells: Minor Healing on self when a gem holds it.
 
@@ -1694,8 +1697,12 @@ namespace
 		std::vector<std::pair<float, float> > zoneLines;	// where the zone tried to send us elsewhere
 		bool sayDeath;	// died: say so to the group once back
 		std::map<int, int> corpseFood, corpseDrink;	// the food and drink left on our last corpse that had some
+		bool wantTown;	// out of food or drink: go to town (EQBOT_TOWN), sell, buy, come back
+		long lastTown;
+		int townTrips;
 		HuntStats() : kills(0), loots(0), items(0), deaths(0), hitsDealt(0), damageDealt(0), hitsTaken(0), damageTaken(0),
-		              refused(0), recovered(0), equipped(0), assists(0), casts(0), expGained(0), campSet(false), campX(0), campY(0), campZ(0), sayDeath(false) {}
+		              refused(0), recovered(0), equipped(0), assists(0), casts(0), expGained(0), campSet(false), campX(0), campY(0), campZ(0), sayDeath(false),
+		              wantTown(false), lastTown(0), townTrips(0) {}
 	};
 
 	// Items of the bulk inventory sent at zone-in: slot -> Item_Struct bytes.
@@ -1881,6 +1888,9 @@ namespace
 				if (!saidHungry)
 					BotLog(charname, st.zone, "action=Hungry why=no_%s level=%d", what, level);
 				saidHungry = true;
+				// a town to shop in (EQBOT_TOWN), nothing waiting on a corpse, and no trip in the last 20 minutes
+				if (getenv("EQBOT_TOWN") && hs.corpseFood.empty() && hs.corpseDrink.empty() && (!hs.lastTown || NowMs() - hs.lastTown > 1200000))
+					hs.wantTown = true;
 				return;
 			}
 			unsigned char b[16];	// Consume_Struct: slot, 0xffffffff (the client did it by itself), 4 bytes, type
@@ -2579,6 +2589,17 @@ namespace
 					avoided = true;
 				}
 			}
+			// EQBOT_TOWN_EVERY=<minutes>: a trip now and then to empty the packs, hungry or not
+			if (!hs.wantTown && getenv("EQBOT_TOWN") && getenv("EQBOT_TOWN_EVERY") && now - std::max(hs.lastTown, start) > atol(getenv("EQBOT_TOWN_EVERY")) * 60000L)
+				hs.wantTown = true;
+			if (hs.wantTown && !member && !underAttack && state == Seek && myMaxHp && myHp < 90)
+				setState(Rest, "before the trip to town");	// the road is walked without fighting back: leave healthy
+			if (hs.wantTown && !member && !underAttack && (state == Seek || state == Rest) && (!myMaxHp || myHp >= 90))
+			{
+				BotLog(charname, st.zone, "action=LeaveForTown hp=%d%% pos=%.0f,%.0f", myHp, meX, meY);
+				sit(false);
+				break;
+			}
 			if (!avoided) switch (state)
 			{
 			case Seek:
@@ -2909,6 +2930,9 @@ namespace
 		return true;
 	}
 
+	bool TownTrip(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname,
+	              const std::string& town, const std::string& linesFile);
+
 	int Hunt(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname, int seconds)
 	{
 		long start = NowMs(), deadline = start + seconds * 1000L;
@@ -2941,6 +2965,15 @@ namespace
 			if (relog)
 			{
 				BotLog(charname, "-", "action=Relog why=equip");
+				continue;
+			}
+			if (!died && hs.wantTown && NowMs() < deadline)
+			{
+				// milestone 5: to town and back, then a new life at the camp
+				hs.wantTown = false;
+				hs.lastTown = NowMs();
+				hs.townTrips++;
+				TownTrip(host, user, pass, charname, getenv("EQBOT_TOWN"), getenv("EQBOT_ZONELINES") ? getenv("EQBOT_ZONELINES") : "../botd/paths/zonelines.tsv");
 				continue;
 			}
 			if (!died)
@@ -3091,6 +3124,9 @@ namespace
 
 	const int16 kZoneChange = (int16)0xa320;	// ZoneChange_Struct: char name[32], zone name[16], 20 bytes
 
+	int TravelLegs(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname,
+	               EqSession*& z, ZoneState& st, const std::vector<std::string>& legs, const std::vector<ZoneLine>& lines);
+
 	int Travel(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname,
 	           const std::string& route, const std::string& linesFile)
 	{
@@ -3106,6 +3142,18 @@ namespace
 		EqSession* z = new EqSession();
 		ZoneState st;
 		if (!EnterZone(host, user, pass, charname, *z, st)) { BotLog(charname, "-", "action=Login result=failed"); return 1; }
+		int ok = TravelLegs(host, user, pass, charname, z, st, legs, lines);
+		BotLog(charname, st.zone, "action=Done legs=%d of=%d", ok, (int)legs.size());
+		z->Disconnect();
+		delete z;
+		return ok == (int)legs.size() ? 0 : 1;
+	}
+
+	// Walks to the zone line of each leg and changes zone; the session `z` and `st` are those of the last
+	// zone reached. Returns the number of legs done.
+	int TravelLegs(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname,
+	               EqSession*& z, ZoneState& st, const std::vector<std::string>& legs, const std::vector<ZoneLine>& lines)
+	{
 		int ok = 0;
 		for (size_t leg = 0; leg < legs.size(); leg++)
 		{
@@ -3137,7 +3185,8 @@ namespace
 			unsigned tick = 0;
 			std::string confirmed;
 			bool teleported = false;
-			while (NowMs() - start < 600000 && confirmed.empty())
+			bool killed = false;
+			while (NowMs() - start < 600000 && confirmed.empty() && !killed)
 			{
 				std::vector<Packet*> got = z->Poll(250);
 				for (size_t i = 0; i < got.size(); i++)
@@ -3146,6 +3195,11 @@ namespace
 					const unsigned char* b = p->pBuffer;
 					if (p->opcode == (int16)0xf520 && p->size >= 12 && (b[4] | (b[5] << 8)) == 16 && myId == 0)
 						myId = b[8] | (b[9] << 8);
+					else if (p->opcode == kDeath && p->size >= 8 && myId && (b[0] | (b[1] << 8)) == myId)
+					{
+						BotLog(charname, st.zone, "action=Killed on_the_road=1 to=%s at=%.0f,%.0f", to.c_str(), meX, meY);
+						killed = true;
+					}
 					else if (p->opcode == (int16)0x4d21 && p->size >= 44)	// TeleportPC: the zone sends us elsewhere
 					{
 						std::string dest((const char*)b, strnlen((const char*)b, 16));
@@ -3211,6 +3265,8 @@ namespace
 					teleported = false;
 				}
 			}
+			if (killed)
+				break;	// the zone sends the dead to their bind point: not a leg done
 			if (confirmed.empty())
 			{
 				BotLog(charname, st.zone, "action=Travel result=timeout to=%s pos=%.0f,%.0f", to.c_str(), meX, meY);
@@ -3237,10 +3293,212 @@ namespace
 			BotLog(charname, st.zone, "action=Zoned from=%s to=%s ms=%ld pos=%.0f,%.0f", from.c_str(), st.zone.c_str(), NowMs() - t0, nx, ny);
 			ok++;
 		}
-		BotLog(charname, st.zone, "action=Done legs=%d of=%d", ok, (int)legs.size());
+		return ok;
+	}
+
+	// ---- milestone 5: a trip to town ----
+	// From where the bot stands: the zone line to `town`, the merchants there (closest first, six at most):
+	// the first that opens buys what the packs hold (everything but food and drink); each is asked for a
+	// stack of the cheapest food and drink it sells until we have both; then back to the zone we came from.
+	// One line per step: TownSell, TownBuy, Town, TownBack. Returns true when the bot is back in its hunting zone.
+	// The road is walked without fighting back (the bot leaves healthy); killed on it, the trip is over.
+	bool TownTrip(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname,
+	              const std::string& town, const std::string& linesFile)
+	{
+		std::vector<ZoneLine> lines = LoadZoneLines(linesFile);
+		EqSession* z = new EqSession();
+		ZoneState st;
+		bool in = false;
+		for (int attempt = 0; attempt < 8 && !in; attempt++)
+		{
+			if (attempt)	// World refuses a login for about a minute after the last one ended
+			{
+				long until = NowMs() + 15000;
+				while (NowMs() < until) { struct timeval tv = { 0, 200000 }; select(0, 0, 0, 0, &tv); }
+				delete z;
+				z = new EqSession();
+				st = ZoneState();
+			}
+			in = EnterZone(host, user, pass, charname, *z, st);
+		}
+		if (!in) { BotLog(charname, "-", "action=Town result=login_failed"); delete z; return false; }
+		std::string home = st.zone;
+		std::vector<std::string> there(1, town), back(1, home);
+		if (lines.empty() || TravelLegs(host, user, pass, charname, z, st, there, lines) != 1)
+		{
+			BotLog(charname, st.zone, "action=Town result=not_reached town=%s", town.c_str());
+			z->Disconnect();
+			delete z;
+			return false;
+		}
+		std::vector<unsigned char> pp = DecodeProfile(st.profile);
+		float meX = 0, meY = 0, meZ = 0;
+		if (pp.size() >= 2420) { memcpy(&meY, &pp[2408], 4); memcpy(&meX, &pp[2412], 4); memcpy(&meZ, &pp[2416], 4); }
+		std::vector<Packet*> early = z->Poll(1500);
+		for (size_t i = 0; i < early.size(); i++)
+			if (early[i]->opcode == (int16)0xf520 && early[i]->size >= 12 && (early[i]->pBuffer[4] | (early[i]->pBuffer[5] << 8)) == 16 && st.myId == 0)
+				st.myId = early[i]->pBuffer[8] | (early[i]->pBuffer[9] << 8);
+		DeleteAll(early);
+		// what to sell: the packs (22-29) and what is in bags (250-329), but food (14) and drink (15)
+		std::vector<int> toSell;
+		bool haveFood = false, haveDrink = false;
+		std::map<int, std::vector<unsigned char> > items = InventoryItems(st.inventory);
+		for (std::map<int, std::vector<unsigned char> >::iterator i = items.begin(); i != items.end(); ++i)
+		{
+			if (i->second.size() < 220)
+				continue;
+			int type = i->second[194];
+			if (type == 14) haveFood = true;
+			else if (type == 15) haveDrink = true;
+			else if ((i->first >= 22 && i->first <= 29) || (i->first >= 250 && i->first < 330)) toSell.push_back(i->first);
+		}
+		std::vector<SpawnInfo> merchants;
+		std::vector<SpawnInfo> spawns = DecodeSpawns(st.spawnPackets);
+		for (size_t i = 0; i < spawns.size(); i++)
+			if (spawns[i].npc == 1 && (spawns[i].cls == 41 || spawns[i].cls == 32))	// Sony's 41; our MERCHANT is 32
+				merchants.push_back(spawns[i]);
+		const char* prefer = getenv("EQBOT_TOWN_NPC");	// a merchant known to sell food: tried first
+		std::sort(merchants.begin(), merchants.end(), [&](const SpawnInfo& a, const SpawnInfo& b) {
+			bool pa = prefer && a.name.compare(0, strlen(prefer), prefer) == 0, pb = prefer && b.name.compare(0, strlen(prefer), prefer) == 0;
+			if (pa != pb) return pa;
+			return (a.x - meX) * (a.x - meX) + (a.y - meY) * (a.y - meY) < (b.x - meX) * (b.x - meX) + (b.y - meY) * (b.y - meY); });
+		unsigned tick = 0;
+		auto send = [&](bool walking, float tx, float ty) {
+			unsigned char u[15];
+			memset(u, 0, sizeof(u));
+			short y = (short)meY, x = (short)meX, zz = (short)(meZ * 10);
+			u[0] = st.myId & 0xff; u[1] = st.myId >> 8;
+			u[2] = walking ? 22 : 0;
+			u[3] = HeadingTowards(meX, meY, tx, ty);
+			memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
+			u[11] = walking ? ((++tick & 1) ? 1 : 2) : 0;
+			z->Send(kClientUpdate, u, sizeof(u));
+		};
+		int sold = 0, visited = 0;
+		bool didSell = toSell.empty();
+		for (size_t m = 0; m < merchants.size() && visited < 6 && !(didSell && haveFood && haveDrink); m++)
+		{
+			const SpawnInfo& mer = merchants[m];
+			visited++;
+			long last = NowMs(), walkStart = last;
+			while (NowMs() - walkStart < 240000)	// straight to it, 20 units a second, stop 4 away
+			{
+				{ std::vector<Packet*> g = z->Poll(250); DeleteAll(g); }
+				long now = NowMs();
+				float dx = mer.x - meX, dy = mer.y - meY, d = sqrtf(dx * dx + dy * dy), step = 20.0f * (now - last) / 1000.0f;
+				last = now;
+				if (d <= 4) break;
+				float s = std::min(step, d - 3);
+				meX += dx / d * s; meY += dy / d * s; meZ = mer.z;
+				send(true, mer.x, mer.y);
+			}
+			send(false, mer.x, mer.y);
+			uint16_t aim[2] = { (uint16_t)mer.id, 0 };
+			z->Send(kClientTarget, aim, sizeof(aim));
+			unsigned char click[16];	// OP_ShopRequest: Merchant_Click_Struct (entity id, player id, 4 bytes, price multiplier)
+			memset(click, 0, sizeof(click));
+			click[0] = mer.id & 0xff; click[1] = mer.id >> 8;
+			z->Send(0x0b20, click, sizeof(click));
+			std::vector<Packet*> shop = Collect(*z, 3000, [](const std::vector<Packet*>&) { return false; });
+			bool opened = false;
+			int foodSlot = -1, drinkSlot = -1, foodCost = 0x7fffffff, drinkCost = 0x7fffffff, foodItem = 0, drinkItem = 0;
+			for (size_t i = 0; i < shop.size(); i++)
+			{
+				const Packet* p = shop[i];
+				if (p->opcode == 0x0b20 && p->size >= 9 && p->pBuffer[8] == 1)
+					opened = true;
+				if (p->opcode != 0x0c20 || p->size < 5 + 220)
+					continue;
+				const unsigned char* it = p->pBuffer + 5;	// OP_ShopItem: the Item_Struct after 5 bytes
+				int cost = it[140] | (it[141] << 8) | (it[142] << 16) | (it[143] << 24), type = it[194];
+				int slot = (short)(it[134] | (it[135] << 8)), nr = it[130] | (it[131] << 8);
+				if (type == 14 && cost > 0 && cost < foodCost) { foodCost = cost; foodSlot = slot; foodItem = nr; }
+				if (type == 15 && cost > 0 && cost < drinkCost) { drinkCost = cost; drinkSlot = slot; drinkItem = nr; }
+			}
+			DeleteAll(shop);
+			if (!opened)
+			{
+				BotLog(charname, st.zone, "action=TownShop merchant=%s result=closed", mer.name.c_str());
+				continue;
+			}
+			auto trade = [&](int16 opcode, int slot, int qty, int& gotQty, int& gotCost) {
+				unsigned char b[20];	// Merchant_Purchase_Struct: npc, player, slot at 8, quantity at 12, cost at 16
+				memset(b, 0, sizeof(b));
+				b[0] = mer.id & 0xff; b[1] = mer.id >> 8;
+				b[4] = st.myId & 0xff; b[5] = st.myId >> 8;
+				b[8] = slot & 0xff; b[9] = (slot >> 8) & 0xff;
+				b[12] = (unsigned char)qty;
+				z->Send(opcode, b, sizeof(b));
+				std::vector<Packet*> r = Collect(*z, 2500, [&](const std::vector<Packet*>& g) {
+					for (size_t i = 0; i < g.size(); i++) if (g[i]->opcode == opcode) return true;
+					return HasText(g, "afford"); });
+				gotQty = gotCost = -1;
+				for (size_t i = 0; i < r.size(); i++)
+					if (r[i]->opcode == opcode && r[i]->size >= 20)
+					{
+						gotQty = r[i]->pBuffer[12];
+						gotCost = r[i]->pBuffer[16] | (r[i]->pBuffer[17] << 8) | (r[i]->pBuffer[18] << 16) | (r[i]->pBuffer[19] << 24);
+					}
+				DeleteAll(r);
+			};
+			if (!didSell)
+			{
+				for (size_t i = 0; i < toSell.size(); i++)
+				{
+					int q, cost;
+					trade(0x2820, toSell[i], 20, q, cost);	// OP_ShopPlayerSell: the zone caps the quantity at what the slot holds
+					int nr = items[toSell[i]][130] | (items[toSell[i]][131] << 8);
+					BotLog(charname, st.zone, "action=TownSell merchant=%s slot=%d item=%d qty=%d", mer.name.c_str(), toSell[i], nr, q);	// (the zone echoes the request: no price in it)
+					if (q >= 0) sold++;
+				}
+				didSell = true;
+			}
+			// A little of each first (5, or what the purse allows: the zone says "You cannot afford that"),
+			// then up to a stack of 20 with what is left
+			auto buy = [&](int slot, int item, const char* what, const int* tries, int n) {
+				for (int k = 0; k < n; k++)
+				{
+					int q, cost;
+					trade(0x2720, slot, tries[k], q, cost);	// OP_ShopPlayerBuy
+					if (q > 0)
+					{
+						BotLog(charname, st.zone, "action=TownBuy merchant=%s what=%s item=%d qty=%d copper=%d", mer.name.c_str(), what, item, q, cost);
+						return true;
+					}
+				}
+				return false;
+			};
+			static const int first[] = { 5, 2, 1 }, more[] = { 15, 10, 5 };
+			bool gotDrink = !haveDrink && drinkSlot >= 0 && buy(drinkSlot, drinkItem, "drink", first, 3);
+			bool gotFood = !haveFood && foodSlot >= 0 && buy(foodSlot, foodItem, "food", first, 3);
+			if (gotFood) buy(foodSlot, foodItem, "food", more, 3);
+			if (gotDrink) buy(drinkSlot, drinkItem, "drink", more, 3);
+			if (!haveDrink && drinkSlot >= 0 && !gotDrink) BotLog(charname, st.zone, "action=TownBuy merchant=%s what=drink item=%d qty=0 why=cannot_afford", mer.name.c_str(), drinkItem);
+			if (!haveFood && foodSlot >= 0 && !gotFood) BotLog(charname, st.zone, "action=TownBuy merchant=%s what=food item=%d qty=0 why=cannot_afford", mer.name.c_str(), foodItem);
+			haveDrink = haveDrink || gotDrink;
+			haveFood = haveFood || gotFood;
+			z->Send(0x3720, 0, 0);	// OP_ShopEnd: close the window
+			{ std::vector<Packet*> g = Collect(*z, 600, [](const std::vector<Packet*>&) { return false; }); DeleteAll(g); }
+		}
+		BotLog(charname, st.zone, "action=Town town=%s merchants=%d sold=%d food=%d drink=%d", town.c_str(), visited, sold, haveFood ? 1 : 0, haveDrink ? 1 : 0);
+		// back: a new session, so that it starts from where we stand (the legs walk from the profile's position)
 		z->Disconnect();
 		delete z;
-		return ok == (int)legs.size() ? 0 : 1;
+		z = new EqSession();
+		st = ZoneState();
+		in = false;
+		for (int attempt = 0; attempt < 8 && !in; attempt++)
+		{
+			long until = NowMs() + 15000;
+			while (NowMs() < until) { struct timeval tv = { 0, 200000 }; select(0, 0, 0, 0, &tv); }
+			if (attempt) { delete z; z = new EqSession(); st = ZoneState(); }
+			in = EnterZone(host, user, pass, charname, *z, st);
+		}
+		bool ok = in && TravelLegs(host, user, pass, charname, z, st, back, lines) == 1;
+		BotLog(charname, st.zone, "action=TownBack result=%s zone=%s", ok ? "ok" : "failed", st.zone.c_str());
+		if (in) z->Disconnect();
+		delete z;
+		return ok;
 	}
 
 	void Usage()
