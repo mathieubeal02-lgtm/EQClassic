@@ -5629,7 +5629,6 @@ void Client::ProcessOP_ClassTraining(APPLAYER* pApp)
 			memcpy(pApp->pBuffer + g_trainGreedOffset, &g_trainGreedValue, sizeof(float));
 			EQC::Common::Log(EQCLog::Debug, CP_CLIENT, "ClassTraining: price multiplier %f at byte %d", g_trainGreedValue, g_trainGreedOffset);
 		}
-		}
 		
 		QueuePacket(pApp);
 	}
