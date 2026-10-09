@@ -50,5 +50,8 @@ See `docs/ARCHITECTURE.md` (components, data flow, hotspots) and `docs/BUILD.md`
 - SQL: wrap every string interpolated into a quoted SQL literal with
   `SQLEscape(x).c_str()` (`Common/Include/SQLEscape.h`). Never interpolate into unquoted SQL.
 - Database: `sql/schema.sql` (structure), `sql/eqclassic_db` (submodule with the data dump).
+- NPC data lives twice: the zone loads `npc_types_without` (`Database::LoadNPCTypes`), `npc_types` only
+  gives the highest id. A patch that changes NPC stats, sizes or levels writes both
+  (`tools/npc_stats/README.md`).
 - Do not "fix" the `LS/` tree by re-importing files from `legacy/`; Login only needs what
   is left in `LS/common` and `LS/zone` (transitive include closure, see `legacy/README.md`).

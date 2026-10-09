@@ -205,7 +205,8 @@ def main():
         stats = {r[0]: r[1:] for r in rows("SELECT id, level, hp, mindmg, maxdmg, AC FROM %s.npc_types WHERE id IN (%s)" % (QUARM, ','.join(restat.values())))}
         for oid in sorted(restat):
             level, hp, mindmg, maxdmg, ac = stats[restat[oid]]
-            w('UPDATE npc_types SET level = %s, hp = %s, mindmg = %s, maxdmg = %s, AC = %s WHERE id = %d;' % (level, hp, mindmg, maxdmg, ac, oid))
+            for table in ('npc_types', 'npc_types_without'):	# the zone reads the second one
+                w('UPDATE %s SET level = %s, hp = %s, mindmg = %s, maxdmg = %s, AC = %s WHERE id = %d;' % (table, level, hp, mindmg, maxdmg, ac, oid))
         w('')
 
     out += values('spawngroup', ['id', 'name', 'spawnlimit'], [(int(g[0]) + ID_OFFSET, q(g[1]), g[2]) for g in group_rows])
