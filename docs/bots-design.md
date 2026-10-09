@@ -710,7 +710,7 @@ None of milestones 1–4 changes server code.
 
 ### Optional later milestones
 
-- **M5: going back to town and selling.** Bags full → walk to the zone's merchant (`merchantlist`),
+- **M5: going back to town and selling** (done: `eqbot hunt` with `EQBOT_TOWN`, see `tools/botd/README.md`). Bags full → walk to the zone's merchant (`merchantlist`),
   sell items by value, buy food and drink, return to camp. Check: copper increases and bag slots
   are freed, both in the logs.
 - **M6: zoning.** Walk to a zone point, client-side zone change through World, continue in the new
