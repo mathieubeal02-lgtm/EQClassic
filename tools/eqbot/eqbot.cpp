@@ -1679,6 +1679,9 @@ namespace
 	//   Rest     sit until healed (under 90 % HP before a pull, and a short sit after each fight); stand on aggro
 	//   Flee     back to the camp under 20 % HP while the prey is still healthy
 //   Avoid    (Seek/Rest) a named 3+ levels above us within 70: walk away; prey near one is left alone
+//   Recover  its own corpse, when one lies in the zone: walk to it and loot it. A try that fails (killed on the
+//            way, out of reach) is made again five minutes later; after two the bot gives the corpse up and asks
+//            for help on OOC (milestone 7).
 //   It eats and drinks from its packs when the zone says it is getting hungry (a famished player heals nothing).
 //   Out of food or drink (or every EQBOT_TOWN_EVERY minutes), with EQBOT_TOWN set: a trip to town between two
 //   lives (TownTrip, milestone 5): sell the packs, buy drink and food, come back.
@@ -1697,12 +1700,16 @@ namespace
 		std::vector<std::pair<float, float> > zoneLines;	// where the zone tried to send us elsewhere
 		bool sayDeath;	// died: say so to the group once back
 		std::map<int, int> corpseFood, corpseDrink;	// the food and drink left on our last corpse that had some
+		std::map<std::string, int> corpseFailures;	// tries at each corpse that ended badly (killed on the way, out of reach)
+		std::map<std::string, long> corpseRetryAt;	// not before: the next try
+		std::string helpCorpse;	// given up after two tries: ask for help on OOC (milestone 7)
+		float helpX, helpY;
 		bool wantTown;	// out of food or drink: go to town (EQBOT_TOWN), sell, buy, come back
 		long lastTown;
 		int townTrips;
 		HuntStats() : kills(0), loots(0), items(0), deaths(0), hitsDealt(0), damageDealt(0), hitsTaken(0), damageTaken(0),
 		              refused(0), recovered(0), equipped(0), assists(0), casts(0), expGained(0), campSet(false), campX(0), campY(0), campZ(0), sayDeath(false),
-		              wantTown(false), lastTown(0), townTrips(0) {}
+		              wantTown(false), lastTown(0), townTrips(0), helpX(0), helpY(0) {}
 	};
 
 	// Items of the bulk inventory sent at zone-in: slot -> Item_Struct bytes.
@@ -2046,6 +2053,25 @@ namespace
 			z.Send(kAutoAttack, &v, sizeof(v));
 		};
 		// walks toward a point, stops `stop` units short; true when there
+		// Milestone 7: a try at a corpse that ended badly. The first time the bot comes back to it five
+		// minutes later; the second time it gives the corpse up and asks for help on OOC. True when given up.
+		auto corpseFailed = [&](const std::string& corpse, const char* why) {
+			int n = ++hs.corpseFailures[corpse];
+			float cx = 0, cy = 0;
+			for (std::map<int, Mobile>::iterator it = myCorpses.begin(); it != myCorpses.end(); ++it)
+				if (it->second.name == corpse) { cx = it->second.x; cy = it->second.y; }
+			if (n < 2)
+			{
+				hs.corpseRetryAt[corpse] = NowMs() + 300000;
+				BotLog(charname, st.zone, "action=CorpseRunFailed corpse=%s why=%s tries=%d retry_in=300", corpse.c_str(), why, n);
+				return false;
+			}
+			BotLog(charname, st.zone, "action=AbandonCorpse corpse=%s why=%s tries=%d", corpse.c_str(), why, n);
+			hs.emptiedCorpses.insert(corpse);
+			hs.helpCorpse = corpse;
+			hs.helpX = cx; hs.helpY = cy;
+			return true;
+		};
 		long lastAvoid = 0;
 		// NPCs we keep away from: 3 levels above us or more, neither a guard nor known to like us
 		auto isDanger = [&](int id) {
@@ -2421,11 +2447,7 @@ namespace
 						{
 							hs.deaths++;
 							if (!recovering.empty())
-							{
-								// killed while going back to a corpse: something camps it, give it up
-								BotLog(charname, st.zone, "action=AbandonCorpse corpse=%s", recovering.c_str());
-								hs.emptiedCorpses.insert(recovering);
-							}
+								corpseFailed(recovering, "killed");	// killed while going back to it: something camps it
 							if (!food.empty() || !drink.empty())
 							{
 								hs.corpseFood = food;	// what we carried stays on the corpse
@@ -2524,6 +2546,16 @@ namespace
 			}
 			if (hs.sayDeath && grouped && state != Dead && askLine("death", "group", ""))
 				hs.sayDeath = false;
+			if (!hs.helpCorpse.empty() && state != Dead)
+			{
+				char loc[80];
+				snprintf(loc, sizeof(loc), ",\"loc\":\"%.0f, %.0f\"", hs.helpY, hs.helpX);	// as /loc shows it: y, x
+				if (askLine("corpsehelp", "ooc", loc))
+				{
+					BotLog(charname, st.zone, "action=CorpseHelp corpse=%s loc=%.0f,%.0f", hs.helpCorpse.c_str(), hs.helpY, hs.helpX);
+					hs.helpCorpse.clear();
+				}
+			}
 			// leader: invite who is missing (again after a death or a disconnect)
 			for (size_t k = 0; k < invitees.size(); k++)
 			{
@@ -2629,6 +2661,7 @@ namespace
 					// grouped, only a corpse near the leader: nobody goes alone across the zone
 					int lid = member && grouped ? playerByName(leaderName) : 0;
 					if ((!lid || fabsf(players[lid].x - it->second.x) + fabsf(players[lid].y - it->second.y) < 150) &&
+					    !(hs.corpseRetryAt.count(it->second.name) && now < hs.corpseRetryAt[it->second.name]) &&
 					    !nearDanger(it->second.x, it->second.y))	// not while what killed us stands by it
 						corpseId = it->first;
 				}
@@ -2889,7 +2922,15 @@ namespace
 			{
 				Mobile& c = myCorpses[target];
 				if (nearZoneLine(c.x, c.y)) { hs.emptiedCorpses.insert(c.name); myCorpses.erase(target); recovering.clear(); setState(Seek, "corpse by a zone line"); break; }
-				if (now - stateSince > 120000) { hs.emptiedCorpses.insert(c.name); myCorpses.erase(target); setState(Seek, "corpse out of reach"); break; }
+				if (now - stateSince > 120000)
+				{
+					std::string name = c.name;
+					if (corpseFailed(name, "out_of_reach"))
+						myCorpses.erase(target);
+					recovering.clear();
+					setState(Seek, "corpse out of reach");
+					break;
+				}
 				if (!walkTo(c.x, c.y, c.z, step, 2))
 					break;
 				if (!c.alive)	// request sent: the items came right after it
