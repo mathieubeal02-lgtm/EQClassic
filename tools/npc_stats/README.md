@@ -34,3 +34,7 @@ Generate a zone's patch before applying it: the generator reads our tables, and 
 the NPCs it imported look like ours (a regenerated patch would no longer carry them).
 `test_zone_patch.sh <patch> <zone> <zone id>` applies a patch twice to copies of the tables and counts
 what would dangle. It refuses to run when a patch writes a table it does not copy.
+
+`gen_019_post_velious.sh` writes patch 019: the spawn entries of NPCs added to era zones after Velious
+(in neither Quarm nor the ShowEQ capture, and standing where Quarm has no spawn point within 15 units;
+an era NPC under another name sits on an era point and is kept). Patch 012 did Innothule by hand.
