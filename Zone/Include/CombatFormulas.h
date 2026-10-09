@@ -112,6 +112,9 @@ namespace Combat
 	// 76, 1.25 from 61 to 75, then up to 1.55 at 0. Apprehensive: 1.05 from 131, 1.33 at 76, 1.4
 	// from 61 to 75, up to 1.73 at 0. Never under 1.05.
 	float MerchantPriceMultiplier(int cha, bool amiableOrBetter, bool apprehensive);
+	// What a guildmaster charges for one training point, in copper, as the client shows it:
+	// (skill - 10)^3 x the merchant multiplier x 0.01; nothing up to skill 10 (TAKP has the same).
+	int TrainingCost(int skill, float priceMultiplier);
 }
 
 #endif

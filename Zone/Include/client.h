@@ -50,6 +50,7 @@ class Client : public Mob
 public:
 	int		DiffInventory(Client* to);	// #diffinv: our inventory against the one the client uploaded last
 	void	ShowFaction(Client* to, NPC* npc);	// #showfaction
+	float	TrainerPriceMultiplier(Mob* trainer);	// what a guildmaster's training costs, as a merchant's prices
 	// A new NPC for this client: now if in game, at the end of its zone-in if its spawn list is
 	// already sent (a zone still loading spawns its NPCs while the first player comes in)
 	void	SendNewSpawn(NPC* npc);

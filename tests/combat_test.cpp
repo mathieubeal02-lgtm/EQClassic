@@ -156,6 +156,13 @@ int main()
 	EXPECT_NEAR(MerchantPriceMultiplier(100, false, true), 100.0 / (100 - 45 / 2.8));	// 1.19
 	EXPECT_NEAR(MerchantPriceMultiplier(40, false, true), 1.0 + 103.574 / 196.434);	// 1.527
 
+	// training: (skill - 10)^3 x multiplier x 0.01 copper
+	EXPECT_EQ(TrainingCost(10, 1.25f), 0);
+	EXPECT_EQ(TrainingCost(11, 1.25f), 0);		// 0.0125 copper
+	EXPECT_EQ(TrainingCost(60, 10.0f), 12499);	// what the real client showed: 12 platinum, 4 gold
+	EXPECT_EQ(TrainingCost(60, 1.25f), 1562);
+	EXPECT_EQ(TrainingCost(200, 1.05f), 72019);	// 72 platinum for a point at 200
+
 	if (failures == 0)
 		printf("combat_test: all tests passed\n");
 	return failures == 0 ? 0 : 1;

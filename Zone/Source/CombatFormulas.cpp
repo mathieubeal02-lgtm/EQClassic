@@ -528,4 +528,12 @@ namespace Combat
 		float multiplier = 1.0f / pays;
 		return multiplier < 1.05f || pays <= 0 ? 1.05f : multiplier;
 	}
+
+	int TrainingCost(int skill, float priceMultiplier)
+	{
+		int adjusted = skill - 10;
+		if (adjusted <= 0)
+			return 0;
+		return (int)((double)adjusted * adjusted * adjusted * priceMultiplier * 0.0099999998);
+	}
 }

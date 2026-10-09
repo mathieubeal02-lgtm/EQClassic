@@ -5541,6 +5541,15 @@ void Client::ProcessOP_AssistTarget(APPLAYER* pApp){
 *  exploiting. Also, make sure to add class points upon leveling.	*
 ********************************************************************/
 
+// The multiplier a guildmaster applies to training, the same as a merchant's (charisma and standing)
+float Client::TrainerPriceMultiplier(Mob* trainer)
+{
+	FACTION_VALUE standing = FACTION_INDIFFERENT;
+	if (trainer && trainer->IsNPC())
+		standing = GetFactionLevel(character_id, trainer->GetNPCTypeID(), race, class_, deity, trainer->CastToNPC()->GetPrimaryFactionID(), trainer);
+	return Combat::MerchantPriceMultiplier(GetCHA(), standing <= FACTION_AMIABLE, standing == FACTION_APPREHENSIVE);
+}
+
 void Client::ProcessOP_ClassTraining(APPLAYER* pApp)
 {
 	//Yeahlight: GMs ignore invis PCs
@@ -5598,6 +5607,10 @@ void Client::ProcessOP_ClassTraining(APPLAYER* pApp)
 		for(int i=0; i < sizeof(classtrain->unknown); i++) {
 			classtrain->unknown[i] = 1;
 		}
+		classtrain->unknown112 = 1;
+		// The price of a point follows charisma and standing, as a merchant's (it was free: these bytes
+		// were all 1, a float of nearly 0). ProcessOP_ClassTrainSkill charges the same.
+		classtrain->pricemultiplier = TrainerPriceMultiplier((trainer && trainer->IsNPC()) ? trainer->CastToMob() : 0);
 		
 		QueuePacket(pApp);
 	}
@@ -5652,6 +5665,19 @@ void Client::ProcessOP_ClassTrainSkill(APPLAYER* pApp)
 		return;
 	if (gmskill->skill_type != 0 && gmskill->skill_type != 1)
 		return;
+
+	// What the client showed for this point (Combat::TrainingCost): pay first
+	{
+		int16 current = gmskill->skill_type == 0 ? GetSkill(gmskill->skill_id) : GetLanguageSkill(gmskill->skill_id);
+		if (current == 254)
+			current = GetLevel() - 1;
+		int cost = Combat::TrainingCost(current, TrainerPriceMultiplier(trainer));
+		if (cost > 0 && !TakeMoneyFromPP(cost))
+		{
+			Message(RED, "You cannot afford that.");
+			return;
+		}
+	}
 
 	// train a regular skill
 	if(gmskill->skill_type == 0) {
