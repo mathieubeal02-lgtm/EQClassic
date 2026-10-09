@@ -145,6 +145,17 @@ int main()
 	EXPECT_EQ(ClientManaRegen(true, false, false, 235), 19);	// 4 + 235 / 15
 	EXPECT_EQ(ClientManaRegen(true, true, false, 235), 0);
 
+	// merchant prices
+	EXPECT_NEAR(MerchantPriceMultiplier(115, false, false), 1.05);	// the floor
+	EXPECT_NEAR(MerchantPriceMultiplier(200, false, false), 1.05);
+	EXPECT_NEAR(MerchantPriceMultiplier(104, true, false), 1.05);	// amiable: 11 charisma more
+	EXPECT_NEAR(MerchantPriceMultiplier(76, false, false), 1.0 / (1 - 39 * 0.004));	// 1.185
+	EXPECT_NEAR(MerchantPriceMultiplier(70, false, false), 1.25);
+	EXPECT_NEAR(MerchantPriceMultiplier(40, false, false), 1.0 + 80 / 220.0);	// a troll: 1.364
+	EXPECT_NEAR(MerchantPriceMultiplier(70, false, true), 1.4);
+	EXPECT_NEAR(MerchantPriceMultiplier(100, false, true), 100.0 / (100 - 45 / 2.8));	// 1.19
+	EXPECT_NEAR(MerchantPriceMultiplier(40, false, true), 1.0 + 103.574 / 196.434);	// 1.527
+
 	if (failures == 0)
 		printf("combat_test: all tests passed\n");
 	return failures == 0 ? 0 : 1;

@@ -16,6 +16,7 @@
 #endif
 
 #include "client.h"
+#include "CombatFormulas.h"
 #include "database.h"
 #include "EQCUtils.hpp"
 #include "packet_functions.h"
@@ -3801,8 +3802,9 @@ void Client::ProcessOP_ShopRequest(APPLAYER* pApp){
 	if(this->GetInvisible())
 		action = 0;
 	
+	FACTION_VALUE FactionLevel = FACTION_INDIFFERENT;
 	if(action !=0){
-		FACTION_VALUE FactionLevel = GetFactionLevel(character_id, tmp->GetNPCTypeID(), race, class_, deity, tmp->CastToNPC()->GetPrimaryFactionID(), tmp);
+		FactionLevel = GetFactionLevel(character_id, tmp->GetNPCTypeID(), race, class_, deity, tmp->CastToNPC()->GetPrimaryFactionID(), tmp);
 	
 		if(FactionLevel == FACTION_DUBIOUS){
 			action = 0;
@@ -3814,8 +3816,10 @@ void Client::ProcessOP_ShopRequest(APPLAYER* pApp){
 	mco->unknown[1] = 0x03;
 	mco->unknown[2] = 0x00;
 	mco->unknown[3] = 0x00;
-	if(action){ // Tazadar : We calculate the pricemultiplier
-		mco->pricemultiplier=2.5;
+	if(action){
+		// The price depends on charisma and standing (it was 2.5 for everybody: a loaf at 19 copper cost 48,
+		// and loot sold for 40% of its price). The client shows and charges what this number says.
+		mco->pricemultiplier = Combat::MerchantPriceMultiplier(GetCHA(), FactionLevel <= FACTION_AMIABLE, FactionLevel == FACTION_APPREHENSIVE);
 	}
 	else{ // Tazadar : We do not need to calculate the pricemultiplier
 		mco->pricemultiplier=200;

@@ -103,6 +103,15 @@ namespace Combat
 	// A player's natural mana regen: 0 famished, 1 standing, 2 sitting; sitting with Meditate (not
 	// bards) 3, or 4 + skill / 15 once the skill is above 1.
 	int ClientManaRegen(bool sitting, bool famished, bool bard, int meditateSkill);
+
+	// ---- merchants -----------------------------------------------------------------------------
+	// What a merchant charges for an item, as a multiple of its price (it pays the price divided by
+	// the same number), from the buyer's charisma and standing: the eqtraders.com price study, as
+	// TAKP fitted it (CalcPriceMod, merchants without greed). Amiable or better counts as 11 more
+	// charisma. Indifferent or better: 1.05 at 115 charisma and above, rising in a line to 1.18 at
+	// 76, 1.25 from 61 to 75, then up to 1.55 at 0. Apprehensive: 1.05 from 131, 1.33 at 76, 1.4
+	// from 61 to 75, up to 1.73 at 0. Never under 1.05.
+	float MerchantPriceMultiplier(int cha, bool amiableOrBetter, bool apprehensive);
 }
 
 #endif
