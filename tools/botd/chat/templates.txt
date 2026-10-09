@@ -8,6 +8,9 @@ inc|1|incoming, {mob}
 death|2|ugh, died
 death|1|corpse run time...
 death|1|well that went badly
+corpsehelp|2|can anyone help me get my corpse? its around {loc} in {zone}
+corpsehelp|1|lost my corpse twice at {loc}, anyone around {zone} who can help?
+corpsehelp|1|need a hand with a corpse run in {zone}, loc {loc}
 thanks|2|thanks for the group
 thanks|1|ty all, gtg
 levelup|2|ding {level}!

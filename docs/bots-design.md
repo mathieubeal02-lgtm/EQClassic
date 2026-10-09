@@ -720,7 +720,7 @@ None of milestones 1–4 changes server code.
     Qeynos -> Qeynos Hills -> Blackburrow -> Qeynos Hills -> North Qeynos passes, 2 to 3 s per change.
     The client side was not captured from the real client: it was read from the zone and World code
     (`Client::ProcessOP_ZoneChange`, `ScanForZoneLines`, World's login and enter-world path).
-- **M7: deaths and corpse runs.** Go back to the corpse and loot it; ask for help on OOC after 2
+- **M7: deaths and corpse runs** (done: `eqbot hunt` goes back to its corpse and loots it; a failed try is made again five minutes later, and after two the bot posts a `corpsehelp` line on OOC through chatd). Go back to the corpse and loot it; ask for help on OOC after 2
   failures.
 - **M8: a living world.** Bots log in and out on a schedule (evening peaks), level up and move to
   harder zones, and rotate activity like mod-playerbots' `AllowActive` (idle bots far from any real
