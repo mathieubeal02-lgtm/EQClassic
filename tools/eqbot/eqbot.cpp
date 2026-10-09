@@ -1882,6 +1882,7 @@ namespace
 		}
 		long lastConsume = 0;
 		bool saidHungry = false;
+		int pendingType = 0, pendingSlot = 0, pendingLevel = 0;	// the last thing eaten: did the level rise?
 		auto consume = [&](std::map<int, int>& stock, int type, const char* what, int level) {
 			if (stock.empty())
 			{
@@ -1905,6 +1906,7 @@ namespace
 			if (left <= 0)
 				stock.erase(stock.begin());
 			lastConsume = NowMs();
+			pendingType = type; pendingSlot = slot; pendingLevel = level;
 		};
 		hs.equipped += equipped;
 
@@ -2135,6 +2137,14 @@ namespace
 					else if (p->opcode == (int16)0x5721 && p->size >= 4)	// Stamina: food, water (6000 full, 0 famished)
 					{
 						int foodLevel = (short)(b[0] | (b[1] << 8)), waterLevel = (short)(b[2] | (b[3] << 8));
+						if (pendingType && NowMs() - lastConsume > 3000)
+						{
+							// the zone refused it (nothing consumable in that slot): forget the slot
+							std::map<int, int>& stock = pendingType == 1 ? food : drink;
+							if ((pendingType == 1 ? foodLevel : waterLevel) <= pendingLevel && stock.erase(pendingSlot))
+								BotLog(charname, st.zone, "action=ConsumeFailed what=%s slot=%d", pendingType == 1 ? "food" : "drink", pendingSlot);
+							pendingType = 0;
+						}
 						if (NowMs() - lastConsume > 3000)
 						{
 							if (foodLevel < 2000) consume(food, 1, "food", foodLevel);
@@ -2889,12 +2899,11 @@ namespace
 						uint32_t corpse = target;
 						z.Send(0x4f20, &corpse, sizeof(corpse));	// OP_EndLootRequest
 						BotLog(charname, st.zone, "action=Recovered corpse=%s items=%d", c.name.c_str(), lootedItems);
-						if (lootedItems && (!hs.corpseFood.empty() || !hs.corpseDrink.empty()))
+						bool rationsBack = lootedItems && (!hs.corpseFood.empty() || !hs.corpseDrink.empty());
+						if (rationsBack)
 						{
-							// the rations came back with the rest (the inventory packet is only sent at zone-in)
-							food = hs.corpseFood; drink = hs.corpseDrink;
-							hs.corpseFood.clear(); hs.corpseDrink.clear();
-							saidHungry = false;
+							hs.corpseFood.clear();
+							hs.corpseDrink.clear();
 						}
 						hs.recovered++;
 						hs.emptiedCorpses.insert(c.name);
@@ -2904,6 +2913,13 @@ namespace
 						// the zone puts worn items back in their slots; what went to the packs is put on
 						// at the next login (logging in again now would be refused for a minute)
 						setState(Seek, lootedItems ? "corpse looted" : "corpse empty");
+						if (rationsBack)
+						{
+							// the rations came back, but not to the slots they left: only a new login tells where
+							// they are (the inventory is sent at zone-in). Worth the minute World makes us wait
+							relog = true;
+							state = Dead;
+						}
 					}
 					break;
 				}
