@@ -500,4 +500,32 @@ namespace Combat
 			return 2;
 		return meditateSkill > 1 ? 4 + meditateSkill / 15 : 3;
 	}
+
+	float MerchantPriceMultiplier(int cha, bool amiableOrBetter, bool apprehensive)
+	{
+		if (amiableOrBetter)
+			cha += 11;
+		// the share of the price a merchant pays; it charges the inverse
+		float pays;
+		if (!apprehensive)
+		{
+			if (cha > 75)
+				pays = 1.0f - (115 - cha) * 0.004f;
+			else if (cha > 60)
+				pays = 1.0f / 1.25f;
+			else
+				pays = 1.0f / (1.0f + (120 - cha) / 220.0f);
+		}
+		else
+		{
+			if (cha > 75)
+				pays = (100.0f - (145 - cha) / 2.8f) / 100.0f;
+			else if (cha > 60)
+				pays = 1.0f / 1.4f;
+			else
+				pays = 1.0f / (1.0f + (143.574f - cha) / 196.434f);
+		}
+		float multiplier = 1.0f / pays;
+		return multiplier < 1.05f || pays <= 0 ? 1.05f : multiplier;
+	}
 }

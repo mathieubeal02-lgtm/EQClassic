@@ -3,7 +3,8 @@
 # cheapest stack of Balhallia (EQBOT_SHOP_NPC), twice, and the database tells what it paid and got:
 #   1. with one copper short of 5 items: refused, money unchanged;
 #   2. with exactly the price of 5: bought, money 0, 5 in the stack.
-# Usage: merchant-test.sh [unit price in copper, default 8 = Balhallia's 13106 at x2.5]
+# Usage: merchant-test.sh [unit price in copper]  (the default 8 was Balhallia's 13106 at the old fixed x2.5;
+# the price now follows charisma and standing, Combat::MerchantPriceMultiplier: pass what Qbottwo pays)
 # Needs the database credentials of runtime/db.ini (eqc/eqc here) and a GM bot account (bot/bot).
 cd "$(dirname "$0")"
 UNIT=${1:-8}
