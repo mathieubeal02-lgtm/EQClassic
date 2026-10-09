@@ -1704,7 +1704,10 @@ struct ClassTrain_Struct
 	/*000*/ int32	npcid;
 	/*004*/ int32	playerid;
 	/*008*/ int8	highesttrain[73]; // Highest value for each skill a trainer can train you to.
-	/*081*/	int8	unknown[32];	  // one of these are important or the trainer wont open the training window
+	/*081*/	int8	unknown[27];	  // one of these are important or the trainer wont open the training window
+	/*108*/ float	pricemultiplier;  // the client's price of a training point: (skill - 10)^3 x this x 0.01 copper ("No Charge" at 0).
+	                                  // Found on the real client by writing a float at each byte (10.0 here: 12pp 4gp at skill 60)
+	/*112*/ int8	unknown112;
 	/*113*/ int8	highesttrainLang[24]; // Harakiri languages max a trainer can teach you
 	/*137*/ int8	unknown2[11];   // Unknown
 };
