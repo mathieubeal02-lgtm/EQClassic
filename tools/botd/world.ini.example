@@ -1,0 +1,20 @@
+# Copy to world.ini (not in git). world.py reads it: a population that follows the hour of the day.
+[world]
+# bot_001 .. bot_016 (setup-accounts.sh makes and places them)
+bots = 16
+first = 1
+host = 127.0.0.1
+password = botpass
+eqbot = ../../build-linux/bin/eqbot
+logs = logs/world
+# a session lasts between these many minutes, then the bot is away 10 to 120 minutes
+session_minutes = 40-120
+tick_seconds = 30
+# the share of the bots online at each hour, 00 to 23 (local time): a few at night, all of them at 19-20 h
+curve = 0.15 0.10 0.10 0.05 0.05 0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.40 0.40 0.45 0.50 0.60 0.80 1.00 1.00 0.90 0.60 0.30
+
+# The zones a bot climbs, in order: <zone> = <levels> <town next door or -> <merchant to try first or ->
+# (trolls: Innothule, then the Feerrott; Grobb sells bread and milk to both)
+[ladder]
+innothule = 1-7 grobb Ootok
+feerrott = 8-14 - -

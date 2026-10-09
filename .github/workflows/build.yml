@@ -99,7 +99,7 @@ jobs:
       - run: cmake --build build --parallel
       - run: ctest --test-dir build --output-on-failure
       - name: Bot chat service (a stub LLM, no network)
-        run: python3 tools/botd/test_chatd.py
+        run: python3 tools/botd/test_chatd.py && python3 tools/botd/test_world.py
 
   # The Release servers from windows-cmake, under Wine with MariaDB, played by eqbot:
   # login, character creation, zone entry, twice (see tools/eqbot/ci-e2e.sh).
