@@ -28,6 +28,18 @@ OURS = os.environ.get('EQC_DB_NAME', 'eqclassic')
 QUARM = os.environ.get('QUARM_DB', 'quarm_ref')
 ID_OFFSET = 1000000		# Quarm's spawn2 and spawngroup ids overlap ours: theirs + 1,000,000
 HEADING = 1.0198
+# Quarm's special_abilities numbers -> the letters of our npcspecialattks (Zone/Source/npc.cpp)
+ABILITY = {1: 'S', 2: 'E', 3: 'R', 5: 'F', 6: 'T', 7: 'Q', 12: 'U', 13: 'M', 14: 'C', 15: 'N', 16: 'I', 17: 'D',
+           19: 'A', 20: 'B', 21: 'f', 22: 'O', 23: 'W', 24: 'H'}
+
+
+def abilities(special):
+    out = ''
+    for part in special.split('^'):
+        f = part.split(',')
+        if f[0].isdigit() and int(f[0]) in ABILITY and (len(f) < 2 or f[1] != '0'):
+            out += ABILITY[int(f[0])]
+    return out[:19]
 
 
 def rows(sql):
@@ -152,7 +164,7 @@ def main():
                 'see_invis', 'see_invis_undead', 'AC', 'npc_aggro', 'STR', 'STA', 'DEX', 'AGI', '_INT', 'WIS', 'CHA', 'ATK', 'Accuracy']
         done = set()
         data, loot, factions = [], {}, []
-        for r in rows("SELECT id, loottable_id, npc_faction_id, %s FROM %s.npc_types WHERE id IN (%s) ORDER BY id" % (', '.join(cols), QUARM, ids)):
+        for r in rows("SELECT id, loottable_id, npc_faction_id, special_abilities, %s FROM %s.npc_types WHERE id IN (%s) ORDER BY id" % (', '.join(cols), QUARM, ids)):
             new_id = mapping[r[0]]
             if new_id in done:
                 continue
@@ -160,12 +172,12 @@ def main():
             if int(r[1]):
                 loot[r[1]] = int(r[1]) + ID_OFFSET
             if int(r[2]):
-                factions.append((r[3].lstrip('#'), r[2]))	# npc_faction names carry no '#'
-            vals = [new_id, loot.get(r[1], 0)] + [q(v) if c in ('name', 'lastname') else v for c, v in zip(cols, r[3:])]
+                factions.append((r[4].lstrip('#'), r[2]))	# npc_faction names carry no '#'
+            vals = [new_id, loot.get(r[1], 0), q(abilities(r[3]))] + [q(v) if c in ('name', 'lastname') else v for c, v in zip(cols, r[4:])]
             data.append(vals)
         # npc_types_without is the copy the zone reads an NPC's name from to find its faction (npc_faction, by name)
-        out += values('npc_types', ['id', 'loottable_id'] + cols, data)
-        out += values('npc_types_without', ['id', 'loottable_id'] + cols, data)
+        out += values('npc_types', ['id', 'loottable_id', 'npcspecialattks'] + cols, data)
+        out += values('npc_types_without', ['id', 'loottable_id', 'npcspecialattks'] + cols, data)
         w('')
         if loot:
             # Their loot tables, ids + 1,000,000: the drops there at Velious, items the server can load (ids up to 33000)
