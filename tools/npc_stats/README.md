@@ -38,3 +38,7 @@ what would dangle. It refuses to run when a patch writes a table it does not cop
 `gen_019_post_velious.sh` writes patch 019: the spawn entries of NPCs added to era zones after Velious
 (in neither Quarm nor the ShowEQ capture, and standing where Quarm has no spawn point within 15 units;
 an era NPC under another name sits on an era point and is kept). Patch 012 did Innothule by hand.
+
+**Two NPC tables.** The zone loads NPCs from `npc_types_without` (`Database::LoadNPCTypes`); `npc_types`
+only gives the highest id. A patch that changes NPC data must write both (004 and 005 do; 011 and the
+first version of the era patches wrote `npc_types` alone, and 021 copies their values over).
