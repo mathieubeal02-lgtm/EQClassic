@@ -107,7 +107,8 @@ NPC::NPC(NPCType* d, Spawn2* in_respawn, float x, float y, float z, float headin
 	EntityList::RemoveNumbers(name);
 
 	//Yeahlight: Grab the NPC's primary facton ID while their name is stripped of excess data
-	primaryFaction = Database::Instance()->GetPrimaryFaction(name);
+	// (by the NPC type's own faction list; a spawn made by hand has no type and goes by its name)
+	primaryFaction = d->npc_id ? Database::Instance()->GetPrimaryFactionOfNPC(d->npc_id) : Database::Instance()->GetPrimaryFaction(name);
 	//Yeahlight: Record the NPC's proper name while it is stripped of excees data
 	CreateProperName(name);
 	entity_list.MakeNameUnique(name);

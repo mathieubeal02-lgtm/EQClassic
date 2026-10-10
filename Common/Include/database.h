@@ -189,6 +189,7 @@ public:
 	bool	LoadNPCFactionLists();
 	int32	GetNPCFactionID(int32 npc_id);
 	int32	GetPrimaryFaction(char* name);
+	int32	GetPrimaryFactionOfNPC(int32 npc_id);	// by the NPC type's own faction list
 	// -- End Faction --
 
 	int		GetFreeGroupID();
