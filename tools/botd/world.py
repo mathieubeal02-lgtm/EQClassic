@@ -100,7 +100,7 @@ class World:
         self.host = w.get('host', '127.0.0.1')
         self.password = w.get('password', 'botpass')
         self.eqbot = os.path.join(HERE, w.get('eqbot', '../../build-linux/bin/eqbot'))
-        self.logs = os.path.join(HERE, w.get('logs', 'logs/world'))
+        self.logs = os.path.join(HERE, os.environ.get('BOTD_LOGS') or w.get('logs', 'logs/world'))	# BOTD_LOGS: as fleet.sh
         lo, hi = w.get('session_minutes', '40-120').split('-')
         self.session = (int(lo), int(hi))
         self.tick = int(w.get('tick_seconds', '30'))
