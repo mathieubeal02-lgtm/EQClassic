@@ -28,6 +28,7 @@ OURS = os.environ.get('EQC_DB_NAME', 'eqclassic')
 QUARM = os.environ.get('QUARM_DB', 'quarm_ref')
 ID_OFFSET = 1000000		# Quarm's spawn2 and spawngroup ids overlap ours: theirs + 1,000,000
 HEADING = 1.0198
+ROAM_RANGE = 150		# how far a roamer of ours goes in one leg (Quarm picks any spot of the group's box)
 # Quarm's special_abilities numbers -> the letters of our npcspecialattks (Zone/Source/npc.cpp)
 ABILITY = {1: 'S', 2: 'E', 3: 'R', 5: 'F', 6: 'T', 7: 'Q', 12: 'U', 13: 'M', 14: 'C', 15: 'N', 16: 'I', 17: 'D',
            19: 'A', 20: 'B', 21: 'f', 22: 'O', 23: 'W', 24: 'H'}
@@ -135,6 +136,7 @@ def main():
     w('-- Our rows are kept in spawn2_before_era, spawngroup_before_era, spawnentry_before_era, grid_before_era and')
     w('-- grid_entries_before_era. To restore: delete the zone\'s rows with id >= %d (spawn2, and spawngroup /' % ID_OFFSET)
     w('-- spawnentry by spawngroupID), delete its grid / grid_entries rows, and insert the *_before_era rows back.')
+    w('-- Roamers: the boxes of Quarm\'s spawn groups become the zone\'s zone_roam_boxes (ours kept in zone_roam_boxes_before_era).')
     w('-- Idempotent.')
     w('')
     ours_points = "zone = %s AND id < %d" % (q(zone), ID_OFFSET)
@@ -172,7 +174,7 @@ def main():
             if int(r[1]):
                 loot[r[1]] = int(r[1]) + ID_OFFSET
             if int(r[2]):
-                factions.append((r[4].lstrip('#'), r[2]))	# npc_faction names carry no '#'
+                factions.append((r[4].lstrip('#'), r[2], new_id))	# npc_faction names carry no '#'
             vals = [new_id, loot.get(r[1], 0), q(abilities(r[3]))] + [q(v) if c in ('name', 'lastname') else v for c, v in zip(cols, r[4:])]
             data.append(vals)
         # npc_types_without is the copy the zone reads an NPC's name from to find its faction (npc_faction, by name)
@@ -199,7 +201,7 @@ def main():
                 out += values('lootdrop_entries', ['lootdrop_id', 'item_id', 'item_charges', 'equip_item', 'chance'],
                               [(int(i[0]) + ID_OFFSET, i[1], min(int(i[2]), 127), i[3], max(1, min(100, round(float(i[4]))))) for i in items])
             w('')
-        for name, qf in factions:
+        for name, qf, _ in factions:
             # a faction list for the name, unless we have one: Quarm's, with our faction ids (same faction names)
             if rows("SELECT 1 FROM npc_faction WHERE name = %s" % q(name)):
                 continue
@@ -209,6 +211,11 @@ def main():
             for fid, value, npc_value in rows("SELECT o.id, e.value, e.npc_value FROM %s.npc_faction_entries e JOIN %s.faction_list qf ON qf.id = e.faction_id "
                                               "JOIN faction_list o ON o.name = qf.name WHERE e.npc_faction_id = %s ORDER BY o.id" % (QUARM, QUARM, qf)):
                 w("INSERT IGNORE INTO npc_faction_entries (npc_faction_id, faction_id, value, npc_value) SELECT id, %s, %s, %s FROM npc_faction WHERE name = %s;" % (fid, value, npc_value, q(name)))
+        for name, _, new_id in factions:
+            # the zone finds an NPC's faction list by this id (by name only when one list has the name)
+            for table in ('npc_types', 'npc_types_without'):
+                w("UPDATE %s SET npc_faction_id = (SELECT MIN(id) FROM npc_faction WHERE name = %s) WHERE id = %d AND EXISTS (SELECT 1 FROM npc_faction WHERE name = %s);"
+                  % (table, q(name), new_id, q(name)))
         w('')
 
     if restat:
@@ -236,8 +243,22 @@ def main():
         data.append([int(g) + ID_OFFSET, mapping[npc], int(chance), 0])
     out += values('spawnentry', ['spawngroupID', 'npcID', 'chance', 'time_of_day'], data)
     w('')
+    # Quarm's roamers walk inside a box their spawn group names. Ours walk legs of roamRange inside one of the
+    # zone's boxes (zone_roam_boxes): the zone gets each box once, and the points of a group with a box, no grid, a range.
+    boxed = {r[0]: tuple(int(round(float(v))) for v in r[1:]) for r in
+             rows("SELECT id, min_x, max_x, min_y, max_y FROM %s.spawngroup WHERE id IN (%s) AND max_x <> min_x AND max_y <> min_y" % (QUARM, inlist))}
+    # largest first: a roamer takes the last box its first spot is in (Spawn2), so the smallest one around it
+    boxes = sorted(set(boxed.values()), key=lambda b: -(b[1] - b[0]) * (b[3] - b[2]))
+    if boxes:
+        w('CREATE TABLE IF NOT EXISTS zone_roam_boxes_before_era LIKE zone_roam_boxes;')
+        w('INSERT IGNORE INTO zone_roam_boxes_before_era SELECT * FROM zone_roam_boxes WHERE zone = %s AND id < %d;' % (q(zone), ID_OFFSET))
+        w('DELETE FROM zone_roam_boxes WHERE zone = %s;' % q(zone))
+        out += values('zone_roam_boxes', ['id', 'zone', 'minX', 'maxX', 'minY', 'maxY'],
+                      [(ID_OFFSET + int(zid) * 100 + i, q(zone)) + b for i, b in enumerate(boxes)])
+        w('')
     out += values('spawn2', ['id', 'spawngroupID', 'zone', 'x', 'y', 'z', 'heading', 'respawntime', 'variance', 'pathgrid', 'timeleft', '_condition', 'cond_value', 'roamRange'],
-                  [(int(p[0]) + ID_OFFSET, int(p[1]) + ID_OFFSET, q(zone), p[2], p[3], p[4], heading(p[5]), p[6], p[7], p[8], 0, 0, 0, 0) for p in points])
+                  [(int(p[0]) + ID_OFFSET, int(p[1]) + ID_OFFSET, q(zone), p[2], p[3], p[4], heading(p[5]), p[6], p[7], p[8], 0, 0, 0,
+                    ROAM_RANGE if p[1] in boxed and int(p[8]) == 0 else 0) for p in points])
     w('')
     out += values('grid', ['id', 'zoneid', 'type', 'type2'], rows("SELECT id, zoneid, type, type2 FROM %s.grid WHERE zoneid = %s ORDER BY id" % (QUARM, zid)))
     w('')
