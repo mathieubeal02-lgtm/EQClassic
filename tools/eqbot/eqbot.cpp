@@ -427,8 +427,8 @@ namespace
 					const unsigned char* u = p->pBuffer + 4 + k * 15;
 					int id = u[0] | (u[1] << 8);
 					float zz = (short)(u[9] | (u[10] << 8)) / 10.0f;	// NPC z is sent x10
-					if (getenv("EQBOT_TRACE") && atoi(getenv("EQBOT_TRACE")) == id)
-						printf("       trace %d: x %d y %d z %.1f\n", id, (short)(u[7] | (u[8] << 8)), (short)(u[5] | (u[6] << 8)), zz);
+					if (getenv("EQBOT_TRACE") && (atoi(getenv("EQBOT_TRACE")) == id || atoi(getenv("EQBOT_TRACE")) < 0))	// -1: every mob
+						printf("       trace %d: x %d y %d z %.1f t %ld\n", id, (short)(u[7] | (u[8] << 8)), (short)(u[5] | (u[6] << 8)), zz, NowMs());
 					Track& t = mobs[id];
 					if (t.updates == 0)
 					{

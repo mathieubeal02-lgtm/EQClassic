@@ -1222,6 +1222,19 @@ void NPC::MoveTowards(float x, float y, float d)
 					float average = (test1 + test2 + test3 + test4) / 4.0;
 					if(CheckCoordLos(old_x, old_y, old_z, new_x, new_y, average))
 						NPC::z_pos = average;
+					else if(this->onRoamPath)
+					{
+						// A roamer whose leg runs into the terrain stops where it stood and takes another leg at its
+						// next roam check. Sent home instead, it walked the same leg again: seen from a client it
+						// jumped between its spawn point and the obstacle every few seconds (Innothule).
+						NPC::x_pos = old_x;
+						NPC::y_pos = old_y;
+						NPC::z_pos = old_z;
+						this->setMoving(false);
+						walking_timer->Disable();
+						onRoamPath = false;
+						SendPosUpdate(false, NPC_UPDATE_RANGE, false);
+					}
 					else
 						TeleportToLocation(org_x, org_y, org_z);
 				}
