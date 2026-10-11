@@ -6,9 +6,9 @@
 set -e
 PATCH=$1; ZONE=$2; ZID=$3
 M="mysql --skip-ssl -u${EQC_DB_USER:-eqc} -p${EQC_DB_PASS:-eqc} ${EQC_DB_NAME:-eqclassic}"
-TABLES="spawn2 spawngroup spawnentry grid grid_entries npc_types npc_types_without loottable loottable_entries lootdrop lootdrop_entries npc_faction npc_faction_entries"
+TABLES="spawn2 spawngroup spawnentry grid grid_entries npc_types npc_types_without loottable loottable_entries lootdrop lootdrop_entries npc_faction npc_faction_entries zone_roam_boxes"
 TMP=$(mktemp)
-sed -E 's/\b(spawn2|spawngroup|spawnentry|grid_entries|grid|npc_types_without|npc_types|loottable_entries|loottable|lootdrop_entries|lootdrop|npc_faction_entries|npc_faction)(_before_era)?\b/tzp_\1\2/g' "$PATCH" > "$TMP"
+sed -E 's/\b(spawn2|spawngroup|spawnentry|grid_entries|grid|npc_types_without|npc_types|loottable_entries|loottable|lootdrop_entries|lootdrop|npc_faction_entries|npc_faction|zone_roam_boxes)(_before_era)?\b/tzp_\1\2/g' "$PATCH" > "$TMP"
 # refuse to run if a statement would still write a real table
 REAL=$(grep -oE "^(INSERT( IGNORE)? INTO|REPLACE INTO|DELETE FROM|UPDATE|CREATE TABLE IF NOT EXISTS|CREATE TEMPORARY TABLE|DROP TEMPORARY TABLE) +[A-Za-z_0-9]+" "$TMP" | awk '{print $NF}' | sort -u | grep -v '^tzp_' | grep -v '^era_groups$' || true)
 if [ -n "$REAL" ]; then echo "not a dry run, the patch writes: $REAL (add to TABLES)"; rm -f "$TMP"; exit 1; fi
