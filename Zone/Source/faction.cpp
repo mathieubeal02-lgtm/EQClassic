@@ -55,7 +55,9 @@ FACTION_VALUE CalculateFaction(FactionMods* fm, sint32 tmpCharacter_value)
 	if(character_value >=  1100)							return FACTION_ALLY;
 	if(character_value >=   750 && character_value <= 1099) return FACTION_WARMLY;
 	if(character_value >=   500 && character_value <=  749) return FACTION_KINDLY;
-	if(character_value >=   101 && character_value <=  499) return FACTION_AMIABLE;
+	// Amiable starts at 100: at 101, a value of exactly 100 fell through every range and conned indifferent.
+	// A new troll has 100 with Da Bashers (race 50, deity 50), so the guards never took its side.
+	if(character_value >=   100 && character_value <=  499) return FACTION_AMIABLE;
 	if(character_value >=     0 && character_value <=   99) return FACTION_INDIFFERENT;
 	if(character_value >=  -100 && character_value <=   -1) return FACTION_APPREHENSIVE;
 	if(character_value >=  -500 && character_value <= -101) return FACTION_DUBIOUS;
