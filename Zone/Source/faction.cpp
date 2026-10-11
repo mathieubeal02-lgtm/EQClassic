@@ -546,32 +546,59 @@ bool Database::GetNPCFactionList(int32 npc_id, sint32* faction_id, sint32* value
 //| Purpose: Returns the faction ID from an NPC ID
 //o--------------------------------------------------------------
 int32 Database::GetNPCFactionID(int32 npc_id){
-	char errbuf2[MYSQL_ERRMSG_SIZE];
-    char *query2 = 0;
-	char tempName[100] = "";
-    MYSQL_RES *result2;
-    MYSQL_ROW row2;
-	if (RunQuery(query2, MakeAnyLenString(&query2, "SELECT name FROM npc_types_without where id = %i", npc_id), errbuf2, &result2)) {
-		safe_delete_array(query2);//delete[] query2;
-		row2 = mysql_fetch_row(result2);
-		// npc_faction names carry no '#': the 2,209 NPCs named '#...' (the nameds) found no faction list
-		if(row2)
-			strn0cpy(tempName, row2[0][0] == '#' ? row2[0] + 1 : row2[0], sizeof(tempName));
-		mysql_free_result(result2);
-	}
-
+	// The NPC's own faction list (npc_types_without.npc_faction_id, set for 22,950 NPCs). This went by
+	// name alone: of the 22 lists called a_skeleton the first one is KOS, so the Dark Ones' skeleton in
+	// Grobb killed trolls in their own city, and Freeport's Orc_Centurion counted as Crushbone's.
+	// Without one, the list of that name when there is exactly one (npc_faction names carry no '#').
 	char errbuf[MYSQL_ERRMSG_SIZE];
-    char *query = 0;
-    MYSQL_RES *result;
-    MYSQL_ROW row;
-	if (RunQuery(query, MakeAnyLenString(&query, "SELECT id FROM npc_faction where name = '%s'", SQLEscape(tempName).c_str()), errbuf, &result)) {
-		safe_delete_array(query);//delete[] query;
+	char *query = 0;
+	MYSQL_RES *result;
+	MYSQL_ROW row;
+	int32 id = 0;
+	char tempName[100] = "";
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT npc_faction_id, name FROM npc_types_without where id = %i", npc_id), errbuf, &result)) {
 		row = mysql_fetch_row(result);
-		int32 id = row ? atoi(row[0]) : 0;
+		if (row) {
+			id = atoi(row[0]);
+			strn0cpy(tempName, row[1][0] == '#' ? row[1] + 1 : row[1], sizeof(tempName));
+		}
 		mysql_free_result(result);
-		return id;
 	}
-	return 0;
+	safe_delete_array(query);
+	if (id != 0 || tempName[0] == 0)
+		return id;
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT MIN(id), COUNT(*) FROM npc_faction where name = '%s'", SQLEscape(tempName).c_str()), errbuf, &result)) {
+		row = mysql_fetch_row(result);
+		if (row && row[0] && atoi(row[1]) == 1)
+			id = atoi(row[0]);
+		mysql_free_result(result);
+	}
+	safe_delete_array(query);
+	return id;
+}
+
+//o--------------------------------------------------------------
+//| Name: GetPrimaryFactionOfNPC
+//o--------------------------------------------------------------
+//| Purpose: The primary faction of an NPC type's faction list (0: none)
+//o--------------------------------------------------------------
+int32 Database::GetPrimaryFactionOfNPC(int32 npc_id){
+	int32 list = GetNPCFactionID(npc_id);
+	if (list == 0)
+		return 0;
+	char errbuf[MYSQL_ERRMSG_SIZE];
+	char *query = 0;
+	MYSQL_RES *result;
+	MYSQL_ROW row;
+	int32 faction = 0;
+	if (RunQuery(query, MakeAnyLenString(&query, "SELECT primaryfaction FROM npc_faction where id = %i", list), errbuf, &result)) {
+		row = mysql_fetch_row(result);
+		if (row)
+			faction = atoi(row[0]);
+		mysql_free_result(result);
+	}
+	safe_delete_array(query);
+	return faction;
 }
 
 //o--------------------------------------------------------------
