@@ -1696,7 +1696,7 @@ namespace
 	// A bot that is hit fights back whatever it was doing. Killed: it logs, waits, and logs in again
 	// (the zone sends it to its bind point). Spells: Minor Healing on self when a gem holds it.
 
-	struct Mobile { std::string name; int level; float x, y, z; int hp; bool alive; bool touched = false; };	// touched: a player other than us hit it
+	struct Mobile { std::string name; int level; float x, y, z; int hp; bool alive; bool touched = false; int anim = 0, heading = 0; long seen = 0; };	// touched: a player other than us hit it; anim, heading, seen: its last position update
 
 	struct HuntStats
 	{
@@ -1756,6 +1756,16 @@ namespace
 		return (classes & (1 << (cls - 1))) && (races & (1 << (race - 1)));
 	}
 
+	// May the item go in this worn slot? Its slot mask says so, and the primary hand (13) takes weapons
+	// only (damage at 191): with a Lightstone there the zone never swings for us, fists included.
+	bool FitsSlot(const unsigned char* it, size_t size, int to)
+	{
+		if (size < 192)
+			return false;
+		uint32_t slots = it[136] | (it[137] << 8) | (it[138] << 16) | ((uint32_t)it[139] << 24);
+		return (slots & (1u << to)) && (to != 13 || (signed char)it[191] > 0);
+	}
+
 	// Pack slot -> cursor -> worn slot, the two moves a player makes.
 	void Wear(EqSession& z, int from, int to)
 	{
@@ -1778,6 +1788,25 @@ namespace
 		const int* order = kWearOrder;
 		const size_t orderCount = sizeof(kWearOrder) / sizeof(kWearOrder[0]);
 		int moved = 0;
+		// what an earlier version put in the primary hand and is no weapon: to the other hand or a pack
+		if (items.count(13) && !FitsSlot(&items[13][0], items[13].size(), 13))
+		{
+			int to = !items.count(14) && FitsSlot(&items[13][0], items[13].size(), 14) ? 14 : 0;
+			for (int f = 22; f <= 29 && !to; f++)
+				if (!items.count(f))
+					to = f;
+			uint32_t pick[3] = { 13, 0, 0 }, drop[3] = { 0, (uint32_t)to, 0 }, destroy[3] = { 0, 0xFFFFFFFFu, 0 };
+			if (!to && items.count(0))
+				z.Send((int16)0x2c21, destroy, sizeof(destroy));	// no room anywhere: what lies on the cursor goes
+			z.Send((int16)0x2c21, pick, sizeof(pick));
+			if (to)
+				z.Send((int16)0x2c21, drop, sizeof(drop));	// else it stays on the cursor
+			std::vector<Packet*> got = z.Poll(300);
+			DeleteAll(got);
+			BotLog(charname, zone, "action=Unequip item=%d from=13 to=%d why=no weapon", items[13][130] | (items[13][131] << 8), to);
+			items[to] = items[13];
+			items.erase(13);
+		}
 		for (int from = 22; from <= 29; from++)
 		{
 			if (!items.count(from))
@@ -1785,11 +1814,10 @@ namespace
 			const std::vector<unsigned char> it = items[from];
 			if (!CanWear(&it[0], it.size(), cls, race))
 				continue;
-			uint32_t slots = it[136] | (it[137] << 8) | (it[138] << 16) | ((uint32_t)it[139] << 24);
 			for (size_t k = 0; k < orderCount; k++)
 			{
 				int to = order[k];
-				if (!(slots & (1u << to)) || items.count(to))
+				if (!FitsSlot(&it[0], it.size(), to) || items.count(to))
 					continue;
 				Wear(z, from, to);
 				std::vector<Packet*> got = z.Poll(300);
@@ -2160,6 +2188,7 @@ namespace
 							o->y = (short)(m[5] | (m[6] << 8));
 							o->x = (short)(m[7] | (m[8] << 8));
 							o->z = (short)(m[9] | (m[10] << 8)) / 10.0f;
+							o->anim = (signed char)m[2]; o->heading = m[3]; o->seen = NowMs();
 						}
 					}
 					else if ((p->opcode == kNewSpawn && p->size >= 168) || p->opcode == kZoneSpawns)
@@ -2241,7 +2270,11 @@ namespace
 						if (blind) { cantSee++; backOff = true; }
 						if ((far || blind) && NowMs() - lastMeleeMsg > 10000)
 						{
-							BotLog(charname, st.zone, "action=MeleeBlocked why=%s too_far=%d cant_see=%d", far ? "too_far" : "cant_see", tooFar, cantSee);
+							const Mobile* t = mobs.count(target) ? &mobs[target] : 0;
+							BotLog(charname, st.zone, "action=MeleeBlocked why=%s too_far=%d cant_see=%d target=%s(%d) target_hp=%d%% dist=%.1f target_anim=%d target_heading=%d seen_ms_ago=%ld my_heading=%d",
+							       far ? "too_far" : "cant_see", tooFar, cantSee, t ? t->name.c_str() : "-", target, t ? t->hp : 0,
+							       t ? sqrtf((t->x - meX) * (t->x - meX) + (t->y - meY) * (t->y - meY)) : 0.0f, t ? t->anim : 0, t ? t->heading : 0,
+							       t && t->seen ? NowMs() - t->seen : -1L, (int)(uint8_t)(lastHeading + headingOffset));
 							lastMeleeMsg = NowMs();
 						}
 					}
@@ -2436,12 +2469,11 @@ namespace
 					{
 						// something we can wear and have nothing of: on at once, as a player would
 						int from = (short)(b[134] | (b[135] << 8));
-						uint32_t slots = b[136] | (b[137] << 8) | (b[138] << 16) | ((uint32_t)b[139] << 24);
 						if (from >= 22 && from <= 29 && CanWear(b, p->size, myClass, myRace))
 							for (size_t k = 0; k < sizeof(kWearOrder) / sizeof(kWearOrder[0]); k++)
 							{
 								int to = kWearOrder[k];
-								if (!(slots & (1u << to)) || worn.count(to))
+								if (!FitsSlot(b, p->size, to) || worn.count(to))
 									continue;
 								Wear(z, from, to);
 								worn.insert(to);
