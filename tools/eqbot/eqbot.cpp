@@ -402,6 +402,14 @@ namespace
 		return failures ? 1 : 0;
 	}
 
+	// A player's pace as the client draws it: it moves a player model about 4.64 units a second for each
+	// point of anim_type (twice what it does for an NPC; EQMacEmu sends 7 for a running client and moves
+	// it 32.5 units a second). Any other pair makes the watching client run ahead of the positions we
+	// send and snap back at each update.
+	const float kRunSpeed = 32.5f;		// units a second
+	const unsigned char kRunAnim = 7;
+	unsigned char AnimForSpeed(float speed) { int a = (int)(speed / 4.64f + 0.5f); return (unsigned char)(a < 1 ? 1 : a > 127 ? 127 : a); }
+
 	const int16 kMobUpdate = 0xa120;	// SpawnPositionUpdates_Struct: int32 count, then 15-byte updates
 
 	// Stays `seconds` in the zone and reports, per mob, how its height moved between position
@@ -1355,7 +1363,7 @@ namespace
 			return 1;
 		}
 		BotLog(charname, st.zone, "action=EnterZone id=%d waypoints=%d", st.myId, (int)wps.size());
-		const float speed = getenv("EQBOT_SPEED") ? atof(getenv("EQBOT_SPEED")) : 20.0f;	// units/s, about a walk
+		const float speed = getenv("EQBOT_SPEED") ? atof(getenv("EQBOT_SPEED")) : kRunSpeed;	// units/s
 		const int tickMs = 250;
 		std::vector<unsigned char> pp = DecodeProfile(st.profile);
 		Waypoint at = wps[0];
@@ -1395,7 +1403,7 @@ namespace
 			memset(u, 0, sizeof(u));
 			short y = (short)at.y, x = (short)at.x, zz = (short)(at.z * 10);	// a client sends z x10
 			u[0] = st.myId & 0xff; u[1] = st.myId >> 8;
-			u[2] = arrived ? 0 : (unsigned char)(speed > 30 ? 46 : 22);	// animation: walking pace
+			u[2] = arrived ? 0 : AnimForSpeed(speed);
 			u[3] = HeadingTowards(at.x, at.y, to.x, to.y);
 			memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
 			z.Send(kClientUpdate, u, sizeof(u));
@@ -1734,31 +1742,56 @@ namespace
 
 	// Puts on what lies in the packs and fits an empty worn slot (after looting our corpse), as a player
 	// does: pack -> cursor (slot 0) -> worn slot. Weapons first in the primary hand.
-	int EquipFromPacks(EqSession& z, const std::string& charname, const std::string& zone, const std::vector<unsigned char>& inventory)
+	// Can this class and race wear the item (Item_Struct: type at 129, classes at 208, races at 212, one
+	// bit each from class 1 and race 1; an iksar is race 13 there)? The zone refuses the others and the
+	// item stays on the cursor.
+	bool CanWear(const unsigned char* it, size_t size, int cls, int race)
+	{
+		if (size < 214 || it[129] != 0 || cls < 1 || cls > 16)
+			return false;
+		if (race == 128) race = 13;
+		if (race < 1 || race > 16)
+			return false;
+		int classes = it[208] | (it[209] << 8), races = it[212] | (it[213] << 8);
+		return (classes & (1 << (cls - 1))) && (races & (1 << (race - 1)));
+	}
+
+	// Pack slot -> cursor -> worn slot, the two moves a player makes.
+	void Wear(EqSession& z, int from, int to)
+	{
+		uint32_t a[3] = { (uint32_t)from, 0, 0 }, b[3] = { 0, (uint32_t)to, 0 };
+		z.Send((int16)0x2c21, a, sizeof(a));	// OP_MoveItem: pick up
+		z.Send((int16)0x2c21, b, sizeof(b));	// put on
+	}
+
+	// The worn slots, in the order we fill them: weapons first.
+	static const int kWearOrder[] = { 13, 14, 11, 2, 17, 18, 19, 7, 12, 6, 8, 20, 5, 1, 4, 3, 9, 10, 15, 16, 21 };
+
+	// worn: the slots taken afterwards (what the inventory had there and what we put on).
+	int EquipFromPacks(EqSession& z, const std::string& charname, const std::string& zone, const std::vector<unsigned char>& inventory, int cls, int race, std::set<int>& worn)
 	{
 		std::map<int, std::vector<unsigned char> > items = InventoryItems(inventory);
 		if (getenv("EQBOT_VERBOSE"))
 			for (std::map<int, std::vector<unsigned char> >::iterator i = items.begin(); i != items.end(); ++i)
 				printf("       item slot=%d nr=%d size=%d slots=0x%08x\n", i->first, i->second[130] | (i->second[131] << 8), (int)i->second.size(),
 				       i->second[136] | (i->second[137] << 8) | (i->second[138] << 16) | ((unsigned)i->second[139] << 24));
-		static const int order[] = { 13, 14, 11, 2, 17, 18, 19, 7, 12, 6, 8, 20, 5, 1, 4, 3, 9, 10, 15, 16, 21 };
+		const int* order = kWearOrder;
+		const size_t orderCount = sizeof(kWearOrder) / sizeof(kWearOrder[0]);
 		int moved = 0;
 		for (int from = 22; from <= 29; from++)
 		{
 			if (!items.count(from))
 				continue;
 			const std::vector<unsigned char> it = items[from];
-			if (it.size() < 140)
+			if (!CanWear(&it[0], it.size(), cls, race))
 				continue;
 			uint32_t slots = it[136] | (it[137] << 8) | (it[138] << 16) | ((uint32_t)it[139] << 24);
-			for (size_t k = 0; k < sizeof(order) / sizeof(order[0]); k++)
+			for (size_t k = 0; k < orderCount; k++)
 			{
 				int to = order[k];
 				if (!(slots & (1u << to)) || items.count(to))
 					continue;
-				uint32_t a[3] = { (uint32_t)from, 0, 0 }, b[3] = { 0, (uint32_t)to, 0 };
-				z.Send((int16)0x2c21, a, sizeof(a));	// OP_MoveItem: pick up
-				z.Send((int16)0x2c21, b, sizeof(b));	// put on
+				Wear(z, from, to);
 				std::vector<Packet*> got = z.Poll(300);
 				DeleteAll(got);
 				items[to] = it;
@@ -1767,6 +1800,9 @@ namespace
 				break;
 			}
 		}
+		for (std::map<int, std::vector<unsigned char> >::iterator i = items.begin(); i != items.end(); ++i)
+			if (i->first >= 1 && i->first <= 21)
+				worn.insert(i->first);
 		return moved;
 	}
 
@@ -1872,7 +1908,9 @@ namespace
 		};
 		BotLog(charname, st.zone, "action=EnterZone id=%d level=%d npcs=%d corpses=%d items=%d camp=%.0f,%.0f,%.0f", st.myId, myLevel, (int)mobs.size(),
 		       (int)myCorpses.size(), (int)InventoryItems(st.inventory).size(), campX, campY, campZ);
-		int equipped = EquipFromPacks(z, charname, st.zone, st.inventory);
+		const int myClass = pp.size() > 58 ? pp[58] : 0, myRace = pp.size() > 57 ? pp[56] | (pp[57] << 8) : 0;
+		std::set<int> worn;
+		int equipped = EquipFromPacks(z, charname, st.zone, st.inventory, myClass, myRace, worn);
 		// food and drink in the inventory (item type 14 / 15): slot -> what is left of the stack. The real
 		// client eats and drinks by itself when it gets hungry; famished, a player regenerates nothing
 		std::map<int, int> food, drink;
@@ -1942,7 +1980,7 @@ namespace
 		bool closeIn = false, backOff = false;
 		int target = 0;
 		long start = NowMs(), lastTick = start, stateSince = start, lastStatus = start, lastHitTaken = 0, lastNoPrey = 0;
-		const float speed = 20.0f;
+		const float speed = kRunSpeed;
 		std::set<int> skip;				// prey we gave up on or must not attack
 		std::map<int, int> faction;		// OP_Consider answers, by NPC id
 		std::set<int> attackers;
@@ -1962,7 +2000,7 @@ namespace
 			memset(u, 0, sizeof(u));
 			short y = (short)meY, x = (short)meX, zz = (short)(meZ * 10);
 			u[0] = st.myId & 0xff; u[1] = st.myId >> 8;
-			u[2] = walking ? 22 : 0;
+			u[2] = walking ? kRunAnim : 0;
 			// right on top of it, the direction means nothing: keep the last heading
 			if ((tx - meX) * (tx - meX) + (ty - meY) * (ty - meY) > 0.25f)
 				lastHeading = HeadingTowards(meX, meY, tx, ty);
@@ -2023,7 +2061,6 @@ namespace
 		// chat (milestone 4): who we are for chatd, what we heard, the one request in flight
 		ChatClient chat;
 		std::vector<std::string> heard;
-		const int myRace = pp.size() > 57 ? pp[56] : 0, myClass = pp.size() > 58 ? pp[58] : 0;
 		auto personaJson = [&]() {
 			char b[160];
 			snprintf(b, sizeof(b), "{\"race\":\"%s\",\"class\":\"%s\",\"level\":%d}", RaceName(myRace), ClassName(myClass), myLevel);
@@ -2394,6 +2431,24 @@ namespace
 						z.Send((int16)0xa020, li, sizeof(li));	// OP_LootItem
 						BotLog(charname, st.zone, "action=LootItem corpse=%u item=%d slot=%d", corpse, b[130] | (b[131] << 8), slot);
 						lootedItems++;
+					}
+					else if (p->opcode == (int16)0x3120 && p->size >= 214 && state == Loot)	// OP_ItemTradeIn: where the zone put what we looted
+					{
+						// something we can wear and have nothing of: on at once, as a player would
+						int from = (short)(b[134] | (b[135] << 8));
+						uint32_t slots = b[136] | (b[137] << 8) | (b[138] << 16) | ((uint32_t)b[139] << 24);
+						if (from >= 22 && from <= 29 && CanWear(b, p->size, myClass, myRace))
+							for (size_t k = 0; k < sizeof(kWearOrder) / sizeof(kWearOrder[0]); k++)
+							{
+								int to = kWearOrder[k];
+								if (!(slots & (1u << to)) || worn.count(to))
+									continue;
+								Wear(z, from, to);
+								worn.insert(to);
+								hs.equipped++;
+								BotLog(charname, st.zone, "action=Equip item=%d from=%d to=%d", b[130] | (b[131] << 8), from, to);
+								break;
+							}
 					}
 					else if (p->opcode == kAction && p->size >= 16)
 					{
@@ -3310,7 +3365,7 @@ namespace
 					memset(u, 0, sizeof(u));
 					short y = (short)meY, x = (short)meX, zz = (short)(meZ * 10);
 					u[0] = myId & 0xff; u[1] = myId >> 8;
-					u[2] = walking ? 22 : 0;
+					u[2] = walking ? kRunAnim : 0;
 					u[3] = HeadingTowards(meX, meY, gx, gy);
 					memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
 					u[11] = walking ? ((++tick & 1) ? 1 : 2) : 0;
@@ -3425,7 +3480,7 @@ namespace
 			memset(u, 0, sizeof(u));
 			short y = (short)meY, x = (short)meX, zz = (short)(meZ * 10);
 			u[0] = st.myId & 0xff; u[1] = st.myId >> 8;
-			u[2] = walking ? 22 : 0;
+			u[2] = walking ? kRunAnim : 0;
 			u[3] = HeadingTowards(meX, meY, tx, ty);
 			memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
 			u[11] = walking ? ((++tick & 1) ? 1 : 2) : 0;
