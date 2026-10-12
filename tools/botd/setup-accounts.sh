@@ -28,6 +28,11 @@ for i in $(seq "$FIRST" $((FIRST + COUNT - 1))); do
   "$EQBOT" create 127.0.0.1 "$account" "$PASS" "$name" > /dev/null 2>&1 || { echo "$account: could not create $name"; continue; }
   sleep 2	# one login at a time (World's active_accounts rows are matched by IP)
   $DB -e "UPDATE character_ SET profile = CONCAT(SUBSTRING(profile, 1, 2408), UNHEX('$POS'), RPAD('$ZONE', 15, '\0'), SUBSTRING(profile, 2440)) WHERE name = '$name'"
+  # Troll bots without a valid deity (int16 at 4156; characters made before the profile carried it have 0 or
+  # leftover bytes there) follow Cazic-Thule (203), as the creation template does. The zone treats an invalid
+  # deity as agnostic, which leaves a troll 50 short of amiable with Da Bashers: the Bashers did not defend them.
+  DEITY="CAST(CONV(HEX(REVERSE(SUBSTRING(profile, 4157, 2))), 16, 10) AS UNSIGNED)"
+  $DB -e "UPDATE character_ SET profile = INSERT(profile, 4157, 2, UNHEX('CB00')) WHERE name = '$name' AND ORD(SUBSTRING(profile, 57, 1)) = 9 AND NOT ($DEITY BETWEEN 201 AND 216 OR $DEITY = 396)"
   # The starting spell in the spell book (int16[256] at 1878) and in gem 1 (int16[8] at 2390), as a
   # player would scribe and memorize the starting scroll: Minor Healing (200) or Frost Bolt (54)
   case "${EQBOT_CLASS:-}" in
