@@ -2004,7 +2004,8 @@ namespace
 		bool sharedTarget = false;	// another player hit our target
 		bool helpPending = false;	// leader: asked the zone what a member in trouble fights
 		unsigned moveTick = 0;
-		int tooFar = 0, cantSee = 0;
+		int tooFar = 0, cantSee = 0, restStartHp = 100;
+		bool restUseless = false;
 		bool closeIn = false, backOff = false;
 		int target = 0;
 		long start = NowMs(), lastTick = start, stateSince = start, lastStatus = start, lastHitTaken = 0, lastNoPrey = 0;
@@ -2020,6 +2021,7 @@ namespace
 			if (s == state) return;
 			state = s;
 			stateSince = NowMs();
+			if (s == Rest) restStartHp = myHp;
 			const char* tn = mobs.count(target) ? mobs[target].name.c_str() : myCorpses.count(target) ? myCorpses[target].name.c_str() : "-";
 			BotLog(charname, st.zone, "action=%s target=%s(%d) hp=%d%% why=%s", names[s], tn, target, myHp, why);
 		};
@@ -2734,7 +2736,9 @@ namespace
 			case Seek:
 			{
 				target = 0;
-				if (myMaxHp && myHp < 90 && !underAttack)	// a fight starts healthy
+				// a fight starts healthy; but a rest that healed nothing (famished, no food left) is not
+				// tried again before things get worse: that bot sat for the whole session at 88%
+				if (myMaxHp && myHp < (restUseless ? 50 : 90) && !underAttack)
 				{
 					setState(Rest, "hurt");
 					break;
@@ -2933,7 +2937,9 @@ namespace
 					sendPos(m.x, m.y, false);
 					break;
 				}
-				if (walkTo(m.x, m.y, m.z, step, 2) && state == Approach)
+				// 5 units away, inside the 10 of melee: positions travel as whole units, and at 2 units that
+				// rounding turned the direction the zone computes by up to a quarter turn ("can't see your target")
+				if (walkTo(m.x, m.y, m.z, step, 5) && state == Approach)
 				{
 					uint16_t t[2] = { (uint16_t)target, 0 };
 					z.Send(kClientTarget, t, sizeof(t));
@@ -2992,9 +2998,11 @@ namespace
 					healed = false;
 				if (medding.count(charname))
 					healed = false;	// said "oom": rest until "ready"
-				if ((healed && now - stateSince > 5000) || now - stateSince > 180000)
+				bool noUse = restUseless && myHp >= 50 && myHp <= restStartHp;	// the last rest healed nothing, nor does this one
+				if (((healed || noUse) && now - stateSince > 5000) || now - stateSince > 180000)
 				{
 					sit(false);
+					restUseless = !healed && myMaxHp && myHp <= restStartHp;
 					setState(Seek, healed ? "rested" : "rested long enough");
 					if (!members.empty()) gsay("follow");
 				}
