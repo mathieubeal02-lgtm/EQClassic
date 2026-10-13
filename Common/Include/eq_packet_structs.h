@@ -1622,9 +1622,11 @@ struct InspectRequest_Struct
 //Size: 1044 (Answer)
 struct InspectAnswer_Struct 
 { 
-	int32 TargetID;			// Comment: ? 
-	int32 PlayerID;			// Comment: ?
-	int8  unknown[1036];	// Comment: ?
+	int32 TargetID;			// Comment: who inspects (the answer is relayed to it)
+	int32 PlayerID;			// Comment: who is inspected
+	char  itemNames[22][32];	// Comment: by inventory slot (0 cursor, 1-21 worn); the client leaves empty slots unset
+	sint16 itemIcons[22];	// Comment: -1 = nothing in the slot
+	char  text[288];		// Comment: 
 }; 
 
 

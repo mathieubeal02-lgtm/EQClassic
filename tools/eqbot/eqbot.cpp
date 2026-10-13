@@ -1777,8 +1777,37 @@ namespace
 	// The worn slots, in the order we fill them: weapons first.
 	static const int kWearOrder[] = { 13, 14, 11, 2, 17, 18, 19, 7, 12, 6, 8, 20, 5, 1, 4, 3, 9, 10, 15, 16, 21 };
 
-	// worn: the slots taken afterwards (what the inventory had there and what we put on).
-	int EquipFromPacks(EqSession& z, const std::string& charname, const std::string& zone, const std::vector<unsigned char>& inventory, int cls, int race, std::set<int>& worn)
+	// What a player sees when inspecting us: slot -> item name and icon.
+	typedef std::map<int, std::pair<std::string, int> > Gear;
+
+	void NoteGear(Gear& gear, int slot, const unsigned char* it)
+	{
+		gear[slot] = std::make_pair(std::string((const char*)it, strnlen((const char*)it, 31)), it[132] | (it[133] << 8));
+	}
+
+	// OP_InspectAnswer, as a Trilogy client fills it (taken from one): the inspector's id, ours, 22 item
+	// names of 32 bytes by inventory slot, 22 icons (-1: nothing there), 288 bytes of text. The zone only
+	// relays the request: without this answer the inspector's window never opens.
+	void AnswerInspect(EqSession& z, int inspector, int me, const Gear& gear)
+	{
+		unsigned char a[1044];
+		memset(a, 0, sizeof(a));
+		a[0] = inspector & 0xff; a[1] = inspector >> 8;
+		a[4] = me & 0xff; a[5] = me >> 8;
+		memset(a + 712, 0xff, 44);
+		for (Gear::const_iterator g = gear.begin(); g != gear.end(); ++g)
+		{
+			if (g->first < 1 || g->first > 21)
+				continue;
+			memcpy(a + 8 + 32 * g->first, g->second.first.c_str(), g->second.first.size());
+			a[712 + 2 * g->first] = g->second.second & 0xff;
+			a[713 + 2 * g->first] = g->second.second >> 8;
+		}
+		z.Send((int16)0xb620, a, sizeof(a));
+	}
+
+	// worn: the slots taken afterwards (what the inventory had there and what we put on); gear: what is in them.
+	int EquipFromPacks(EqSession& z, const std::string& charname, const std::string& zone, const std::vector<unsigned char>& inventory, int cls, int race, std::set<int>& worn, Gear& gear)
 	{
 		std::map<int, std::vector<unsigned char> > items = InventoryItems(inventory);
 		if (getenv("EQBOT_VERBOSE"))
@@ -1830,7 +1859,11 @@ namespace
 		}
 		for (std::map<int, std::vector<unsigned char> >::iterator i = items.begin(); i != items.end(); ++i)
 			if (i->first >= 1 && i->first <= 21)
+			{
 				worn.insert(i->first);
+				if (i->second.size() >= 134)
+					NoteGear(gear, i->first, &i->second[0]);
+			}
 		return moved;
 	}
 
@@ -1938,7 +1971,8 @@ namespace
 		       (int)myCorpses.size(), (int)InventoryItems(st.inventory).size(), campX, campY, campZ);
 		const int myClass = pp.size() > 58 ? pp[58] : 0, myRace = pp.size() > 57 ? pp[56] | (pp[57] << 8) : 0;
 		std::set<int> worn;
-		int equipped = EquipFromPacks(z, charname, st.zone, st.inventory, myClass, myRace, worn);
+		Gear gear;
+		int equipped = EquipFromPacks(z, charname, st.zone, st.inventory, myClass, myRace, worn, gear);
 		// food and drink in the inventory (item type 14 / 15): slot -> what is left of the stack. The real
 		// client eats and drinks by itself when it gets hungry; famished, a player regenerates nothing
 		std::map<int, int> food, drink;
@@ -2479,10 +2513,16 @@ namespace
 									continue;
 								Wear(z, from, to);
 								worn.insert(to);
+								NoteGear(gear, to, b);
 								hs.equipped++;
 								BotLog(charname, st.zone, "action=Equip item=%d from=%d to=%d", b[130] | (b[131] << 8), from, to);
 								break;
 							}
+					}
+					else if (p->opcode == (int16)0xb520 && p->size >= 8 && (b[0] | (b[1] << 8)) == st.myId)	// OP_InspectRequest: a player looks at us
+					{
+						AnswerInspect(z, b[4] | (b[5] << 8), st.myId, gear);
+						BotLog(charname, st.zone, "action=Inspected by=%d items=%d", b[4] | (b[5] << 8), (int)gear.size());
 					}
 					else if (p->opcode == kAction && p->size >= 16)
 					{
