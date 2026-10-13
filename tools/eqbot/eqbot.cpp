@@ -1774,6 +1774,26 @@ namespace
 		z.Send((int16)0x2c21, b, sizeof(b));	// put on
 	}
 
+	// OP_WearChange, which the client sends when it changes what shows on its model (the zone relays it
+	// and does nothing else): without it the others keep seeing what we wore when they met us.
+	// it: the item now in inventory slot `to`, 0 when the slot was emptied.
+	void ShowWorn(EqSession& z, int me, int to, const unsigned char* it)
+	{
+		static const int kShown[9] = { 2, 17, 7, 10, 12, 18, 19, 13, 14 };	// Spawn_Struct equipment[]: head, chest, arms, bracer, hands, legs, feet, primary, secondary
+		for (int w = 0; w < 9; w++)
+		{
+			if (kShown[w] != to)
+				continue;
+			unsigned char c[16];
+			memset(c, 0, sizeof(c));
+			c[0] = me & 0xff; c[1] = me >> 8;
+			c[4] = (unsigned char)w;
+			if (it)
+				c[5] = w >= 7 ? (strnlen((const char*)it + 95, 6) >= 3 ? (unsigned char)atoi((const char*)it + 97) : 0) : it[197];	// weapons: the number of the IT model
+			z.Send((int16)0x9220, c, sizeof(c));
+		}
+	}
+
 	// The worn slots, in the order we fill them: weapons first.
 	static const int kWearOrder[] = { 13, 14, 11, 2, 17, 18, 19, 7, 12, 6, 8, 20, 5, 1, 4, 3, 9, 10, 15, 16, 21 };
 
@@ -1807,7 +1827,7 @@ namespace
 	}
 
 	// worn: the slots taken afterwards (what the inventory had there and what we put on); gear: what is in them.
-	int EquipFromPacks(EqSession& z, const std::string& charname, const std::string& zone, const std::vector<unsigned char>& inventory, int cls, int race, std::set<int>& worn, Gear& gear)
+	int EquipFromPacks(EqSession& z, const std::string& charname, const std::string& zone, const std::vector<unsigned char>& inventory, int cls, int race, int me, std::set<int>& worn, Gear& gear)
 	{
 		std::map<int, std::vector<unsigned char> > items = InventoryItems(inventory);
 		if (getenv("EQBOT_VERBOSE"))
@@ -1835,6 +1855,9 @@ namespace
 			BotLog(charname, zone, "action=Unequip item=%d from=13 to=%d why=no weapon", items[13][130] | (items[13][131] << 8), to);
 			items[to] = items[13];
 			items.erase(13);
+			ShowWorn(z, me, 13, 0);
+			if (to == 14)
+				ShowWorn(z, me, 14, &items[14][0]);
 		}
 		for (int from = 22; from <= 29; from++)
 		{
@@ -1852,6 +1875,8 @@ namespace
 				std::vector<Packet*> got = z.Poll(300);
 				DeleteAll(got);
 				items[to] = it;
+				if (it.size() >= 198)
+					ShowWorn(z, me, to, &it[0]);
 				BotLog(charname, zone, "action=Equip item=%d from=%d to=%d", it[130] | (it[131] << 8), from, to);
 				moved++;
 				break;
@@ -1972,7 +1997,7 @@ namespace
 		const int myClass = pp.size() > 58 ? pp[58] : 0, myRace = pp.size() > 57 ? pp[56] | (pp[57] << 8) : 0;
 		std::set<int> worn;
 		Gear gear;
-		int equipped = EquipFromPacks(z, charname, st.zone, st.inventory, myClass, myRace, worn, gear);
+		int equipped = EquipFromPacks(z, charname, st.zone, st.inventory, myClass, myRace, st.myId, worn, gear);
 		// food and drink in the inventory (item type 14 / 15): slot -> what is left of the stack. The real
 		// client eats and drinks by itself when it gets hungry; famished, a player regenerates nothing
 		std::map<int, int> food, drink;
@@ -2514,6 +2539,7 @@ namespace
 								Wear(z, from, to);
 								worn.insert(to);
 								NoteGear(gear, to, b);
+								ShowWorn(z, st.myId, to, b);
 								hs.equipped++;
 								BotLog(charname, st.zone, "action=Equip item=%d from=%d to=%d", b[130] | (b[131] << 8), from, to);
 								break;
