@@ -46,6 +46,7 @@
 #include <vector>
 
 #include "EqSession.h"
+#include "BotMap.h"
 
 using namespace EqBot;
 
@@ -2217,12 +2218,51 @@ namespace
 					return true;
 			return false;
 		};
+		// The zone's collision map (EQBOT_MAPS: the directory of the server's .map files): with it we
+		// stay on the ground and go round what stands in the way; without, straight at the target's height.
+		BotMap map;
+		if (getenv("EQBOT_MAPS"))
+			map.Load(std::string(getenv("EQBOT_MAPS")) + "/" + st.zone + ".map");
+		// a player's z is above the ground it stands on: 4.5 units for a high elf (seen from a client), taken by size here
+		const float zAbove = myRace == 9 || myRace == 10 ? 6.0f : myRace == 8 || myRace == 11 || myRace == 12 ? 3.0f : 4.5f;
+		int detourSide = 0; long detourUntil = 0;
+		BotLog(charname, st.zone, "action=Map loaded=%d", map.Loaded() ? 1 : 0);
 		auto walkTo = [&](float tx, float ty, float tz, float step, float stop) {
 			float dx = tx - meX, dy = ty - meY, dist = sqrtf(dx * dx + dy * dy);
 			if (dist <= stop + 1) { sendPos(tx, ty, false); return true; }
 			if (NowMs() < castUntil) return false;	// moving breaks a cast
 			float s = std::min(step, dist - stop);
-			meX += dx / dist * s; meY += dy / dist * s; meZ = tz;
+			if (map.Loaded())
+			{
+				// straight first; if something is in the way, the smallest turn that is free, on the
+				// side we already took a moment ago (else we would sway left and right before a wall)
+				static const float kTurn[] = { 0, 30, 60, 90, 120 };
+				// where we stand: the surface under us (our z may be a target's, or one from before the map)
+				float feet = map.Ground(meX, meY, meZ + 2), base = atan2f(dy, dx);
+				if (feet == BotMap::kNoGround)
+					feet = meZ - zAbove;
+				int first = NowMs() < detourUntil ? detourSide : 1;
+				for (int k = 0; k < 5; k++)
+					for (int t = 0; t < (k ? 2 : 1); t++)
+					{
+						int side = t ? -first : first;
+						float a = base + side * kTurn[k] * 3.14159265f / 180;
+						float nx = meX + cosf(a) * s, ny = meY + sinf(a) * s;
+						float g = map.Ground(nx, ny, feet + 8);	// 8: what we step up without a jump
+						if (g == BotMap::kNoGround || map.Blocked(meX, meY, feet + 4, nx, ny, g + 4))
+							continue;
+						if (k > 0)
+						{
+							if (NowMs() >= detourUntil)
+								BotLog(charname, st.zone, "action=Detour turn=%d pos=%.0f,%.0f,%.0f", (int)(side * kTurn[k]), meX, meY, meZ);
+							detourSide = side; detourUntil = NowMs() + 2000;
+						}
+						meX = nx; meY = ny; meZ = g + zAbove;
+						sendPos(meX + cosf(a) * 10, meY + sinf(a) * 10, true);
+						return false;
+					}
+			}
+			meX += dx / dist * s; meY += dy / dist * s; meZ = tz;	// no map, or shut in on all sides
 			sendPos(tx, ty, true);
 			return false;
 		};
