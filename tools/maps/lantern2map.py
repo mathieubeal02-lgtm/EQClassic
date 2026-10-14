@@ -17,16 +17,22 @@ MIN_SIZE = 64.0		# ...and so is one smaller than this
 NODE_NONE = 65534
 
 
-def read_mesh(path):
+def read_mesh(path, skip=()):
+    """Vertices and triangles; triangles of the materials in `skip` are left out."""
     verts, tris = [], []
     with open(path, encoding='latin-1') as f:
         for line in f:
             p = line.rstrip('\n').split(',')
             if p[0] == 'v':
                 verts.append((float(p[1]), float(p[2]), float(p[3])))
-            elif p[0] == 'i':
+            elif p[0] == 'i' and int(p[1]) not in skip:
                 tris.append((int(p[2]), int(p[3]), int(p[4])))
     return verts, tris
+
+
+def read_mesh_materials(path):
+    with open(path, encoding='latin-1') as f:
+        return [int(line.split(',')[1]) for line in f if line.startswith('i,')]
 
 
 def placed(v, pos, rot, scale):
@@ -97,7 +103,27 @@ def zone_faces(zone_dir):
             if max(a, b, c) < len(verts):
                 faces.append(tuple((verts[i][2], verts[i][0], verts[i][1]) for i in (a, b, c)))
 
-    add(*read_mesh(os.path.join(zone_dir, 'Zone', 'Meshes', name + '.txt')))
+    # The zone's invisible boundary (materials b_...) closes it with a ceiling at the sky: walls kept,
+    # ceiling left out, as azone's maps have it (a ceiling is the ground for anything looking down from above).
+    boundary = set()
+    materials = os.path.join(zone_dir, 'Zone', 'MaterialLists', name + '.txt')
+    for line in open(materials, encoding='latin-1') if os.path.exists(materials) else []:
+        p = line.split(',')
+        if not line.startswith('#') and len(p) > 1 and p[1].startswith('b_'):
+            boundary.add(int(p[0]))
+    verts, tris = read_mesh(os.path.join(zone_dir, 'Zone', 'Meshes', name + '.txt'))
+    walls, mats = [], read_mesh_materials(os.path.join(zone_dir, 'Zone', 'Meshes', name + '.txt'))
+    for t, m in zip(tris, mats):
+        if m in boundary:
+            a, b, c = (verts[i] for i in t)
+            ux, uz, vx, vz = b[0] - a[0], b[2] - a[2], c[0] - a[0], c[2] - a[2]
+            uy, vy = b[1] - a[1], c[1] - a[1]
+            up = ux * vz - uz * vx		# the normal's vertical part (Lantern's y is up)
+            length = math.sqrt((uy * vz - uz * vy) ** 2 + (uz * vx - ux * vz) ** 2 + (ux * vy - uy * vx) ** 2) or 1
+            if abs(up) / length > 0.7:
+                continue
+        walls.append(t)
+    add(verts, walls)
     meshes, done, missing = {}, 0, set()
     instances = os.path.join(zone_dir, 'Zone', 'object_instances.txt')
     for line in open(instances, encoding='latin-1') if os.path.exists(instances) else []:
@@ -111,6 +137,8 @@ def zone_faces(zone_dir):
             missing.add(model)
             continue
         n = [float(x) for x in p[1:10]]
+        if max(abs(x) for x in n[0:3]) > 30000:
+            continue	# parked out of the world (-32768)
         verts, tris = meshes[model]
         add([placed(v, n[0:3], n[3:6], n[6:9]) for v in verts], tris)
         done += 1
