@@ -14,6 +14,9 @@ import sys
 
 MAX_FACES = 150		# a quadtree node with no more faces than this is final...
 MIN_SIZE = 64.0		# ...and so is one smaller than this
+OBJECT_HEIGHT = 10.0	# objects are cut this high above their base: enough to stop a walker, too low for the
+			# zone's roamers to land on (they look for the ground from 150 units up, Zone/Source/npc.cpp,
+			# and would stand on a trunk's sloping side or a tree top)
 NODE_NONE = 65534
 
 
@@ -93,17 +96,58 @@ def object_mesh(objects_dir, model):
     return (verts, tris) if tris else None
 
 
+class Terrain:
+    """The zone's own faces (server axes), to tell an object standing on something from one in the air."""
+    CELL = 64.0
+
+    def __init__(self, faces):
+        self.faces, self.cells = list(faces), {}
+        for i, f in enumerate(self.faces):
+            for cx in range(int(min(v[0] for v in f) // self.CELL), int(max(v[0] for v in f) // self.CELL) + 1):
+                for cy in range(int(min(v[1] for v in f) // self.CELL), int(max(v[1] for v in f) // self.CELL) + 1):
+                    self.cells.setdefault((cx, cy), []).append(i)
+
+    def near(self, x, y, z, gap=20.0):
+        """Is there a surface under (x, y) within `gap` of z, above or below?"""
+        for i in self.cells.get((int(x // self.CELL), int(y // self.CELL)), ()):
+            (ax, ay, az), (bx, by, bz), (cx, cy, cz) = self.faces[i]
+            d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+            if abs(d) < 1e-9:
+                continue
+            u = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / d
+            w = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / d
+            if u >= 0 and w >= 0 and u + w <= 1 and abs(u * az + w * bz + (1 - u - w) * cz - z) <= gap:
+                return True
+        return False
+
+
+def below(verts, tri, top):
+    """The part of a triangle under the height `top` (Lantern's y), as a polygon of 0, 3 or 4 corners."""
+    out = []
+    for k in range(3):
+        a, b = verts[tri[k]], verts[tri[(k + 1) % 3]]
+        if a[1] <= top:
+            out.append(a)
+        if (a[1] <= top) != (b[1] <= top):
+            f = (top - a[1]) / (b[1] - a[1])
+            out.append((a[0] + f * (b[0] - a[0]), top, a[2] + f * (b[2] - a[2])))
+    return out
+
+
 def zone_faces(zone_dir):
     """Triangles in server axes, and how many objects were placed / had no mesh."""
     name = os.path.basename(zone_dir.rstrip('/'))
     faces = []
 
-    def add(verts, tris):
-        for a, b, c in tris:
-            if max(a, b, c) < len(verts):
-                faces.append(tuple((verts[i][2], verts[i][0], verts[i][1]) for i in (a, b, c)))
+    def add(verts, tris, top=None):
+        for t in tris:
+            if max(t) >= len(verts):
+                continue
+            for poly in [[verts[i] for i in t]] if top is None else [below(verts, t, top)]:
+                for k in range(1, len(poly) - 1):	# a fan: the clipped triangle may have four corners
+                    faces.append(tuple((v[2], v[0], v[1]) for v in (poly[0], poly[k], poly[k + 1])))
 
-    # The zone's invisible boundary (materials b_...) closes it with a ceiling at the sky: walls kept,
+    # The zone's invisible boundary (materials b_...) closes it with a ceiling at the sky: floor and walls kept,
     # ceiling left out, as azone's maps have it (a ceiling is the ground for anything looking down from above).
     boundary = set()
     materials = os.path.join(zone_dir, 'Zone', 'MaterialLists', name + '.txt')
@@ -118,13 +162,14 @@ def zone_faces(zone_dir):
             a, b, c = (verts[i] for i in t)
             ux, uz, vx, vz = b[0] - a[0], b[2] - a[2], c[0] - a[0], c[2] - a[2]
             uy, vy = b[1] - a[1], c[1] - a[1]
-            up = ux * vz - uz * vx		# the normal's vertical part (Lantern's y is up)
+            up = uz * vx - ux * vz		# the normal's vertical part (Lantern's y is up)
             length = math.sqrt((uy * vz - uz * vy) ** 2 + (uz * vx - ux * vz) ** 2 + (ux * vy - uy * vx) ** 2) or 1
-            if abs(up) / length > 0.7:
-                continue
+            if -up / length > 0.7:
+                continue	# facing down: the ceiling (its floor and walls stay)
         walls.append(t)
     add(verts, walls)
-    meshes, done, missing = {}, 0, set()
+    terrain = Terrain(faces)
+    meshes, done, missing, floating = {}, 0, set(), 0
     instances = os.path.join(zone_dir, 'Zone', 'object_instances.txt')
     for line in open(instances, encoding='latin-1') if os.path.exists(instances) else []:
         p = line.strip().split(',')
@@ -139,10 +184,13 @@ def zone_faces(zone_dir):
         n = [float(x) for x in p[1:10]]
         if max(abs(x) for x in n[0:3]) > 30000:
             continue	# parked out of the world (-32768)
+        if not terrain.near(n[2], n[0], n[1]):
+            floating += 1
+            continue	# hangs in the air (a tree top over a hill): only roamers would ever meet it
         verts, tris = meshes[model]
-        add([placed(v, n[0:3], n[3:6], n[6:9]) for v in verts], tris)
+        add([placed(v, n[0:3], n[3:6], n[6:9]) for v in verts], tris, n[1] + OBJECT_HEIGHT)
         done += 1
-    return faces, done, sorted(missing)
+    return faces, done, sorted(missing), floating
 
 
 def write_map(faces, path):
@@ -194,9 +242,9 @@ def main():
     zones = sys.argv[3:] or sorted(d for d in os.listdir(exports) if os.path.exists(os.path.join(exports, d, 'Zone', 'Meshes', d + '.txt')))
     os.makedirs(out, exist_ok=True)
     for zone in zones:
-        faces, objects, missing = zone_faces(os.path.join(exports, zone))
+        faces, objects, missing, floating = zone_faces(os.path.join(exports, zone))
         count, nodes, lists = write_map(faces, os.path.join(out, zone + '.map'))
-        print('%-14s %7d faces %5d nodes %7d list entries, %4d objects%s' % (zone, count, nodes, lists, objects,
+        print('%-14s %7d faces %5d nodes %7d list entries, %4d objects, %3d in the air%s' % (zone, count, nodes, lists, objects, floating,
               ', no mesh for: ' + ' '.join(missing) if missing else ''))
 
 
