@@ -4531,7 +4531,8 @@ void Client::ProcessOP_InspectRequest(APPLAYER* pApp)
 	{
 		InspectRequest_Struct* ins = (InspectRequest_Struct*) pApp->pBuffer; 
 		Mob* tmp = entity_list.GetMob(ins->TargetID); 
-		tmp->CastToClient()->QueuePacket(pApp); // Send request to target 
+		if (tmp != 0 && tmp->IsClient())	// a stale or forged id, or an NPC: nothing to relay to
+			tmp->CastToClient()->QueuePacket(pApp); // Send request to target 
 	}
 	else
 	{
@@ -4547,7 +4548,8 @@ void Client::ProcessOP_InspectAnswer(APPLAYER* pApp)
 	{
 		InspectAnswer_Struct* ins = (InspectAnswer_Struct*) pApp->pBuffer; 
 		Mob* tmp = entity_list.GetMob(ins->TargetID); 
-		tmp->CastToClient()->QueuePacket(pApp); // Send answer to requester 
+		if (tmp != 0 && tmp->IsClient())
+			tmp->CastToClient()->QueuePacket(pApp); // Send answer to requester 
 	}
 	else
 	{
