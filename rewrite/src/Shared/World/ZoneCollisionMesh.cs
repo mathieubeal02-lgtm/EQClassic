@@ -53,7 +53,8 @@ public sealed class ZoneCollisionMesh
     /// A zone as the client collides with it: the zone mesh (Zone/Meshes/&lt;zone&gt;_collision.txt)
     /// plus every placed object (Zone/object_instances.txt) whose model has a collision mesh
     /// (Objects/Meshes/&lt;model&gt;_collision.txt). Objects without one (crates, barrels) or with an
-    /// empty one are not solid; in Qeynos only the trees are.
+    /// empty one are not solid; in Qeynos only the trees are. Animated models (the swaying trees of
+    /// Kunark and Velious) have no mesh of their own but a skeleton: see PosedSkeleton.
     /// </summary>
     public static ZoneCollisionMesh LoadLanternZone(string exportDir, string zone)
     {
@@ -61,21 +62,24 @@ public sealed class ZoneCollisionMesh
         return ParseLanternZone(
             File.ReadLines(Path.Combine(exportDir, zone, "Zone", "Meshes", zone + "_collision.txt")),
             File.Exists(instances) ? File.ReadLines(instances) : Array.Empty<string>(),
-            model =>
+            file =>
             {
-                var path = Path.Combine(exportDir, zone, "Objects", "Meshes", model + "_collision.txt");
+                var path = Path.Combine(exportDir, zone, "Objects", file);
                 return File.Exists(path) ? File.ReadLines(path) : null;
             });
     }
 
-    /// <param name="objectMesh">The collision mesh lines of an object model, or null when it has none.</param>
+    /// <param name="objectFile">
+    /// The lines of a file of the export's Objects directory ("Meshes/tree_collision.txt",
+    /// "Skeletons/tree.txt", "Animations/tree_pos.txt"), or null when there is none.
+    /// </param>
     public static ZoneCollisionMesh ParseLanternZone(IEnumerable<string> zoneMesh, IEnumerable<string> objectInstances,
-        Func<string, IEnumerable<string>?> objectMesh)
+        Func<string, IEnumerable<string>?> objectFile)
     {
         var vertices = new List<Vec3>();
         var triangles = new List<int>();
         ReadLantern(zoneMesh, vertices, triangles, static v => v);
-        var models = new Dictionary<string, List<string>?>();
+        var models = new Dictionary<string, Model?>();
         int lineNo = 0;
         foreach (var raw in objectInstances)
         {
@@ -90,22 +94,148 @@ public sealed class ZoneCollisionMesh
             var pos = (X: Parse(f[1], lineNo), Y: Parse(f[2], lineNo), Z: Parse(f[3], lineNo));
             if (pos.Y < -30000f)
                 continue; // fallen to the bottom of the world (LanternUnityTools skips them too)
-            if (!models.TryGetValue(f[0], out var mesh))
-            {
-                mesh = objectMesh(f[0])?.ToList();
-                // LanternExtractor writes most object collision files with no vertices at all, only
-                // "i,0,0,0,0" lines (Qeynos: everything but the trees): nothing solid there.
-                if (mesh is not null && !mesh.Any(l => l.StartsWith("v,", StringComparison.Ordinal)))
-                    mesh = null;
-                models[f[0]] = mesh;
-            }
-            if (mesh is null)
+            var name = f[0].ToLowerInvariant(); // Lantern's file names are lower case
+            if (!models.TryGetValue(name, out var model))
+                models[name] = model = SolidMesh(objectFile, name) ?? PosedSkeleton(objectFile, name);
+            if (model is null)
                 continue;
             var place = Placement(pos, Parse(f[4], lineNo), Parse(f[5], lineNo), Parse(f[6], lineNo),
                 (Parse(f[7], lineNo), Parse(f[8], lineNo), Parse(f[9], lineNo)));
-            ReadLantern(mesh, vertices, triangles, place);
+            int first = vertices.Count;
+            foreach (var v in model.Vertices)
+            {
+                var (lx, ly, lz) = place(v);
+                vertices.Add(new Vec3(lz, lx, ly));
+            }
+            foreach (int index in model.Triangles)
+                triangles.Add(first + index);
         }
         return new ZoneCollisionMesh(vertices, triangles);
+    }
+
+    /// <summary>An object model's triangles in its own Lantern axes, read once and placed for every instance.</summary>
+    private sealed class Model
+    {
+        public readonly List<(float X, float Y, float Z)> Vertices = new();
+        public readonly List<int> Triangles = new();
+    }
+
+    /// <summary>
+    /// Meshes/&lt;mesh&gt;_collision.txt, or null when it is missing or has no vertices: LanternExtractor
+    /// writes most object collision files with only "i,0,0,0,0" lines (Qeynos: everything but the
+    /// trees; a Kunark tree's branches): nothing solid there. With <paramref name="whole"/>, a mesh
+    /// without a collision file is solid as a whole (Lantern writes one only when some polygons are not).
+    /// </summary>
+    private static Model? SolidMesh(Func<string, IEnumerable<string>?> objectFile, string mesh, bool whole = false)
+    {
+        var lines = objectFile("Meshes/" + mesh + "_collision.txt");
+        if (lines is null && whole)
+            lines = objectFile("Meshes/" + mesh + ".txt");
+        if (lines is null)
+            return null;
+        var model = new Model();
+        var vertices = new List<Vec3>();
+        var triangles = new List<int>();
+        ReadLantern(lines, vertices, triangles, static v => v);
+        if (vertices.Count == 0)
+            return null;
+        foreach (var v in vertices)
+            model.Vertices.Add((v.Y, v.Z, v.X)); // ReadLantern gives EverQuest axes: back to Lantern's
+        for (int t = 0; t < triangles.Count; t += 3)
+        {
+            int a = triangles[t], b = triangles[t + 1], c = triangles[t + 2];
+            if ((uint)a >= (uint)vertices.Count || (uint)b >= (uint)vertices.Count || (uint)c >= (uint)vertices.Count)
+                throw new FormatException($"{mesh}: vertex index out of range");
+            if (a != b && b != c && a != c) // a polygon that is not solid stays as "i,0,0,0,0" among the others
+                model.Triangles.AddRange([a, b, c]);
+        }
+        return model.Triangles.Count > 0 ? model : null;
+    }
+
+    /// <summary>
+    /// An animated model (Skeletons/&lt;model&gt;.txt and Animations/&lt;model&gt;_pos.txt) put together in
+    /// the pose of the first frame of its "pos" animation: each bone's mesh moved by the bone, then
+    /// by its parent, up to the root. Null when the model has no skeleton or no solid bone (a tree's
+    /// trunk is solid, its branches are not). Same assembly as tools/maps/lantern2map.py (object_mesh).
+    /// </summary>
+    private static Model? PosedSkeleton(Func<string, IEnumerable<string>?> objectFile, string model)
+    {
+        var skeleton = objectFile("Skeletons/" + model + ".txt");
+        var animation = objectFile("Animations/" + model + "_pos.txt");
+        if (skeleton is null || animation is null)
+            return null;
+        var boneMesh = new Dictionary<string, string>();
+        foreach (var raw in skeleton)
+        {
+            // BoneName, Children, Mesh, AlternateMesh, ParticleCloud
+            var p = raw.Trim().Split(',');
+            if (!raw.StartsWith("#", StringComparison.Ordinal) && p.Length >= 3 && p[2].Length > 0)
+                boneMesh[p[0].ToLowerInvariant()] = p[2].ToLowerInvariant();
+        }
+        // Bone path ("root/t104tnk") -> its offset from its parent at frame 0, in the file's order.
+        var bones = new List<string>();
+        var pose = new Dictionary<string, Bone>();
+        int lineNo = 0;
+        foreach (var raw in animation)
+        {
+            lineNo++;
+            // Path, Frame, PosX, PosY, PosZ, RotX, RotY, RotZ, RotW, Scale, Delay ("framecount,4" headers are shorter)
+            var p = raw.Trim().Split(',');
+            if (p.Length < 10 || p[1] != "0")
+                continue;
+            var path = p[0].ToLowerInvariant();
+            if (!pose.ContainsKey(path))
+                bones.Add(path);
+            pose[path] = new Bone(
+                (Parse(p[2], lineNo), Parse(p[3], lineNo), Parse(p[4], lineNo)),
+                (Parse(p[5], lineNo), Parse(p[6], lineNo), Parse(p[7], lineNo), Parse(p[8], lineNo)),
+                Parse(p[9], lineNo));
+        }
+        var result = new Model();
+        var chain = new List<Bone>();
+        foreach (var path in bones)
+        {
+            if (!boneMesh.TryGetValue(path.Substring(path.LastIndexOf('/') + 1), out var meshName)
+                || SolidMesh(objectFile, meshName, whole: true) is not { } mesh)
+                continue;
+            chain.Clear(); // the bone, its parent... up to the root
+            for (int end = path.Length; end > 0; end = path.LastIndexOf('/', end - 1))
+                if (pose.TryGetValue(path.Substring(0, end), out var bone))
+                    chain.Add(bone);
+            int first = result.Vertices.Count;
+            foreach (var vertex in mesh.Vertices)
+            {
+                var v = vertex;
+                foreach (var bone in chain)
+                    v = bone.Apply(v);
+                result.Vertices.Add(v);
+            }
+            foreach (int index in mesh.Triangles)
+                result.Triangles.Add(first + index);
+        }
+        return result.Triangles.Count > 0 ? result : null;
+    }
+
+    /// <summary>A bone's offset from its parent: uniform scale, then a rotation (quaternion x, y, z, w), then a position.</summary>
+    private readonly struct Bone
+    {
+        private readonly (float X, float Y, float Z) _pos;
+        private readonly (float X, float Y, float Z, float W) _rot;
+        private readonly float _scale;
+
+        public Bone((float X, float Y, float Z) pos, (float X, float Y, float Z, float W) rot, float scale) =>
+            (_pos, _rot, _scale) = (pos, rot, scale);
+
+        public (float X, float Y, float Z) Apply((float X, float Y, float Z) v)
+        {
+            float x = v.X * _scale, y = v.Y * _scale, z = v.Z * _scale;
+            var (qx, qy, qz, qw) = _rot;
+            // q v q*, as v + w t + q × t with t = 2 (q × v)
+            float tx = 2 * (qy * z - qz * y), ty = 2 * (qz * x - qx * z), tz = 2 * (qx * y - qy * x);
+            return (x + qw * tx + qy * tz - qz * ty + _pos.X,
+                    y + qw * ty + qz * tx - qx * tz + _pos.Y,
+                    z + qw * tz + qx * ty - qy * tx + _pos.Z);
+        }
     }
 
     /// <summary>
