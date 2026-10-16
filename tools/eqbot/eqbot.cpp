@@ -1741,6 +1741,10 @@ namespace
 		return items;
 	}
 
+	// The packs (22-29) and what is in bags (250-329): what the zone lets us eat, drink or sell. The
+	// cursor's bag (330-339) and the bank (2000 on) are in the inventory too, out of reach.
+	bool InPacks(int slot) { return (slot >= 22 && slot <= 29) || (slot >= 250 && slot <= 329); }
+
 	// Puts on what lies in the packs and fits an empty worn slot (after looting our corpse), as a player
 	// does: pack -> cursor (slot 0) -> worn slot. Weapons first in the primary hand.
 	// Can this class and race wear the item (Item_Struct: type at 129, classes at 208, races at 212, one
@@ -2006,7 +2010,7 @@ namespace
 			std::map<int, std::vector<unsigned char> > items = InventoryItems(st.inventory);
 			for (std::map<int, std::vector<unsigned char> >::iterator i = items.begin(); i != items.end(); ++i)
 			{
-				if (i->second.size() < 220 || i->first <= 0)
+				if (i->second.size() < 220 || !InPacks(i->first))
 					continue;
 				int type = i->second[194], left = (signed char)i->second[218];
 				if (type == 14 && left > 0) food[i->first] = left;
@@ -3606,9 +3610,10 @@ namespace
 			if (i->second.size() < 220)
 				continue;
 			int type = i->second[194];
+			if (!InPacks(i->first)) continue;
 			if (type == 14) haveFood = true;
 			else if (type == 15) haveDrink = true;
-			else if ((i->first >= 22 && i->first <= 29) || (i->first >= 250 && i->first < 330)) toSell.push_back(i->first);
+			else toSell.push_back(i->first);
 		}
 		std::vector<SpawnInfo> merchants;
 		std::vector<SpawnInfo> spawns = DecodeSpawns(st.spawnPackets);
