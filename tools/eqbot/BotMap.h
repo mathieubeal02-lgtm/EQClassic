@@ -276,9 +276,9 @@ public:
 	};
 	bool paths;	// look for paths (else turns only)
 
-	BotWalker() : paths(true), side(1), sideUntil(0), at(0), aside(0), searchAfter(0), failX(0), failY(0) {}
+	BotWalker() : paths(true), side(1), sideUntil(0), at(0), aside(0), searchAfter(0), straightUntil(0), failX(0), failY(0) {}
 
-	void Reset() { path.clear(); aside = 0; }
+	void Reset() { path.clear(); aside = 0; straightUntil = 0; }
 
 	// Up to s units from (x, y), feet at `feet`, toward (tx, ty), at `now` (ms); x, y and feet move.
 	Step Walk(const BotMap& map, float& x, float& y, float& feet, float tx, float ty, float s, long now)
@@ -308,7 +308,10 @@ public:
 		static const float kTurn[] = { 0, 30, 60, 90, 120 };
 		float base = atan2f(ay - y, ax - x);
 		int first = now < sideUntil ? side : 1;
-		for (int k = 0; k < 5; k++)
+		// no path led there a moment ago: straight at it (through what is in the way) rather than turning
+		// round and round, as before the paths (a zone line beyond a gap in the map, a goal inside a wall)
+		int turns = now < straightUntil ? 1 : 5;
+		for (int k = 0; k < turns; k++)
 			for (int t = 0; t < (k ? 2 : 1); t++)
 			{
 				int sd = t ? -first : first;
@@ -351,7 +354,7 @@ private:
 	int side; long sideUntil;
 	size_t at;
 	int aside;	// steps in a row turned aside
-	long searchAfter;
+	long searchAfter, straightUntil;
 	float failX, failY;	// the last place no path led to
 
 	bool Search(const BotMap& map, float x, float y, float feet, float tx, float ty, long now, Step& r)
@@ -373,6 +376,7 @@ private:
 			if (fabsf(tx - failX) < 20 && fabsf(ty - failY) < 20)
 				searchAfter = now + 20000;
 			failX = tx; failY = ty;
+			straightUntil = now + 20000;
 		}
 		return !path.empty();
 	}
