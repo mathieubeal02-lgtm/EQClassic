@@ -1701,7 +1701,7 @@ namespace
 
 	struct HuntStats
 	{
-		int kills, loots, items, deaths, hitsDealt, damageDealt, hitsTaken, damageTaken, refused, recovered, equipped, assists, casts;
+		int kills, loots, items, deaths, hitsDealt, damageDealt, hitsTaken, damageTaken, refused, recovered, equipped, assists, casts, throughWall;
 		long expGained;
 		bool campSet;	// the camp is where the first life began: the bot goes back there after a death
 		float campX, campY, campZ;
@@ -1717,7 +1717,7 @@ namespace
 		long lastTown;
 		int townTrips;
 		HuntStats() : kills(0), loots(0), items(0), deaths(0), hitsDealt(0), damageDealt(0), hitsTaken(0), damageTaken(0),
-		              refused(0), recovered(0), equipped(0), assists(0), casts(0), expGained(0), campSet(false), campX(0), campY(0), campZ(0), sayDeath(false),
+		              refused(0), recovered(0), equipped(0), assists(0), casts(0), throughWall(0), expGained(0), campSet(false), campX(0), campY(0), campZ(0), sayDeath(false),
 		              wantTown(false), lastTown(0), townTrips(0), helpX(0), helpY(0) {}
 	};
 
@@ -1896,6 +1896,16 @@ namespace
 			}
 		return moved;
 	}
+
+	// The zone's collision map (EQBOT_MAPS: the directory of the server's .map files): with it a bot stays on
+	// the ground and goes round what stands in the way; without, it walks straight.
+	bool LoadZoneMap(BotMap& map, const std::string& zone)
+	{
+		return getenv("EQBOT_MAPS") && map.Load(std::string(getenv("EQBOT_MAPS")) + "/" + zone + ".map");
+	}
+
+	// A player's z is above the ground it stands on: 4.5 units for a high elf (seen from a client), taken by size here.
+	float ZAbove(int race) { return race == 9 || race == 10 ? 6.0f : race == 8 || race == 11 || race == 12 ? 3.0f : 4.5f; }
 
 	bool IsPreyName(const std::string& n)
 	{
@@ -2222,51 +2232,46 @@ namespace
 					return true;
 			return false;
 		};
-		// The zone's collision map (EQBOT_MAPS: the directory of the server's .map files): with it we
-		// stay on the ground and go round what stands in the way; without, straight at the target's height.
 		BotMap map;
-		if (getenv("EQBOT_MAPS"))
-			map.Load(std::string(getenv("EQBOT_MAPS")) + "/" + st.zone + ".map");
-		// a player's z is above the ground it stands on: 4.5 units for a high elf (seen from a client), taken by size here
-		const float zAbove = myRace == 9 || myRace == 10 ? 6.0f : myRace == 8 || myRace == 11 || myRace == 12 ? 3.0f : 4.5f;
-		int detourSide = 0; long detourUntil = 0;
+		LoadZoneMap(map, st.zone);
+		const float zAbove = ZAbove(myRace);
+		BotWalker walker;
+		walker.paths = !getenv("EQBOT_NOPATH");
+		long lastThrough = 0;
 		BotLog(charname, st.zone, "action=Map loaded=%d", map.Loaded() ? 1 : 0);
 		auto walkTo = [&](float tx, float ty, float tz, float step, float stop) {
 			float dx = tx - meX, dy = ty - meY, dist = sqrtf(dx * dx + dy * dy);
-			if (dist <= stop + 1) { sendPos(tx, ty, false); return true; }
+			if (dist <= stop + 1) { sendPos(tx, ty, false); walker.Reset(); return true; }
 			if (NowMs() < castUntil) return false;	// moving breaks a cast
 			float s = std::min(step, dist - stop);
 			if (map.Loaded())
 			{
-				// straight first; if something is in the way, the smallest turn that is free, on the
-				// side we already took a moment ago (else we would sway left and right before a wall)
-				static const float kTurn[] = { 0, 30, 60, 90, 120 };
 				// where we stand: the surface under us (our z may be a target's, or one from before the map)
-				float feet = map.Ground(meX, meY, meZ + 2), base = atan2f(dy, dx);
-				if (feet == BotMap::kNoGround)
-					feet = meZ - zAbove;
-				int first = NowMs() < detourUntil ? detourSide : 1;
-				for (int k = 0; k < 5; k++)
-					for (int t = 0; t < (k ? 2 : 1); t++)
+				float feet = map.Feet(meX, meY, meZ, zAbove), fromX = meX, fromY = meY, fromZ = meZ;
+				BotWalker::Step r = walker.Walk(map, meX, meY, feet, tx, ty, s, NowMs());
+				if (r.newDetour)
+					BotLog(charname, st.zone, "action=Detour turn=%d pos=%.0f,%.0f,%.0f", r.turn, fromX, fromY, fromZ);
+				if (r.search)
+					BotLog(charname, st.zone, "action=%s from=%.0f,%.0f to=%.0f,%.0f points=%d ms=%ld", r.search > 0 ? "Path" : "NoPath", fromX, fromY, tx, ty, r.points, r.ms);
+				if (r.through)
+				{
+					if (NowMs() - lastThrough > 5000)
 					{
-						int side = t ? -first : first;
-						float a = base + side * kTurn[k] * 3.14159265f / 180;
-						float nx = meX + cosf(a) * s, ny = meY + sinf(a) * s;
-						float g = map.Ground(nx, ny, feet + 8);	// 8: what we step up without a jump
-						if (g == BotMap::kNoGround || map.Blocked(meX, meY, feet + 4, nx, ny, g + 4))
-							continue;
-						if (k > 0)
-						{
-							if (NowMs() >= detourUntil)
-								BotLog(charname, st.zone, "action=Detour turn=%d pos=%.0f,%.0f,%.0f", (int)(side * kTurn[k]), meX, meY, meZ);
-							detourSide = side; detourUntil = NowMs() + 2000;
-						}
-						meX = nx; meY = ny; meZ = g + zAbove;
-						sendPos(meX + cosf(a) * 10, meY + sinf(a) * 10, true);
-						return false;
+						BotLog(charname, st.zone, "action=ThroughWall pos=%.0f,%.0f,%.0f to=%.0f,%.0f", fromX, fromY, fromZ, tx, ty);
+						lastThrough = NowMs();
 					}
+					hs.throughWall++;
+					meZ = tz;
+					sendPos(tx, ty, true);
+				}
+				else if (r.moved)
+				{
+					meZ = feet + zAbove;
+					sendPos(r.headX, r.headY, true);
+				}
+				return false;
 			}
-			meX += dx / dist * s; meY += dy / dist * s; meZ = tz;	// no map, or shut in on all sides
+			meX += dx / dist * s; meY += dy / dist * s; meZ = tz;	// no map: straight at the target's height
 			sendPos(tx, ty, true);
 			return false;
 		};
@@ -3181,8 +3186,8 @@ namespace
 			if (now - lastStatus >= 30000)
 			{
 				const char* label = state == Seek && member ? "Follow" : names[state];
-				BotLog(charname, st.zone, "action=Status state=%s hp=%d%% mana=%d kills=%d assists=%d loots=%d items=%d exp=%ld deaths=%d group=%d pos=%.0f,%.0f,%.0f",
-				       label, myHp, myMana, hs.kills, hs.assists, hs.loots, hs.items, hs.expGained, hs.deaths, grouped || !members.empty() ? (int)members.size() + 1 : 0, meX, meY, meZ);
+				BotLog(charname, st.zone, "action=Status state=%s hp=%d%% mana=%d kills=%d assists=%d loots=%d items=%d exp=%ld deaths=%d group=%d through_wall=%d pos=%.0f,%.0f,%.0f",
+				       label, myHp, myMana, hs.kills, hs.assists, hs.loots, hs.items, hs.expGained, hs.deaths, grouped || !members.empty() ? (int)members.size() + 1 : 0, hs.throughWall, meX, meY, meZ);
 				lastStatus = now;
 			}
 		}
@@ -3448,6 +3453,12 @@ namespace
 			std::string confirmed;
 			bool teleported = false;
 			bool killed = false;
+			BotMap map;
+			BotWalker walker;
+			const float zAbove = ZAbove(pp.size() > 57 ? pp[56] | (pp[57] << 8) : 0);
+			if (!getenv("EQBOT_NOPATH"))	// turns alone get lost on a long road: without paths, straight as before
+				LoadZoneMap(map, st.zone);
+			float feet = map.Feet(meX, meY, meZ, zAbove);
 			while (NowMs() - start < 600000 && confirmed.empty() && !killed)
 			{
 				std::vector<Packet*> got = z->Poll(250);
@@ -3497,7 +3508,15 @@ namespace
 				{
 					float dx = gx - meX, dy = gy - meY, d = sqrtf(dx * dx + dy * dy);
 					bool walking = d > 1;
-					if (walking)
+					if (walking && map.Loaded())
+					{
+						BotWalker::Step r = walker.Walk(map, meX, meY, feet, gx, gy, std::min(step, d), now);
+						if (r.search)
+							BotLog(charname, st.zone, "action=%s to=%.0f,%.0f points=%d ms=%ld", r.search > 0 ? "Path" : "NoPath", gx, gy, r.points, r.ms);
+						if (r.through && line->mode == 0) meZ = line->z;
+						else meZ = feet + zAbove;
+					}
+					else if (walking)
 					{
 						float s2 = std::min(step, d);
 						meX += dx / d * s2;
@@ -3637,6 +3656,12 @@ namespace
 			u[11] = walking ? ((++tick & 1) ? 1 : 2) : 0;
 			z->Send(kClientUpdate, u, sizeof(u));
 		};
+		BotMap map;
+		BotWalker walker;
+		const float zAbove = ZAbove(pp.size() > 57 ? pp[56] | (pp[57] << 8) : 0);
+		if (!getenv("EQBOT_NOPATH"))	// without paths, straight to the merchants as before
+			LoadZoneMap(map, st.zone);
+		float feet = map.Feet(meX, meY, meZ, zAbove);
 		int sold = 0, visited = 0;
 		bool didSell = toSell.empty();
 		for (size_t m = 0; m < merchants.size() && visited < 6 && !(didSell && haveFood && haveDrink); m++)
@@ -3644,7 +3669,9 @@ namespace
 			const SpawnInfo& mer = merchants[m];
 			visited++;
 			long last = NowMs(), walkStart = last;
-			while (NowMs() - walkStart < 240000)	// straight to it, 20 units a second, stop 4 away
+			int throughs = 0;	// steps that went through something (a wall, a counter)
+			walker.Reset();
+			while (NowMs() - walkStart < 240000)	// to it (round what stands in the way, with a map), 20 units a second, stop 4 away
 			{
 				{ std::vector<Packet*> g = z->Poll(250); DeleteAll(g); }
 				long now = NowMs();
@@ -3652,9 +3679,21 @@ namespace
 				last = now;
 				if (d <= 4) break;
 				float s = std::min(step, d - 3);
-				meX += dx / d * s; meY += dy / d * s; meZ = mer.z;
+				if (map.Loaded())
+				{
+					BotWalker::Step r = walker.Walk(map, meX, meY, feet, mer.x, mer.y, s, now);
+					if (r.search)
+						BotLog(charname, st.zone, "action=%s to=%s points=%d ms=%ld", r.search > 0 ? "Path" : "NoPath", mer.name.c_str(), r.points, r.ms);
+					meZ = r.through ? mer.z : feet + zAbove;
+					throughs += r.through;
+				}
+				else
+				{
+					meX += dx / d * s; meY += dy / d * s; meZ = mer.z;
+				}
 				send(true, mer.x, mer.y);
 			}
+			BotLog(charname, st.zone, "action=TownWalk merchant=%s secs=%ld through=%d map=%d", mer.name.c_str(), (NowMs() - walkStart) / 1000, throughs, map.Loaded() ? 1 : 0);
 			send(false, mer.x, mer.y);
 			uint16_t aim[2] = { (uint16_t)mer.id, 0 };
 			z->Send(kClientTarget, aim, sizeof(aim));

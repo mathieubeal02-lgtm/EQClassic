@@ -35,3 +35,7 @@ if(WIN32)
   target_link_libraries(packet_manager_test PRIVATE ws2_32)
 endif()
 add_test(NAME packet_manager COMMAND packet_manager_test)
+
+# The bot's collision map: ground, walls, A* paths and steering (tools/eqbot/BotMap.h, header only).
+add_executable(botmap_test botmap_test.cpp)
+add_test(NAME botmap COMMAND botmap_test)
