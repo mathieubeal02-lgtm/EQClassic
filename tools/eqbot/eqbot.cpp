@@ -2018,7 +2018,7 @@ namespace
 			}
 		}
 		long lastConsume = 0;
-		bool saidHungry = false;
+		bool saidHungry = false, packsFull = false;
 		int pendingType = 0, pendingSlot = 0, pendingLevel = 0;	// the last thing eaten: did the level rise?
 		auto consume = [&](std::map<int, int>& stock, int type, const char* what, int level) {
 			if (stock.empty())
@@ -2365,6 +2365,17 @@ namespace
 						BotLog(charname, st.zone, "action=CastRefused why=%s", range ? "out_of_range" : "mana");
 						if (++castRefusals >= 5)
 							Anomaly(charname, st.zone, "cast_refused", "why=%s in_a_row=%d", range ? "out_of_range" : "mana", castRefusals);
+					}
+					else if (p->opcode == kSpecialMesg && p->size > 4 && state == Loot
+					         && std::string((const char*)b + 4, strnlen((const char*)b + 4, p->size - 4)).find("no room for this item") != std::string::npos)
+					{
+						// the packs are full and the cursor taken: what we loot stays on the corpses. Off to
+						// sell (EQBOT_TOWN), at most once in 20 minutes
+						if (!packsFull)
+							BotLog(charname, st.zone, "action=PacksFull town=%d", getenv("EQBOT_TOWN") ? 1 : 0);
+						packsFull = true;
+						if (getenv("EQBOT_TOWN") && (!hs.lastTown || NowMs() - hs.lastTown > 1200000))
+							hs.wantTown = true;
 					}
 					else if (p->opcode == kSpecialMesg && p->size > 4 && (state == Fight || state == Approach))
 					{
@@ -3601,7 +3612,7 @@ namespace
 			if (early[i]->opcode == (int16)0xf520 && early[i]->size >= 12 && (early[i]->pBuffer[4] | (early[i]->pBuffer[5] << 8)) == 16 && st.myId == 0)
 				st.myId = early[i]->pBuffer[8] | (early[i]->pBuffer[9] << 8);
 		DeleteAll(early);
-		// what to sell: the packs (22-29) and what is in bags (250-329), but food (14) and drink (15)
+		// what to sell: the packs (22-29) and what is in bags (250-329), but the bags, food (14) and drink (15)
 		std::vector<int> toSell;
 		bool haveFood = false, haveDrink = false;
 		std::map<int, std::vector<unsigned char> > items = InventoryItems(st.inventory);
@@ -3613,7 +3624,7 @@ namespace
 			if (!InPacks(i->first)) continue;
 			if (type == 14) haveFood = true;
 			else if (type == 15) haveDrink = true;
-			else toSell.push_back(i->first);
+			else if (i->second[129] != 1) toSell.push_back(i->first);	// the bags stay: they are the packs' room
 		}
 		std::vector<SpawnInfo> merchants;
 		std::vector<SpawnInfo> spawns = DecodeSpawns(st.spawnPackets);
@@ -3706,13 +3717,45 @@ namespace
 			};
 			if (!didSell)
 			{
-				for (size_t i = 0; i < toSell.size(); i++)
-				{
+				std::set<int> emptied;
+				auto sell = [&](int slot, int nr) {
 					int q, cost;
-					trade(0x2820, toSell[i], 20, q, cost);	// OP_ShopPlayerSell: the zone caps the quantity at what the slot holds
-					int nr = items[toSell[i]][130] | (items[toSell[i]][131] << 8);
-					BotLog(charname, st.zone, "action=TownSell merchant=%s slot=%d item=%d qty=%d", mer.name.c_str(), toSell[i], nr, q);	// (the zone echoes the request: no price in it)
-					if (q >= 0) sold++;
+					trade(0x2820, slot, 20, q, cost);	// OP_ShopPlayerSell: the zone caps the quantity at what the slot holds
+					BotLog(charname, st.zone, "action=TownSell merchant=%s slot=%d item=%d qty=%d", mer.name.c_str(), slot, nr, q);	// (the zone echoes the request: no price in it)
+					if (q >= 0) { sold++; emptied.insert(slot); }
+				};
+				for (size_t i = 0; i < toSell.size(); i++)
+					sell(toSell[i], items[toSell[i]][130] | (items[toSell[i]][131] << 8));
+				// A bag on the cursor (looted with the packs full; the zone moves nothing out of it): it
+				// takes the place of a pack bag the sale just emptied, and what it holds is sold in turn
+				if (items.count(0) && items[0].size() >= 214 && items[0][129] == 1)
+				{
+					int swap = 0;
+					for (int p = 22; p <= 29 && !swap; p++)
+					{
+						if (!items.count(p) || items[p].size() < 214 || items[p][129] != 1)
+							continue;
+						bool empty = true;
+						for (int k = 0; k < 10 && empty; k++)
+							empty = !items.count(250 + (p - 22) * 10 + k) || emptied.count(250 + (p - 22) * 10 + k);
+						if (empty)
+							swap = p;
+					}
+					BotLog(charname, st.zone, "action=TownStow item=%d to=%d", items[0][130] | (items[0][131] << 8), swap);
+					if (swap)
+					{
+						MoveItem(*z, kCursor, (uint32_t)swap);	// the zone swaps the two bags, with what they hold
+						{ std::vector<Packet*> g = Collect(*z, 600, [](const std::vector<Packet*>&) { return false; }); DeleteAll(g); }
+						for (int k = 0; k < 10; k++)
+						{
+							if (!items.count(330 + k) || items[330 + k].size() < 220)
+								continue;
+							int type = items[330 + k][194];
+							if (type == 14) haveFood = true;
+							else if (type == 15) haveDrink = true;
+							else sell(250 + (swap - 22) * 10 + k, items[330 + k][130] | (items[330 + k][131] << 8));
+						}
+					}
 				}
 				didSell = true;
 			}
