@@ -3458,8 +3458,8 @@ namespace
 			BotMap map;
 			BotWalker walker;
 			const float zAbove = ZAbove(pp.size() > 57 ? pp[56] | (pp[57] << 8) : 0);
-			if (LoadZoneMap(map, st.zone))
-				walker.paths = !getenv("EQBOT_NOPATH");
+			if (!getenv("EQBOT_NOPATH"))	// turns alone get lost on a long road: without paths, straight as before
+				LoadZoneMap(map, st.zone);
 			float feet = map.Loaded() ? map.Ground(meX, meY, meZ + 2) : BotMap::kNoGround;
 			if (feet == BotMap::kNoGround)
 				feet = meZ - zAbove;
@@ -3663,8 +3663,8 @@ namespace
 		BotMap map;
 		BotWalker walker;
 		const float zAbove = ZAbove(pp.size() > 57 ? pp[56] | (pp[57] << 8) : 0);
-		if (LoadZoneMap(map, st.zone))
-			walker.paths = !getenv("EQBOT_NOPATH");
+		if (!getenv("EQBOT_NOPATH"))	// without paths, straight to the merchants as before
+			LoadZoneMap(map, st.zone);
 		float feet = map.Loaded() ? map.Ground(meX, meY, meZ + 2) : BotMap::kNoGround;
 		if (feet == BotMap::kNoGround)
 			feet = meZ - zAbove;

@@ -345,11 +345,13 @@ private:
 
 	bool Search(const BotMap& map, float x, float y, float feet, float tx, float ty, long now, Step& r)
 	{
-		searchAfter = now + 3000;	// at most one search every 3 s: each costs up to ~70 ms
-		if (!paths || BotMap::Dist(x, y, tx, ty) > 600)
+		searchAfter = now + 3000;	// at most one search every 3 s: each costs up to ~70 ms (~200 far away)
+		float d = BotMap::Dist(x, y, tx, ty);
+		if (!paths || d > 3000)
 			return false;
 		clock_t c0 = clock();
-		path = map.Path(x, y, feet, tx, ty, kStepUp, kEye, 8000);
+		// A* heads for the goal: across open ground a far one costs little more, a maze much more
+		path = map.Path(x, y, feet, tx, ty, kStepUp, kEye, d > 600 ? 25000 : 8000);
 		at = 0;
 		r.ms = (long)((clock() - c0) * 1000 / CLOCKS_PER_SEC);
 		r.points = (int)path.size();
