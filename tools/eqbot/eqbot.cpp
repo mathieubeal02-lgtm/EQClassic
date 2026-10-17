@@ -2247,9 +2247,7 @@ namespace
 			if (map.Loaded())
 			{
 				// where we stand: the surface under us (our z may be a target's, or one from before the map)
-				float feet = map.Ground(meX, meY, meZ + 2), fromX = meX, fromY = meY, fromZ = meZ;
-				if (feet == BotMap::kNoGround)
-					feet = meZ - zAbove;
+				float feet = map.Feet(meX, meY, meZ, zAbove), fromX = meX, fromY = meY, fromZ = meZ;
 				BotWalker::Step r = walker.Walk(map, meX, meY, feet, tx, ty, s, NowMs());
 				if (r.newDetour)
 					BotLog(charname, st.zone, "action=Detour turn=%d pos=%.0f,%.0f,%.0f", r.turn, fromX, fromY, fromZ);
@@ -3460,9 +3458,7 @@ namespace
 			const float zAbove = ZAbove(pp.size() > 57 ? pp[56] | (pp[57] << 8) : 0);
 			if (!getenv("EQBOT_NOPATH"))	// turns alone get lost on a long road: without paths, straight as before
 				LoadZoneMap(map, st.zone);
-			float feet = map.Loaded() ? map.Ground(meX, meY, meZ + 2) : BotMap::kNoGround;
-			if (feet == BotMap::kNoGround)
-				feet = meZ - zAbove;
+			float feet = map.Feet(meX, meY, meZ, zAbove);
 			while (NowMs() - start < 600000 && confirmed.empty() && !killed)
 			{
 				std::vector<Packet*> got = z->Poll(250);
@@ -3665,9 +3661,7 @@ namespace
 		const float zAbove = ZAbove(pp.size() > 57 ? pp[56] | (pp[57] << 8) : 0);
 		if (!getenv("EQBOT_NOPATH"))	// without paths, straight to the merchants as before
 			LoadZoneMap(map, st.zone);
-		float feet = map.Loaded() ? map.Ground(meX, meY, meZ + 2) : BotMap::kNoGround;
-		if (feet == BotMap::kNoGround)
-			feet = meZ - zAbove;
+		float feet = map.Feet(meX, meY, meZ, zAbove);
 		int sold = 0, visited = 0;
 		bool didSell = toSell.empty();
 		for (size_t m = 0; m < merchants.size() && visited < 6 && !(didSell && haveFood && haveDrink); m++)

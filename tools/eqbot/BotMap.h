@@ -69,6 +69,14 @@ public:
 
 	bool Loaded() const { return !faces.empty(); }
 
+	// The feet of someone at z, `above` units over the ground: the surface right under, unless there is
+	// none near (a hole in the map, water the map lacks): then z - above as it is.
+	float Feet(float x, float y, float z, float above) const
+	{
+		float g = Ground(x, y, z + 2);
+		return g == kNoGround || g < z - above - kMaxDrop ? z - above : g;
+	}
+
 	// The highest surface under (x, y) that is not above `from`: kNoGround when there is none.
 	float Ground(float x, float y, float from) const
 	{
@@ -120,7 +128,7 @@ public:
 		for (int i = 1; i <= n; i++)
 		{
 			float nx = ax + dx * i / n, ny = ay + dy * i / n, g = Ground(nx, ny, z + stepUp);
-			if (g == kNoGround || Blocked(x, y, z + eye, nx, ny, g + eye))
+			if (g == kNoGround || g < z - kMaxDrop || Blocked(x, y, z + eye, nx, ny, g + eye))
 				return false;
 			x = nx; y = ny; z = g;
 		}
@@ -164,7 +172,7 @@ public:
 				if (s != seen.end() && nodes[s->second].g <= c.g + step)
 					continue;
 				float g = Ground(nx, ny, c.z + stepUp);
-				if (g == kNoGround || Blocked(cx, cy, c.z + eye, nx, ny, g + eye))
+				if (g == kNoGround || g < c.z - kMaxDrop || Blocked(cx, cy, c.z + eye, nx, ny, g + eye))
 					continue;
 				Node n = { c.g + step, c.g + step + Dist(nx, ny, bx, by), g, cur, ni, nj };
 				if (s != seen.end())
@@ -207,6 +215,9 @@ public:
 	}
 
 	static const int kGrid = 8;	// the path grid: narrower than the gaps between trunks
+	// A drop no walker takes: through a hole in the map it would land on the zone's boundary floor,
+	// 60 units under Innothule's swamp, and walk on under the world
+	static const int kMaxDrop = 30;
 
 private:
 	struct Face { float ax, ay, az, bx, by, bz, cx, cy, cz, nx, ny, nz, nd; };
@@ -304,7 +315,7 @@ public:
 				float a = base + sd * kTurn[k] * 3.14159265f / 180;
 				float nx = x + cosf(a) * s, ny = y + sinf(a) * s;
 				float g = map.Ground(nx, ny, feet + kStepUp);
-				if (g == BotMap::kNoGround || map.Blocked(x, y, feet + kEye, nx, ny, g + kEye))
+				if (g == BotMap::kNoGround || g < feet - BotMap::kMaxDrop || map.Blocked(x, y, feet + kEye, nx, ny, g + kEye))
 					continue;
 				if (k > 0)
 				{
@@ -327,7 +338,7 @@ public:
 		float d = BotMap::Dist(x, y, tx, ty);
 		if (d > 0.01f) { x += (tx - x) / d * s; y += (ty - y) / d * s; }
 		float g = map.Ground(x, y, feet + 50);
-		if (g != BotMap::kNoGround) feet = g;
+		if (g != BotMap::kNoGround && g >= feet - BotMap::kMaxDrop) feet = g;
 		r.moved = r.through = true;
 		return r;
 	}
