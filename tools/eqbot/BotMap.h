@@ -273,6 +273,7 @@ public:
 	Step Walk(const BotMap& map, float& x, float& y, float& feet, float tx, float ty, float s, long now)
 	{
 		Step r = { false, false, 0, false, 0, 0, 0, tx, ty };
+		s = std::min(s, BotMap::Dist(x, y, tx, ty));	// never past the goal
 		// a path made for somewhere else (the target moved on): dropped
 		if (!path.empty() && (fabsf(path.back().first - tx) > 20 || fabsf(path.back().second - ty) > 20))
 			path.clear();
