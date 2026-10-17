@@ -18,6 +18,7 @@
 // EQBOT_VERBOSE=1 lists the zone packets, EQBOT_RAW=1 dumps every datagram received, EQBOT_NETDEBUG=1
 // prints the protocol layer's resends and drops and, when the zone goes silent, the last 6000 datagrams.
 // EQBOT_STAY=<seconds> keeps `play` in the zone and checks the height of moving mobs.
+// EQBOT_MOVE=<units> makes `play` step that far along x, then drop the link without camping.
 // EQBOT_CLASS=warrior|cleric|wizard makes `create` build a human of that class instead of a troll shaman.
 // EQBOT_INVITE=Name,Name makes a hunter lead a group (invites them); EQBOT_ROLE=member makes it
 // never pull: it joins whoever invites it, follows, assists, heals (cleric) or nukes (wizard).
@@ -624,14 +625,42 @@ namespace
 		return true;
 	}
 
+	std::vector<unsigned char> DecodeProfile(std::vector<unsigned char> d);	// below
+
 	int Play(const std::string& host, const std::string& user, const std::string& pass, const std::string& charname)
 	{
 		EqSession z;
 		ZoneState st;
 		if (!EnterZone(host, user, pass, charname, z, st))
 			return 1;
+		std::vector<unsigned char> pp = DecodeProfile(st.profile);
+		float meX = 0, meY = 0, meZ = 0;
+		if (pp.size() >= 2420) { memcpy(&meY, &pp[2408], 4); memcpy(&meX, &pp[2412], 4); memcpy(&meZ, &pp[2416], 4); }
+		char gb[96];
+		snprintf(gb, sizeof(gb), "%.0f,%.0f,%.0f", meX, meY, meZ);
+		Step(pp.size() >= 2420, "position", gb);
 		if (getenv("EQBOT_STAY"))
 			WatchMobs(z, atoi(getenv("EQBOT_STAY")));
+		// EQBOT_MOVE=<units>: steps that far along x, then drops the link without camping (the zone
+		// must still save where we are: ci-e2e.sh plays again and compares)
+		if (getenv("EQBOT_MOVE") && st.myId)
+		{
+			float to = meX + (float)atof(getenv("EQBOT_MOVE"));
+			for (int i = 1; i <= 10; i++)
+			{
+				unsigned char u[15];
+				memset(u, 0, sizeof(u));
+				short y = (short)meY, x = (short)(meX + (to - meX) * i / 10), zz = (short)(meZ * 10);
+				u[0] = st.myId & 0xff; u[1] = st.myId >> 8;
+				memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
+				u[11] = (i & 1) ? 1 : 2;
+				z.Send((int16)0xf320, u, sizeof(u));	// kClientUpdate, below
+				std::vector<Packet*> got = z.Poll(200);
+				DeleteAll(got);
+			}
+			snprintf(gb, sizeof(gb), "to %.0f,%.0f,%.0f, then link dropped", to, meY, meZ);
+			Step(true, "moved", gb);
+		}
 		z.Disconnect();
 		return failures ? 1 : 0;
 	}

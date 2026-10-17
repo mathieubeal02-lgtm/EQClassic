@@ -9,6 +9,7 @@
 # imports the dump and sql/patches, creates a login account, starts login, world and one dynamic
 # zone, then: eqbot login, create, play, and play again (the second session is refused with
 # "Error 1018: active character" when the zone fails to log the first one out).
+# Last, a step and a dropped link: the next session must start where the last one ended.
 set -euo pipefail
 
 SERVER=$(realpath "$1")
@@ -104,4 +105,15 @@ db eqclassic -e "UPDATE account SET status = 255 WHERE lsaccount_id = (SELECT id
 db eqclassic -e "SELECT id, name, lsaccount_id, status FROM account;"
 sleep 5
 EQBOT_HAIL=- "$EQBOT" test 127.0.0.1 "$LS_USER" "$LS_PASS" "$CHAR"
+echo "-- position kept when the link drops without camping"
+sleep 5
+EQBOT_MOVE=30 "$EQBOT" play 127.0.0.1 "$LS_USER" "$LS_PASS" "$CHAR" | tee logs/eqbot-move.log
+sleep 5
+"$EQBOT" play 127.0.0.1 "$LS_USER" "$LS_PASS" "$CHAR" | tee logs/eqbot-moved.log
+moved=$(sed -n 's/.*moved *to \([^,]*,[^,]*\),.*/\1/p' logs/eqbot-move.log)
+now=$(sed -n 's/.*position *\([^,]*,[^,]*\),.*/\1/p' logs/eqbot-moved.log)
+if [ -z "$moved" ] || [ "$moved" != "$now" ]; then
+  echo "position not saved: moved to '$moved', back at '$now'"
+  exit 1
+fi
 echo "== end-to-end OK"
