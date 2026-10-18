@@ -133,6 +133,10 @@ Client::Client(int32 in_ip, int16 in_port, int in_send_socket)
 	sneaking = false; 
 	hitWhileCasting = false;
 	isZoning = false;
+	isZoningZP = false;	// was never set: Save() read garbage and could save the zoning coordinates
+	usingSoftCodedZoneLine = false;
+	zoningX = zoningY = zoningZ = 0;
+	tempHeading = 0;
 	zoningZone[0] = 0;
 	zoneLinesArmed = false;
 	InWater = false;
@@ -450,11 +454,16 @@ void Client::SendPacketQueue(bool Block)
 	if (client_state != CLIENT_DISCONNECTED && !packet_manager.CheckActive())
 	{
 		EQC::Common::PrintF(CP_CLIENT, "Client disconnected (!pm.CA): %s\n", GetName());
+		// Saved before the state changes: Save() does nothing once the client is not connected, so a
+		// client that dropped without camping (closed, crashed, lost link) lost its position and all
+		// since the last event that saved. Not when zoning: the zone change saved the target zone and
+		// position, and the next zone may already be saving the character.
+		if(!this->isZoning && !this->isZoningZP)
+			this->Save();
 		client_state = CLIENT_DISCONNECTED;
 		if(this->GetCraftingStation()!=0){//Tazadar: If Client goes LD we close the station
 			this->ProcessOP_CraftingStation();
 		}
-		this->Save();
 	}
 
 	packet_manager.CheckTimers();
