@@ -1182,7 +1182,7 @@ void Client::ProcessOP_ZoneChange(APPLAYER* pApp)
 		// The client seems to dump this profile on us, but I ignore it for now. Saving is client initiated?
 		x_pos = tarx; // Hmm, these coordinates will now be saved when ~client is called
 		y_pos = tary;
-		z_pos = tarz;
+		z_pos = tarz * 10;	// tenths, as GetZ() reads it
 
 		strcpy(pp.current_zone, tarzone);
 		this->Save();
@@ -6144,7 +6144,7 @@ void Client::Process_ClientConnection2(APPLAYER *app)
 	strcpy(Surname, pp.Surname); 
 	x_pos = pp.x;
 	y_pos = pp.y;
-	z_pos = pp.z;
+	z_pos = pp.z * 10;	// a client's z is kept in tenths (GetZ() divides): each save before its first update divided it by 10
 	heading = pp.heading * 2;
 	race = pp.race;
 	base_race = pp.race;

@@ -116,4 +116,13 @@ if [ -z "$moved" ] || [ "$moved" != "$now" ]; then
   echo "position not saved: moved to '$moved', back at '$now'"
   exit 1
 fi
+echo "-- and the height kept by a session that never moved"
+sleep 5
+"$EQBOT" play 127.0.0.1 "$LS_USER" "$LS_PASS" "$CHAR" | tee logs/eqbot-still.log
+before=$(sed -n 's/.*position *\([^ ]*\)$/\1/p' logs/eqbot-moved.log)
+after=$(sed -n 's/.*position *\([^ ]*\)$/\1/p' logs/eqbot-still.log)
+if [ -z "$before" ] || [ "$before" != "$after" ]; then
+  echo "position changed by a session that did not move: '$before', then '$after'"
+  exit 1
+fi
 echo "== end-to-end OK"
