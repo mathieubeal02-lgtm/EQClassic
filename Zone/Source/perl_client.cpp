@@ -3183,36 +3183,6 @@ XS(XS_Client_ScanForZoneLines)
 }
 
 
-XS(XS_Client_FearMovement); /* prototype to pass -Wmissing-prototypes */
-XS(XS_Client_FearMovement)
-{
-	dXSARGS;
-	if (items != 4)
-		Perl_croak(aTHX_ "Usage: Client::FearMovement(THIS, x, y, z)");
-	{
-		Client *		THIS;
-		bool		RETVAL;
-		float		x = (float)SvNV(ST(1));
-		float		y = (float)SvNV(ST(2));
-		float		z = (float)SvNV(ST(3));
-
-		if (sv_derived_from(ST(0), "Client")) {
-			IV tmp = SvIV((SV*)SvRV(ST(0)));
-			THIS = INT2PTR(Client *,tmp);
-		}
-		else
-			Perl_croak(aTHX_ "THIS is not of type Client");
-		if(THIS == NULL)
-			Perl_croak(aTHX_ "THIS is NULL, avoiding crash.");
-
-		RETVAL = THIS->FearMovement(x, y, z);
-		ST(0) = boolSV(RETVAL);
-		sv_2mortal(ST(0));
-	}
-	XSRETURN(1);
-}
-
-
 XS(XS_Client_GetAccountName); /* prototype to pass -Wmissing-prototypes */
 XS(XS_Client_GetAccountName)
 {
@@ -5021,7 +4991,6 @@ XS(boot_Client)
 		newXSproto(strcpy(buf, "FindItemTypeInInventory"), XS_Client_FindItemTypeInInventory, file, "$$");
 		newXSproto(strcpy(buf, "CreateZoneLineNode"), XS_Client_CreateZoneLineNode, file, "$$$$");
 		newXSproto(strcpy(buf, "ScanForZoneLines"), XS_Client_ScanForZoneLines, file, "$");
-		newXSproto(strcpy(buf, "FearMovement"), XS_Client_FearMovement, file, "$$$$");
 		newXSproto(strcpy(buf, "GetAccountName"), XS_Client_GetAccountName, file, "$");
 		newXSproto(strcpy(buf, "GetAccountID"), XS_Client_GetAccountID, file, "$");
 		newXSproto(strcpy(buf, "IsStunned"), XS_Client_IsStunned, file, "$");

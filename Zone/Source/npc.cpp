@@ -3765,42 +3765,19 @@ bool NPC::GetFearDestination(float x, float y, float z)
 		}
 	}
 	//Yeahlight: Target has no pathing nodes in range and has not been blocked from finding paths, so use random location roaming mechanics
-	int loop = 0;
-	bool permit = false;
+	// Roamers look for ground from higher up (hills). None found: the NPC stays feared where it is and
+	// tries again in 2 s (the fear ran out early before).
+	if(Timer::GetCurrentTime() < fearRetryAt)
+		return false;
 	float ranx, rany, ranz;
-	float offset = 2;
-	//Yeahlight: Roamers are given a large offset for hills and such
-	if(this->isRoamer)
-		offset = 150;
-	while(loop < 100)
+	if(!FindFearPoint(x, y, z, this->isRoamer ? 150 : 50, ranx, rany, ranz))
 	{
-		int ran = 250 - (loop*2);
-		loop++;
-		ranx = x + rand()%ran - rand()%ran;
-		rany = y + rand()%ran - rand()%ran;
-		ranz = FindGroundZ(ranx, rany, offset);
-		if(ranz == -999999)
-			continue;
-		float fdist = abs(ranz - z);
-		if(fdist <= 12 && CheckCoordLosNoZLeaps(x, y, z, ranx, rany, ranz))
-		{
-			permit = true;
-			break;
-		}
-	}
-	//Yeahlight: A reasonable destination has been found
-	if(permit)
-	{
-		fear_walkto_x = ranx;
-		fear_walkto_y = rany;
-		fear_walkto_z = ranz;
-	}
-	//Yeahlight: NPC is in an odd location, uncapable of locating a reasonable destination, so drop the debuff immediately
-	else
-	{
-		BuffFadeByEffect(SE_Fear);
+		fearRetryAt = Timer::GetCurrentTime() + 2000;
 		return false;
 	}
+	fear_walkto_x = ranx;
+	fear_walkto_y = rany;
+	fear_walkto_z = ranz;
 	faceDestination(ranx, rany);
 	SetDestination(ranx, rany, ranz);
 	StartWalking();

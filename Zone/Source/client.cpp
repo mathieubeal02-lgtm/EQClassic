@@ -4321,116 +4321,6 @@ void Client::ScanForZoneLines()
 }
 
 //o--------------------------------------------------------------
-//| FearMovement; Yeahlight, Aug 17, 2008
-//o--------------------------------------------------------------
-//| Taken from EQEMU 7.0: Fears a PC towards x, y, z. This 
-//| requires a ton of adeptation.
-//o--------------------------------------------------------------
-bool Client::FearMovement(float x, float y, float z)
-{
-	CAST_CLIENT_DEBUG_PTR(this)->Log(CP_PATHING, "Client::FearMovement(x = %f, y = %f, z = %f)", x, y, z);
-	if (IsRooted())
-	{
-		this->animation = 0;
-		return true;
-	}
-	float nx = this->x_pos;
-	float ny = this->y_pos;
-	float nz = this->z_pos;
-	float vx, vy, vz;
-	float vb;
-	float speed = this->runspeed;
-	float speed_mod = ((float)(speed*spellbonuses.MovementSpeed))/100.0f;
-	speed += speed_mod;
-
-	if (x_pos == x && y_pos == y)
-	{
-		this->animation = 0;
-		return false;
-	}
-
-	bool ret = true;
-
-	this->faceDestination(x, y);
-
-	// --------------------------------------------------------------------------
-	// 1: get Vector AB (Vab = B-A)
-	// --------------------------------------------------------------------------
-	vx = x - nx;
-	vy = y - ny;
-	vz = z - nz;
-
-	speed *= 30; //First we recalc into clientside units. 1.2 = 36, etc.
-	this->animation = speed;
-
-	//Now we recalc it into units per second moved.
-	speed *= 0.76;
-
-	//Divide by ten to account for movement happening every 0.1
-	speed /= 10;
-
-	CAST_CLIENT_DEBUG_PTR(this)->Log(CP_PATHING, "Client::FearMovement(): speed = %f", speed);
-
-	// --------------------------------------------------------------------------
-	// 2: get unit vector
-	// --------------------------------------------------------------------------
-	vb = speed / sqrt (vx*vx + vy*vy);
-
-	if (vb >= 0.5) //Stop before we've reached the point in case it's too close to a wall
-	{
-		fear_walkto_x = x_pos;
-		fear_walkto_y = y_pos;
-		fear_walkto_z = z_pos;
-		CAST_CLIENT_DEBUG_PTR(this)->Log(CP_PATHING, "Client::FearMovement(): stopping before getting to the wall");
-		ret = false;
-	}
-	else
-	{
-		// --------------------------------------------------------------------------
-		// 3: destination = start plus movementvector (unitvektor*speed)
-		// --------------------------------------------------------------------------
-		x_pos = x_pos + vx*vb;
-		y_pos = y_pos + vy*vb;
-		if (zone->map == 0)
-		{
-			z_pos = z_pos + vz*vb;
-		}
-		else
-		{
-			NodeRef pnode = zone->map->SeekNode( zone->map->GetRoot(), x_pos, y_pos );
-			if (pnode == NODE_NONE)
-			{
-				z_pos = z_pos + vz*vb;
-			}
-			else
-			{
-				VERTEX me;
-				me.x = x_pos;
-				me.y = y_pos;
-				me.z = z_pos + vz*vb + GetSize();
-				VERTEX hit;
-				FACE *onhit;
-				float best_z = zone->map->FindBestZ(pnode, me, &hit, &onhit);
-				if (best_z != -999999)
-				{
-					z_pos = best_z + 1;
-				}
-				else
-				{
-					z_pos = z_pos + vz*vb;
-				}
-			}
-		}
-	}
-	APPLAYER* app = new APPLAYER(OP_ClientUpdate, sizeof(SpawnPositionUpdate_Struct));
-	SpawnPositionUpdate_Struct* spu = (SpawnPositionUpdate_Struct*)app->pBuffer;
-	MakeSpawnUpdate(spu);
-	entity_list.QueueClients(this,app);
-	safe_delete(app);
-	return ret;
-}
-
-//o--------------------------------------------------------------
 //| FindBestEquipmentSlot; Yeahlight, Dec 21, 2008
 //o--------------------------------------------------------------
 //| Returns the most likely used slot for the provided item
@@ -4600,36 +4490,20 @@ uint32 Client::GetTotalLevelExp()
 //o--------------------------------------------------------------
 bool Client::GetFearDestination(float x, float y, float z)
 {
-	int loop = 0;
-	bool permit = false;
-	float ranx, rany, ranz;
-	while(loop < 100)
+	//Yeahlight: PC is in an odd location, uncapable of locating a reasonable destination
+	// It stays feared, standing (as on Quarm), and tries again in 2 s: the fear ran out early before.
+	if(Timer::GetCurrentTime() < fearRetryAt)
+		return false;
+	if(!FindFearPoint(x, y, z, 50, fear_walkto_x, fear_walkto_y, fear_walkto_z))
 	{
-		int ran = 250 - (loop*2);
-		loop++;
-		ranx = x + rand()%ran - rand()%ran;
-		rany = y + rand()%ran - rand()%ran;
-		ranz = FindGroundZ(ranx, rany, 2);
-		if(ranz == -999999)
-			continue;
-		float fdist = abs(ranz - z);
-		if(fdist <= 12 && CheckCoordLosNoZLeaps(x, y, z, ranx, rany, ranz))
-		{
-			permit = true;
-			break;
-		}
-	}
-	//Yeahlight: A reasonable destination has been found
-	if(permit)
-	{
-		fear_walkto_x = ranx;
-		fear_walkto_y = rany;
-		fear_walkto_z = ranz;
-	}
-	//Yeahlight: PC is in an odd location, uncapable of locating a reasonable destination, so drop the debuff immediately
-	else
-	{
-		BuffFadeByEffect(SE_Fear);
+		fearRetryAt = Timer::GetCurrentTime() + 2000;
+		fear_walkto_x = x;
+		fear_walkto_y = y;
+		fear_walkto_z = z;
+		this->animation = 0;
+		this->delta_heading = 0;
+		this->delta_z = 0;
+		SendPosUpdate(true, PC_UPDATE_RANGE, false);
 		return false;
 	}
 	//Yeahlight: PC is rooted, so they will not be given a velocity

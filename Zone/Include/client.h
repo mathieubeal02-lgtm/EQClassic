@@ -271,7 +271,6 @@ public:
 	void	CreateZoneLineNode(char* zoneName, char* connectingZoneName, int16 range);
 	void	ScanForZoneLines();
 
-	bool	FearMovement(float x, float y, float z);
 
 	char*	GetAccountName(){return account_name;}
 	int16	GetAccountID(){return account_id;}
