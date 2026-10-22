@@ -397,6 +397,9 @@ bool SpellsHandler::HandleBuffSpellEffects(Mob* caster, Mob* target, Spell* spel
 
 	// 3. Calculate buff effect time.
 	sint32 tics = spells_handler.CalcSpellBuffTics(caster, target, spell);
+	// A fear on a player lasts 4 ticks (24 s) at most, as on Quarm/TAKP: the player has no control meanwhile.
+	if (target->IsClient() && spell->IsFearSpell() && tics > 4)
+		tics = 4;
 	if (tics > 0) {
 		target->GetBuff(free_slot).spell = spell;
 		target->GetBuff(free_slot).casterlevel = caster ? caster->GetLevel() : 1;

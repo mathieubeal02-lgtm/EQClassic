@@ -420,6 +420,7 @@ public:
 	void			SendAppearancePacket(int16 Spawn_ID, TSpawnAppearanceType Type, int32 Parameter, bool WholeZone);
 	void			faceDestination(float x, float y);
 	void			CalculateNewFearpoint();
+	bool			FindFearPoint(float x, float y, float z, float lookUp, float& outX, float& outY, float& outZ);
 	sint32			CalcMaxMana();
 	void			SendWearChange(int8 material_slot = 250);
 
@@ -650,6 +651,7 @@ protected:
 	float	guard_z;
 	float	guard_heading;
 
+	uint32	fearRetryAt;	// no fear point was found: the next try, not before (Timer::GetCurrentTime)
 	float	fear_walkto_x;
     float	fear_walkto_y;
     float	fear_walkto_z;

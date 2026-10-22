@@ -227,6 +227,7 @@ Mob::Mob(char*   in_name,
 		hitBoxExtension = 40;
 
 	SetCurfp(false);
+	fearRetryAt = 0;
 	fear_walkto_x = 0;
     fear_walkto_y = 0;
     fear_walkto_z = 0;
@@ -1609,40 +1610,75 @@ bool Mob::CheckLosFN(Mob* other)
 
 void Mob::CalculateNewFearpoint()
 {
-	int loop = 0;
-	float ranx, rany, ranz;
-	SetCurfp(false);
-	while (loop < 100) //Max 100 tries
-	{
-		int ran = 250 - (loop*2);
-		loop++;
-		ranx = GetX()+rand()%ran-rand()%ran;
-		rany = GetY()+rand()%ran-rand()%ran;
-		ranz = FindGroundZ(ranx,rany);
-		if (ranz == -999999)
-			continue;
-		float fdist = ranz - GetZ();
-		if (fdist >= -12 && fdist <= 12 && CheckCoordLosNoZLeaps(GetX(),GetY(),GetZ(),ranx,rany,ranz))
-		{
-			SetCurfp(true);
-			break;
-		}
-	}
-	if (GetCurfp())
-	{
-		fear_walkto_x = ranx;
-		//this->x_dest = ranx;
-		fear_walkto_y = rany;
-		//this->y_dest = rany;
-		fear_walkto_z = ranz;
-		//this->z_dest = ranz;
-	}
-	else //Break fear
-	{
-		//BuffFadeByEffect(SE_Fear);
-	}
+	SetCurfp(FindFearPoint(GetX(), GetY(), GetZ(), 50, fear_walkto_x, fear_walkto_y, fear_walkto_z));
 	faceDestination(fear_walkto_x, fear_walkto_y);	
 	SendPosUpdate(false, NPC_UPDATE_RANGE, false);
+}
+
+// Where a feared mob runs to: a random spot within 250 (the range narrows try after try), on ground
+// at most 50 above or below and reached without a climb or a drop on the way (no z leap of 12 or more,
+// so no cliff). Outdoors the first tries want a spot 200 or more away (a near one comes anyway later).
+// The ground is sought from `lookUp` above, but under the ceiling over us: inside, never the floor above.
+// Without a map: any spot, at our height.
+bool Mob::FindFearPoint(float x, float y, float z, float lookUp, float& outX, float& outY, float& outZ)
+{
+	float top = z + lookUp;
+	VERTEX hit;
+	FACE* onhit;
+	if (zone->map != 0)
+	{
+		VERTEX from, up;
+		from.x = up.x = x;
+		from.y = up.y = y;
+		from.z = z + 2;
+		up.z = top;
+		if (zone->map->LineIntersectsZone(from, up, 1, &hit, &onhit) && hit.z - 1 < top)
+			top = hit.z - 1;
+	}
+	bool outdoor = zone->GetOutDoorZone();
+	for (int loop = 0; loop < 100; loop++)
+	{
+		int ran = 250 - loop * 2;
+		float dx, dy;
+		if (outdoor && loop < 20)
+		{
+			dx = (float)(rand() % ran);
+			dy = (float)(rand() % ran);
+			if (dx + dy < 200)
+				continue;
+			if (rand() & 1)
+				dx = -dx;
+			if (rand() & 1)
+				dy = -dy;
+		}
+		else
+		{
+			dx = (float)(rand() % ran - rand() % ran);
+			dy = (float)(rand() % ran - rand() % ran);
+		}
+		float rx = x + dx, ry = y + dy, rz = z;
+		if (zone->map != 0)
+		{
+			NodeRef node = zone->map->SeekNode(zone->map->GetRoot(), rx, ry);
+			if (node == NODE_NONE)
+				continue;
+			VERTEX me;
+			me.x = rx;
+			me.y = ry;
+			me.z = top;
+			rz = zone->map->FindBestZ(node, me, &hit, &onhit);
+			if (rz == -999999)
+				continue;
+		}
+		if (rz - z <= 50 && z - rz <= 50 && CheckCoordLosNoZLeaps(x, y, z, rx, ry, rz))
+		{
+			outX = rx;
+			outY = ry;
+			outZ = rz;
+			return true;
+		}
+	}
+	return false;
 }
 
 float Mob::FindGroundZ(float new_x, float new_y, float z_offset)
