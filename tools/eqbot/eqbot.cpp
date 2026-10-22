@@ -1300,6 +1300,43 @@ namespace
 			}
 		}
 
+		// A fear on ourselves (GM #castspell 229, "Fear"): the zone takes control (appearance 14, 102 =
+		// lose control) and gives it back (100) when the fear ends: 4 ticks at most for a player, and not
+		// at once when no fear point is found (the CI zone has no map).
+		{
+			int self = st.myId ? st.myId : meId;
+			auto control = [&](const std::vector<Packet*>& g, int value) {
+				for (size_t i = 0; i < g.size(); i++)
+				{
+					const unsigned char* d = g[i]->pBuffer;
+					if (g[i]->opcode == (int16)0xf520 && g[i]->size >= 12 && (d[0] | (d[1] << 8)) == self
+						&& (d[4] | (d[5] << 8)) == 14 && (d[8] | (d[9] << 8)) == value)
+						return true;
+				}
+				return false; };
+			uint16_t aim[2] = { (uint16_t)self, 0 };
+			z.Send(kClientTarget, aim, sizeof(aim));
+			got = z.Poll(500);
+			DeleteAll(got);
+			Say(z, charname, "#castspell 229");
+			got = Collect(z, 10000, [&](const std::vector<Packet*>& g) { return control(g, 102); });
+			bool feared = control(got, 102);
+			std::string said = LastTexts(got);
+			DeleteAll(got);
+			if (!feared)
+				Step(false, "fear on a player", "no loss of control after #castspell 229: " + said);
+			else
+			{
+				long start = NowMs();
+				got = Collect(z, 45000, [&](const std::vector<Packet*>& g) { return control(g, 100); });
+				bool back = control(got, 100);
+				long secs = (NowMs() - start) / 1000;
+				DeleteAll(got);
+				snprintf(b, sizeof(b), back ? "control lost, back after %ld s (24 s at most)" : "control not back after %ld s", secs);
+				Step(back && secs >= 6 && secs <= 32, "fear on a player", b);
+			}
+		}
+
 		// A quest NPC answers a hail (the zone's Perl quests work).
 		const char* hailName = getenv("EQBOT_HAIL") ? getenv("EQBOT_HAIL") : "Brohan_Ironforge";
 		if (strcmp(hailName, "-") == 0)
