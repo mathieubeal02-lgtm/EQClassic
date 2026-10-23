@@ -650,7 +650,8 @@ namespace
 			{
 				unsigned char u[15];
 				memset(u, 0, sizeof(u));
-				short y = (short)meY, x = (short)(meX + (to - meX) * i / 10), zz = (short)(meZ * 10);
+				// rounded as printed (a fear leaves the zone's position between whole units)
+				short y = (short)lroundf(meY), x = (short)lroundf(meX + (to - meX) * i / 10), zz = (short)lroundf(meZ * 10);
 				u[0] = st.myId & 0xff; u[1] = st.myId >> 8;
 				memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
 				u[11] = (i & 1) ? 1 : 2;
