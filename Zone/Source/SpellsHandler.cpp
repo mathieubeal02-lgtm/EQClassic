@@ -409,6 +409,7 @@ bool SpellsHandler::HandleBuffSpellEffects(Mob* caster, Mob* target, Spell* spel
 		target->GetBuff(free_slot).diseasecounters = spell->GetDiseaseCounters();
 		target->GetBuff(free_slot).poisoncounters= spell->GetPoisonCounters();
 		target->GetBuff(free_slot).damageRune = spell->GetRuneAmount();
+		target->GetBuff(free_slot).ticked = false;
 
 		target->CalcBonuses(true, true);	// It's important to refresh our bonuses.
 	}
