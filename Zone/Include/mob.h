@@ -72,6 +72,7 @@ struct Buffs_Struct {
 	sint16	diseasecounters;
 	sint16	poisoncounters;
 	sint16	damageRune;
+	bool	ticked;		// a tick has gone by since it landed (TicProcess: no fear break check before)
 };
 
 struct StatsStruct  //struct StatBonuses 
