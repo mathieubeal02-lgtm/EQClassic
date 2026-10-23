@@ -203,6 +203,8 @@ Client::Client(int32 in_ip, int16 in_port, int in_send_socket)
 	myEyeOfZomm = NULL;
 	mySaveChance = 0;
 	feared = false;
+	fearStepAt = 0;
+	fearSyncAt = 0;
 
 	ticProcess_timer = new Timer(6000);
 	charmPositionUpdate_timer = new Timer(200);
@@ -4516,6 +4518,61 @@ bool Client::GetFearDestination(float x, float y, float z)
 	faceDestination(fear_walkto_x, fear_walkto_y);
 	SendPosUpdate(true, PC_UPDATE_RANGE, false);
 	return true;
+}
+
+//o--------------------------------------------------------------
+//| UpdateFearPosition
+//o--------------------------------------------------------------
+//| Runs a feared PC. On live, "when a PC gets feared, the server
+//| takes control of their character to force them to run away"
+//| (EverQuest's lead designer, 2005). Every 200 ms the PC moves
+//| toward its fear point at the pace the client runs with
+//| animation 6 (UpdateCharmPosition's step), on the ground of the
+//| map, and once a second the client is told where it is. The
+//| client still runs by itself in between, but a tree or a root it
+//| catches on no longer holds it for the rest of the fear: what it
+//| reports while feared is ignored (ProcessOP_ClientUpdate).
+//o--------------------------------------------------------------
+void Client::UpdateFearPosition()
+{
+	uint32 now = Timer::GetCurrentTime();
+	if(now < fearStepAt)
+		return;
+	fearStepAt = now + 200;
+	if(IsRooted() || IsStunned() || IsMesmerized())
+		return;
+	float dist = fdistance(GetX(), GetY(), fear_walkto_x, fear_walkto_y);
+	//Standing (no point was found), or there: a new point
+	if(this->animation == 0 || dist <= 5)
+	{
+		if(!GetFearDestination(GetX(), GetY(), GetZ()))
+			return;
+		fearSyncAt = now + 1000;
+		dist = fdistance(GetX(), GetY(), fear_walkto_x, fear_walkto_y);
+		if(dist < 0.5f)
+			return;
+	}
+	float step = 6 * 2.4f / 5 * 1.57f;
+	if(step > dist)
+		step = dist;
+	float nx = GetX() + (fear_walkto_x - GetX()) * step / dist;
+	float ny = GetY() + (fear_walkto_y - GetY()) * step / dist;
+	//Straight toward the point where the map has no ground (no map, deep water); else as high over
+	//the ground as the PC is now (a PC's z is its middle, about 5 over its feet)
+	float nz = GetZ() + (fear_walkto_z - GetZ()) * step / dist;
+	float groundHere = FindGroundZ(GetX(), GetY(), 2);
+	float groundThere = FindGroundZ(nx, ny, 2);
+	if(groundHere != -999999 && groundThere != -999999 && GetZ() - groundHere >= 0 && GetZ() - groundHere <= 10)
+		nz = groundThere + (GetZ() - groundHere);
+	x_pos = nx;
+	y_pos = ny;
+	z_pos = nz * 10;
+	if(now >= fearSyncAt)
+	{
+		fearSyncAt = now + 1000;
+		SendPosUpdate(true, PC_UPDATE_RANGE, false);
+	}
+	ScanForZoneLines();
 }
 
 //o--------------------------------------------------------------
