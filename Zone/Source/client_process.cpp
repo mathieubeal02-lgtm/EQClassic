@@ -384,11 +384,7 @@ bool Client::Process()
 		//Yeahlight: PC is feared
 		if(GetFeared())
 		{
-			//Yeahlight: PC is in range of their destination
-			if(DistanceToLocation(fear_walkto_x, fear_walkto_y, fear_walkto_z) <= 15)
-			{
-				GetFearDestination(GetX(), GetY(), GetZ());
-			}
+			UpdateFearPosition();
 		}
 		//Yeahlight: Time for this PC to attack with its primary weapon
 		else if(attack_timer->Check() || reservedPrimaryAttack)
@@ -2130,6 +2126,10 @@ void Client::ProcessOP_ClientUpdate(APPLAYER* pApp)
 	if(pApp->size == sizeof(SpawnPositionUpdate_Struct))
 	{
 		SpawnPositionUpdate_Struct* cu = (SpawnPositionUpdate_Struct*)pApp->pBuffer;
+		//Feared: the server runs the PC (UpdateFearPosition) and keeps its own position; where the
+		//client says it is may be against the tree it caught on
+		if(GetFeared())
+			return;
 		//Yeahlight: PC currently has an eye of zomm, so we need to forward the movement changes to the NPC and not the PC
 		if(myEyeOfZomm)
 		{

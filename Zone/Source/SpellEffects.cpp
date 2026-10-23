@@ -922,6 +922,9 @@ void Mob::BuffFadeBySlot(int slot, bool iRecalcBonuses)
 				if(IsClient())
 				{
 					CastToClient()->SetFeared(false);
+					//The client stops where the server ran it (UpdateFearPosition)
+					this->animation = 0;
+					SendPosUpdate(true, PC_UPDATE_RANGE, false);
 					SendAppearancePacket(this->GetID(), SAT_Position_Update, SAPP_Sitting_To_Standing, true);
 				}
 				else if(IsNPC())

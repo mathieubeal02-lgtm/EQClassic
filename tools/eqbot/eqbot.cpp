@@ -650,7 +650,8 @@ namespace
 			{
 				unsigned char u[15];
 				memset(u, 0, sizeof(u));
-				short y = (short)meY, x = (short)(meX + (to - meX) * i / 10), zz = (short)(meZ * 10);
+				// rounded as printed (a fear leaves the zone's position between whole units)
+				short y = (short)lroundf(meY), x = (short)lroundf(meX + (to - meX) * i / 10), zz = (short)lroundf(meZ * 10);
 				u[0] = st.myId & 0xff; u[1] = st.myId >> 8;
 				memcpy(u + 5, &y, 2); memcpy(u + 7, &x, 2); memcpy(u + 9, &zz, 2);
 				u[11] = (i & 1) ? 1 : 2;
@@ -1302,7 +1303,8 @@ namespace
 
 		// A fear on ourselves (GM #castspell 229, "Fear"): the zone takes control (appearance 14, 102 =
 		// lose control) and gives it back (100) when the fear ends: 4 ticks at most for a player, and not
-		// at once when no fear point is found (the CI zone has no map).
+		// at once when no fear point is found (the CI zone has no map). Meanwhile the zone runs us: our
+		// position updates (MobUpdate for our id) move once a second, though we send none.
 		{
 			int self = st.myId ? st.myId : meId;
 			auto control = [&](const std::vector<Packet*>& g, int value) {
@@ -1331,9 +1333,32 @@ namespace
 				got = Collect(z, 45000, [&](const std::vector<Packet*>& g) { return control(g, 100); });
 				bool back = control(got, 100);
 				long secs = (NowMs() - start) / 1000;
+				int updates = 0;
+				float fx = 0, fy = 0, run = 0;
+				for (size_t i = 0; i < got.size(); i++)
+				{
+					const Packet* p = got[i];
+					if (p->opcode != (int16)0xa120 || p->size < 4)
+						continue;
+					int n = p->pBuffer[0] | (p->pBuffer[1] << 8);
+					for (int k = 0; k < n && 4 + (k + 1) * 15 <= (int)p->size; k++)
+					{
+						const unsigned char* m = p->pBuffer + 4 + k * 15;
+						if ((m[0] | (m[1] << 8)) != self)
+							continue;
+						float y = (short)(m[5] | (m[6] << 8)), x = (short)(m[7] | (m[8] << 8));
+						if (updates++ > 0)
+							run += sqrtf((x - fx) * (x - fx) + (y - fy) * (y - fy));
+						fx = x;
+						fy = y;
+					}
+				}
 				DeleteAll(got);
-				snprintf(b, sizeof(b), back ? "control lost, back after %ld s (24 s at most)" : "control not back after %ld s", secs);
-				Step(back && secs >= 6 && secs <= 32, "fear on a player", b);
+				if (back)
+					snprintf(b, sizeof(b), "control lost, run %.0f units by the zone (%d updates), back after %ld s (24 s at most)", run, updates, secs);
+				else
+					snprintf(b, sizeof(b), "control not back after %ld s", secs);
+				Step(back && secs >= 6 && secs <= 32 && updates >= 3 && run >= 20, "fear on a player", b);
 			}
 		}
 

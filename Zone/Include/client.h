@@ -292,6 +292,7 @@ public:
 	void	SetFeared(bool in) {feared = in;}
 
 	bool	GetFearDestination(float x, float y, float z);
+	void	UpdateFearPosition();
 	bool	GetCharmDestination(float x, float y);
 	void	UpdateCharmPosition(float targetX, float targetY, int16 meleeReach);
 
@@ -686,6 +687,8 @@ private:
 	int16	mySaveChance;
 
 	bool	feared;
+	uint32	fearStepAt;	// UpdateFearPosition: next step of the server's run (Timer::GetCurrentTime)
+	uint32	fearSyncAt;	// and next time the client is told where it is
 
 	Timer*	ticProcess_timer;
 	int32	pLastCharmUpdate;

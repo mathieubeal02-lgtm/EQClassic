@@ -1632,8 +1632,19 @@ bool Mob::FindFearPoint(float x, float y, float z, float lookUp, float& outX, fl
 		from.y = up.y = y;
 		from.z = z + 2;
 		up.z = top;
-		if (zone->map->LineIntersectsZone(from, up, 1, &hit, &onhit) && hit.z - 1 < top)
-			top = hit.z - 1;
+		if (zone->map->LineIntersectsZone(from, up, 1, &hit, &onhit))
+		{
+			// A surface less than 5 over the middle is not a ceiling (the head would be in it): it is
+			// the water the mob wades or swims in (the maps have its surface, there are no water maps).
+			// Look from just above it: from below, every line to the banks crosses it.
+			if (hit.z - from.z < 5)
+			{
+				z = hit.z + 0.5f;
+				top = z + lookUp;
+			}
+			else if (hit.z - 1 < top)
+				top = hit.z - 1;
+		}
 	}
 	bool outdoor = zone->GetOutDoorZone();
 	for (int loop = 0; loop < 100; loop++)
