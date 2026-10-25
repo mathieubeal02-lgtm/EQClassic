@@ -1302,9 +1302,10 @@ namespace
 		}
 
 		// A fear on ourselves (GM #castspell 229, "Fear"): the zone takes control (appearance 14, 102 =
-		// lose control) and gives it back (100) when the fear ends: 4 ticks at most for a player, and not
-		// at once when no fear point is found (the CI zone has no map). Meanwhile the zone runs us: our
-		// position updates (MobUpdate for our id) move once a second, though we send none.
+		// lose control) and gives it back (100) when the fear ends: 4 ticks at most for a player (sooner when
+		// a tick's resist check breaks it), and not at once when no fear point is found (the CI zone has
+		// no map). Meanwhile the zone runs us: our position updates (MobUpdate for our id) move once a
+		// second, though we send none.
 		{
 			int self = st.myId ? st.myId : meId;
 			auto control = [&](const std::vector<Packet*>& g, int value) {
@@ -1320,11 +1321,17 @@ namespace
 			z.Send(kClientTarget, aim, sizeof(aim));
 			got = z.Poll(500);
 			DeleteAll(got);
-			Say(z, charname, "#castspell 229");
-			got = Collect(z, 10000, [&](const std::vector<Packet*>& g) { return control(g, 102); });
-			bool feared = control(got, 102);
-			std::string said = LastTexts(got);
-			DeleteAll(got);
+			// The fear can be resisted like any spell: cast again, up to three times.
+			bool feared = false;
+			std::string said;
+			for (int tries = 0; tries < 3 && !feared; tries++)
+			{
+				Say(z, charname, "#castspell 229");
+				got = Collect(z, 10000, [&](const std::vector<Packet*>& g) { return control(g, 102); });
+				feared = control(got, 102);
+				said = LastTexts(got);
+				DeleteAll(got);
+			}
 			if (!feared)
 				Step(false, "fear on a player", "no loss of control after #castspell 229: " + said);
 			else
@@ -1358,7 +1365,7 @@ namespace
 					snprintf(b, sizeof(b), "control lost, run %.0f units by the zone (%d updates), back after %ld s (24 s at most)", run, updates, secs);
 				else
 					snprintf(b, sizeof(b), "control not back after %ld s", secs);
-				Step(back && secs >= 6 && secs <= 32 && updates >= 3 && run >= 20, "fear on a player", b);
+				Step(back && secs >= 3 && secs <= 32 && updates >= 3 && run >= 20, "fear on a player", b);
 			}
 		}
 
