@@ -44,7 +44,8 @@ public:
 	sint32			CalcSpellValue(Spell* spell, int8 effect_number, int8 caster_level, int8 bardMod = 0);
 	bool			HandleBuffSpellEffects(Mob* caster, Mob* target, Spell* spell);
 	static sint32	AproximateSpellAC(float server_ac);
-	int16			CalcResistValue(Spell* spell, Mob* victim, Mob* caster); 
+	int16			CalcResistValue(Spell* spell, Mob* victim, Mob* caster, bool tickSave = false);
+	sint16			GetSpellResistMod(Spell* spell) { return spell && spell->GetSpellID() < SPDAT_RECORDS ? spellResistModArray[spell->GetSpellID()] : 0; }
 	sint32			CalcSpellBuffTics(Mob* caster, Mob* target, Spell* spell);
 
 private:

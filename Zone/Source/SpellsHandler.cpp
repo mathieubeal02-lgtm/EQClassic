@@ -453,8 +453,10 @@ sint32 SpellsHandler::AproximateSpellAC(float server_ac) {
 //| current resist values.
 //| Note: This is strictly PC on NPC / NPC on NPC casting. This
 //| will need a ton of work for PvP casting.
+//| tickSave: the roll a fear or charm makes on each tick to hold;
+//| the caster counts 4 levels higher (Quarm/TAKP's tick save).
 //o--------------------------------------------------------------
-int16 SpellsHandler::CalcResistValue(Spell* spell, Mob* victim, Mob* caster)
+int16 SpellsHandler::CalcResistValue(Spell* spell, Mob* victim, Mob* caster, bool tickSave)
 {
 	bool debugFlag = true;
 
@@ -503,6 +505,18 @@ int16 SpellsHandler::CalcResistValue(Spell* spell, Mob* victim, Mob* caster)
 		}
 	}
 
+	//A fearless target (SE_Fearless, e.g. Valiant Companion) cannot be feared
+	if(spell->IsFearSpell())
+	{
+		for(int i = 0; i < BUFF_COUNT; i++)
+		{
+			Spell* buff = victim->GetBuff(i).spell;
+			if(buff && buff->IsValidSpell() && buff->IsEffectInSpell(SE_Fearless))
+				return IMMUNE_RESIST_FLAG;
+		}
+	}
+
+	sint16 casterLevel = caster->GetLevel() + (tickSave ? 4 : 0);
 	sint16 victimsSave = 0;
 	sint16 baseSave = victim->GetLevel() * 3;
 	sint16 saveDifference = 0;
@@ -552,10 +566,19 @@ int16 SpellsHandler::CalcResistValue(Spell* spell, Mob* victim, Mob* caster)
 		caster->Message(LIGHTEN_BLUE, "Debug: Victim's base save value: %i", victimsSave);
 
 	//Yeahlight: Associated penalties/bonuses for casting on a differently leveled target
-	if(victim->GetLevel() > caster->GetLevel())
-		saveAdjustment = (victim->GetLevel() - caster->GetLevel()) * 6;
+	if(victim->GetLevel() > casterLevel)
+		saveAdjustment = (victim->GetLevel() - casterLevel) * 6;
 	else
-		saveAdjustment = (victim->GetLevel() - caster->GetLevel()) * 3;
+		saveAdjustment = (victim->GetLevel() - casterLevel) * 3;
+
+	//An enchanter's charisma makes the charm or mez harder to resist when it is cast, not on the
+	//tick saves: 1 point of the victim's save per 8 CHA above 75 (the Quarm/TAKP rule)
+	if(!tickSave && caster->IsClient() && caster->GetClass() == ENCHANTER && (spell->IsCharmSpell() || spell->IsMezSpell()) && caster->GetCHA() > 75)
+	{
+		saveAdjustment -= (caster->GetCHA() - 75) / 8;
+		if(debugFlag && caster->CastToClient()->GetDebugMe())
+			caster->Message(LIGHTEN_BLUE, "Debug: Charisma lowers the victim's save by %i", (caster->GetCHA() - 75) / 8);
+	}
 
 	if(debugFlag && caster->IsClient() && caster->CastToClient()->GetDebugMe())
 		caster->Message(LIGHTEN_BLUE, "Debug: Victim's save adjustment value: %i", saveAdjustment);
@@ -569,9 +592,9 @@ int16 SpellsHandler::CalcResistValue(Spell* spell, Mob* victim, Mob* caster)
 	//Yeahlight: Casting on an NPC above the caster's level grants the victim a resistance bonus, as long
 	//           as the spell does not have a massive resist adjustment.
 	//           Note: This will be the main tweak for casting raid DPS.
-	if(victim->GetLevel() > caster->GetLevel() && spellResistModifier > -100)
+	if(victim->GetLevel() > casterLevel && spellResistModifier > -100)
 	{
-		switch(victim->GetLevel() - caster->GetLevel())
+		switch(victim->GetLevel() - casterLevel)
 		{
 			case 1: bonusResistance = 5; break;
 			case 2: bonusResistance = 10; break;
