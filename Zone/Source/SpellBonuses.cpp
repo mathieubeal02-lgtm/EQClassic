@@ -371,12 +371,24 @@ void Mob::TicProcess()
 				DoBuffTic(buff_spell, buffs[buffs_i].ticsremaining, buffs[buffs_i].casterlevel, entity_list.GetMob(buffs[buffs_i].casterid));
 			// "Fear is built so that it can break at any time, so it checks resistances every tick"
 			// (EverQuest's lead designer, 2005): 3 ticks in 4 the target rolls its resist against the
-			// caster again (Quarm/TAKP's FearBreakCheckChance), not on the tick right after the fear
-			// landed (Quarm: a client that breaks free at once can lock up). No caster left, no roll.
+			// caster again (Quarm/TAKP's FearBreakCheckChance, a tick save: the caster counts 4 levels
+			// higher), not on the tick right after the fear landed (Quarm: a client that breaks free at once can lock up). No caster left, no roll.
 			if(buff_spell->IsFearSpell() && buffs[buffs_i].ticked)
 			{
 				Mob* fearCaster = entity_list.GetMob(buffs[buffs_i].casterid);
-				if(fearCaster && rand()%100 < 75 && rand()%100 + 1 < spells_handler.CalcResistValue(buff_spell, this, fearCaster))
+				if(fearCaster && rand()%100 < 75 && rand()%100 + 1 < spells_handler.CalcResistValue(buff_spell, this, fearCaster, true))
+				{
+					BuffFadeBySlot(buffs_i, true);
+					continue;
+				}
+			}
+			// A charm breaks too: on every other tick (Quarm/TAKP) the pet rolls its resist against the
+			// charmer, who counts 4 levels higher; with the charmer gone the charm ends. Charms that are
+			// all but unresistable (resist modifier -600 or less: Dictate, the epics) never break.
+			if(buff_spell->IsCharmSpell() && buffs[buffs_i].ticked && spells_handler.GetSpellResistMod(buff_spell) > -600)
+			{
+				Mob* charmer = entity_list.GetMob(buffs[buffs_i].casterid);
+				if(!charmer || (rand()%100 < 50 && rand()%100 + 1 < spells_handler.CalcResistValue(buff_spell, this, charmer, true)))
 				{
 					BuffFadeBySlot(buffs_i, true);
 					continue;
